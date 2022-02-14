@@ -1,0 +1,256 @@
+---
+title: Creel Data Review 
+params:
+  proj_name: "District 14"
+  water_body: "Skagit River"
+  date_start: "2021-08-19"   
+  date_end: "2021-12-31"
+  time_strata: "month"
+  sections: "lut_water_body_location_d14_skagit_fall_salmon.csv"
+  species: "Pink"
+  fin_mark: "UM"
+  fate: "Kept"
+output:
+  html_document:
+    fig_caption: yes
+    theme: cerulean
+    toc: yes
+    toc_depth: 3
+    toc_float: yes
+    code_folding: hide
+---
+
+# setup 
+
+```{r setup, message = FALSE, warning = FALSE}
+knitr::opts_chunk$set(message = FALSE)
+
+library(tidyverse)
+library(rstan)
+
+#base endpoints
+dwg_base <- list(
+  event = "https://data.wa.gov/resource/ui95-axtn.csv",
+  effort = "https://data.wa.gov/resource/h9a6-g38s.csv",
+  interview = "https://data.wa.gov/resource/rpax-ahqm.csv",
+  catch = "https://data.wa.gov/resource/6y4e-8ftk.csv",
+  gear = "https://data.wa.gov/resource/d2ks-afhz.csv"
+)
+
+dwg_sent <- list() #will hold full API strings built on above endpoints with params
+creel <- list() #will hold resulting data objects
+
+dates_holidays_2015_2030 <- read_lines("input_files/dates_holidays_2015_2030.txt") |> 
+  as.Date(format="%Y-%m-%d")
+
+lut <- map(
+  list(
+    river_loc = "input_files/lut_River.Locations_2019-01-07.csv",
+    creel_models = "input_files/lut_Creel_Models_2021-01-20.csv",
+    sections = file.path("input_files", params$sections),
+    census_expansion = "input_files/lut_Proportional_Expansions_for_Tie_In_Sections_Skagit_Fall_Salmon_2021.csv"
+      #"input_files/lut_Proportional_Expansions_for_Tie_In_Sections_Skagit_Steelhead_2021_Example.csv" 
+  ),
+  ~readr::read_csv(file.path(.x))
+)
+
+lu_sections <- lut$sections
+#tie_in_indicator: 0 is index/creel, 1 is tie-in/census
+
+# Proportional tie in expansion table 
+# value of 1 for p_TI means that the entire river section is surveyed during census counts?
+# What is "Indirect_TI_Expan" and how it is calculated?
+
+```
+
+
+
+# get raw data
+
+The data used are from the `r params$proj_name` project on the `r params$location` between `r params$date_start` and `r params$date_end`.
+
+Further development may include interactive control parameter specification via the GUI: [https://bookdown.org/yihui/rmarkdown/params-knit.html#the-interactive-user-interface]
+
+There is also the option to step through multiple pre-defined control parameters:
+[https://bookdown.org/yihui/rmarkdown-cookbook/parameterized-reports.html]
+
+## creel events
+
+First, get the creel events of interest by building the Socrata API url string and grabbing the data
+
+```{r get_event}
+dwg_sent$event <- URLencode(
+  paste0(dwg_base$event,
+         "?$where=project_name in('", params$proj_name, "')",
+         " AND water_body in('", str_replace(params$water_body, ",|\\|", "','"), "')",
+         " AND event_date between '", params$date_start,
+         "T00:00:00' and '", params$date_end,
+         "T00:00:00'&$limit=100000"
+  )
+)
+
+creel$event <- read_csv(dwg_sent$event) |> 
+  dplyr::select(creel_event_id, water_body, event_date, tie_in_indicator)
+```
+
+Then, get the associated effort and interview data.
+
+```{r pending_vw_changes_for_water_body}
+# #if water_body dropped from event filter...
+# #but regardless can/should build creel_event_id condition once and apply twice?
+# eff_int_filter <- paste0(
+#     "?$where=creel_event_id in('",
+#     paste(creel$event$creel_event_id, collapse = "','"), "')",
+#     " AND water_body in('", str_replace(params$water_body, ",|\\|", "','"), "')",
+#     "&$limit=100000"
+#   )
+
+```
+
+## effort counts
+
+```{r get_effort}
+dwg_sent$effort <- URLencode(
+  paste0(dwg_base$effort,
+         "?$where=creel_event_id in('",
+         paste(creel$event$creel_event_id, collapse = "','"),
+         "')&$limit=100000"
+  )
+)
+
+creel$effort <- read_csv(dwg_sent$effort)
+
+```
+
+## interviews
+
+```{r get_interview}
+dwg_sent$interview <- URLencode(
+  paste0(dwg_base$interview,
+         "?$where=creel_event_id in('",
+         paste(creel$event$creel_event_id, collapse = "','"),
+         "')&$limit=100000"
+  )
+)
+
+creel$interview <- read_csv(dwg_sent$interview) |> 
+  rename(location = interview_location) |> 
+  select(interview_id, event_date, water_body, location)
+```
+
+## catch data
+
+And finally, the catch data associated with the interviews.
+
+```{r get_catch}
+dwg_sent$catch <- URLencode(
+  paste0(dwg_base$catch,
+         "?$where=creel_event_id in('",
+         paste(creel$event$creel_event_id, collapse = "','"),
+         "')&$limit=100000"
+  )
+)
+
+# catch with redundant post-join columns removed 
+# filtering catch to specific catch group parameter
+creel$catch <- read_csv(dwg_sent$catch) |>
+  dplyr::select(interview_id, catch_id, species, run, life_stage, fin_mark, fate, fish_count) 
+
+
+```
+
+
+
+## sections
+
+Aggregations of `location` units that depend on `r params$section` lookup table.
+
+**NOTE ANY DATA THAT ARE NOT ASSIGNED TO A SECTION WILL BE EXCLUDED**
+
+```{r add_sections}
+creel$effort <- creel$effort |> 
+  # select(-created_datetime, -modified_datetime) |>
+  left_join(
+    lut$sections |> select(water_body_desc, location = location_code, section),
+    by = c("location")
+    ) |> 
+  filter(!is.na(section))
+
+creel$interview <- creel$interview |> 
+  # select(-created_datetime, -modified_datetime,
+  #        -state_residence, -zip_code) |> 
+  left_join(
+    lut$sections |> select(water_body_desc, location = location_code, section),
+    by = c("location")
+  ) |> 
+  filter(!is.na(section))
+
+```
+
+
+```{r}
+
+catch <- creel$catch |> 
+  left_join(creel$interview) |> 
+  arrange(event_date)
+
+view(catch)
+
+# look for potential data entry mistakes related to fin_mark
+
+catch |> group_by(species, fin_mark, section) |> count() |> arrange(species, section) |>  view()
+
+
+# NA's in fin_mark for pinks 
+
+pinks_NA_fin_mark <- catch |> filter(species == "Pink", is.na(fin_mark))
+
+
+# counts of effort counts and interviews by day and section 
+
+Ints <- creel$interview |> 
+  group_by(event_date, section) |> 
+  count(name = "n_interviews")
+
+# infer sections that were not creeled on the basis of NA's in the number of index
+# counts 
+
+Ecs <- creel$effort |> 
+  group_by(event_date, section) |> 
+  summarize(
+    n_counts = n_distinct(count_sequence)
+  ) |> 
+  pivot_wider(names_from = section, values_from = n_counts, values_fill = 0) |> 
+  pivot_longer(cols = c(2:5), names_to = "section", values_to = "n_counts") |>
+  pivot_wider(names_from = section, values_from = n_counts, values_fill = 0) 
+  
+  mutate(
+    section_creeled = if_else(n_counts > 0, "creeled", "not_creeled")
+  )
+
+
+Ecs_split <- creel$effort |> 
+  group_by(event_date, section) |> 
+  summarize(
+    n_counts = n_distinct(count_sequence)
+  ) |> 
+  pivot_wider(names_from = section, values_from = n_counts, values_fill = 0) |> 
+  pivot_longer(cols = c(2:5), names_to = "section", values_to = "n_counts") |> 
+  mutate(
+    section_creeled = if_else(n_counts > 0, "creeled", "not_creeled")
+  ) |>
+  split(~ section)
+
+Ecs_split$`1` |> view()
+Ecs_split$`2` |> view()
+Ecs_split$`3` |> view()
+Ecs_split$`4` |> view()
+
+
+Comb1 <- Ecs |> 
+  left_join(Ints, by = c("event_date", "section"))
+
+section1 <- Comb1 |> filter(section == 1)
+
+```
+

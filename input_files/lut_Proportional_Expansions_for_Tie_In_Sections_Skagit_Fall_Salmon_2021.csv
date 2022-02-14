@@ -1,0 +1,9 @@
+water_body,gear_num,angler_type,location_desc,section,p_TI,Indirect_TI_Expan
+Skagit River,1,Bank,Mouth of Skagit River to Hwy 536 Bridge,1,1,
+Skagit River,1,Bank,Hwy 536 Bridge to mouth of Gilligan Creek,2,1,
+Skagit River,1,Bank,From mouth of Gilligan Creek to the mouth of Baker River,3,1,
+Skagit River,1,Bank,Mouth of Baker River to Marblemount bridge,4,1,
+Skagit River,2,Boat,Mouth of Skagit River to Hwy 536 Bridge,1,1,
+Skagit River,2,Boat,Hwy 536 Bridge to mouth of Gilligan Creek,2,1,
+Skagit River,2,Boat,From mouth of Gilligan Creek to the mouth of Baker River,3,1,
+Skagit River,2,Boat,Mouth of Baker River to Marblemount bridge,4,1,
