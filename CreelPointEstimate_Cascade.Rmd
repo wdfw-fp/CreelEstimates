@@ -188,7 +188,7 @@ creel$interview <- creel$interview |>
 
 
 
-# prepare data for model fitting
+# prepare data for catch and effort calculations
 
 ```{r init_point_estimate_data_prelim}
 #declare an intermediary list
@@ -365,8 +365,7 @@ data_eval$interview <- creel$interview |>
 #  EB commented out 2/22/2022 pending further review of Cascade River data 
 
 data_eval$remove_location <- bind_rows(
-  tibble(location = "Skagit City Access (SF Skagit, N. end of Fir Island)"),
-  tibble(location = "Rasar State Park"))
+  tibble(location = ")"))
 
 # mistakes in data collection led to instances of incomplete effort counts, this chunk provides the user an option to censor those data by filtering them out of the final dataset
 # count_id is a paste of event_date, section, count_sequence
@@ -379,17 +378,7 @@ creel$effort <- creel$effort |>
 # declare individual count_sequences which contain missing counts and should be filtered from final dataset
 
 data_eval$remove_count <- bind_rows(
-    tibble(count_id = "2021-08-19_2_1"),
-    tibble(count_id = "2021-08-20_1_3"),
-    tibble(count_id = "2021-09-17_3_4"),
-    tibble(count_id = "2021-09-19_3_2"),
-    tibble(count_id = "2021-09-23_4_1"),
-    tibble(count_id = "2021-09-23_3_1"),
-    tibble(count_id = "2021-09-23_1_3"),
-    tibble(count_id = "2021-09-26_2_3"),
-    tibble(count_id = "2021-09-26_3_2"),
-    tibble(count_id = "2021-10-21_4_3"),
-    tibble(count_id = "2021-10-31_4_1")
+    tibble(count_id = "")
     )
 
 # # n rows in effort data pre filter
@@ -413,7 +402,7 @@ creel$effort <- creel$effort |>
 
 
 
-## effort
+## effort data 
 
 ### effort census
 
@@ -485,25 +474,7 @@ point_estimate_data_prelim$effort_index <- point_estimate_data_prelim$effort_ind
   summarise(count_quantity = sum(count_quantity), .groups = "drop") |> 
   # pivot_wider(names_from = count_type, values_from = count_quantity) |> 
   arrange(event_date, section, count_sequence) 
-  # mutate(
-  
 
-# view(point_estimate_data_prelim$effort_index) 
-# point_estimate_data_prelim$effort_index <- point_estimate_data_prelim$effort_index |> 
-#   filter(
-#     #!is.na(count_quantity)
-#     is.na(no_count_reason),
-#     !is.na(count_type)
-#     ) |>  
-#   select(event_date, water_body, water_body_desc, location, section, tie_in_indicator, count_sequence, count_type, count_quantity) |>
-#   left_join(d_days, by = "event_date") |> 
-#   group_by(section, event_date, day_index, Week, Month, count_sequence, count_type) |> 
-#   summarise(count_quantity = sum(count_quantity), .groups = "drop") |> 
-#   pivot_wider(names_from = count_type, values_from = count_quantity) |>
-#   arrange(event_date, section, count_sequence) 
-#   mutate(
-#     `Trailers Only` = replace_na(`Trailers Only`, 0)
-#   )
 ```
 
 
@@ -534,7 +505,7 @@ point_estimate_data_prelim$mean_daily_effort_index_counts <- point_estimate_data
 
 
 
-## interview 
+## interview data 
 
 ```{r point_estimate_data_prelim_interview}
 point_estimate_data_prelim$interview <- point_estimate_data_prelim$interview |> 
@@ -579,8 +550,7 @@ point_estimate_data_prelim$interview <- point_estimate_data_prelim$interview |>
 
 
 
-
-# Daily interview and effort summaries - evaluate days with measured effort by no interview
+# evaluate days with measured effort by no interview
 
 ```{r stan_data_prelim_interview_daily_totals}
 #total hours creel and total catch sample a per day/angler type/section to compare with effort
@@ -608,15 +578,16 @@ effort_no_interview <- point_estimate_data_prelim$mean_daily_effort |>
 
 
 
-# estimates of daily effort from vehicle / trailer counts and angler group data from interviews
+# daily estimates of effort 
 
-A fundamental difference between the historic Columbia River and North Puget Sound creel datasets are what exactly gets counted during index effort counts. Methods outlined in Pollock and Hahn (I think) use actual counts of anglers. North sound creels use counts of 1) vehicles and 2) trailers as surrogates for 1) total number of anglers and 2) a subset of anglers fishing from boats. The use of vehicle and trailer counts requires additional information to translate the index counts into estimates of anglers. Here I've adopted the approach used in Excel workbooks, which uses interview information to calculate rates of anglers per vehicle / trailer. The angler per index count is then multiplied by the mean of sum total of the index counts for a given day and section. 
+Here we seek to calculate estimates of daily effort (angler-hours) from vehicle / trailer counts (index counts) and angler group data (interviews). A fundamental difference between the historic Columbia River and North Puget Sound creel datasets are what exactly gets counted during index effort counts. Methods outlined in Pollock and Hahn (I think) use actual counts of anglers. North sound creels use counts of 1) vehicles and 2) trailers as surrogates for 1) total number of anglers and 2) a subset of anglers fishing from boats. The use of vehicle and trailer counts requires additional information to translate the index counts into estimates of anglers. Here I've adopted the approach used in Excel workbooks, which uses interview information to calculate rates of anglers per vehicle / trailer. The angler per index count is then multiplied by the mean of sum total of the index counts for a given day and section. 
 
+## join daily angler data from interviews to daily summaries of index counts 
 ```{r}
 
-# Split interview data by angler_type
+# summarize interview data by section, angler-type (boat, bank), and event_date
 
-point_estimate_data_prelim$total_effort_interviews <- point_estimate_data_prelim$interview |> 
+point_estimate_data_prelim$angler_data_from_interviews <- point_estimate_data_prelim$interview |> 
   group_by(section, angler_type, event_date, day_index, DayL, Week, Month) |> 
   summarize(
     daily_sum_angler = sum(angler_count),
@@ -624,26 +595,8 @@ point_estimate_data_prelim$total_effort_interviews <- point_estimate_data_prelim
     angler_hours_total = sum(angler_hours_total),
     anglers_per_index_count_from_interview = daily_sum_angler / daily_sum_index_count_from_interview)
     
-
-# view(point_estimate_data_prelim$total_effort_interviews)
-
-# uncomment for non-Cascade
-# update, probably do not need 
-
-# point_estimate_data_prelim$boat_effort_interviews <- point_estimate_data_prelim$interview |>
-#   filter(angler_type == "boat_ang") |> 
-#   group_by(event_date,section, day_index, DayL, Week, Month) |> 
-#   summarize(
-#     daily_sum_angler = sum(angler_count),
-#     daily_sum_index_count_from_interview = sum(trailer_count),
-#     angler_hours_total = sum(angler_hours_total),
-#     anglers_per_index_count_from_interview = daily_sum_angler / daily_sum_index_count_from_interview) |>
-#   mutate(
-#     angler_type = "boat"
-#   )
-
-
-point_estimate_data_prelim$all_effort_interviews <- point_estimate_data_prelim$total_effort_interviews
+-
+# point_estimate_data_prelim$all_effort_interviews <- point_estimate_data_prelim$total_effort_interviews
 
 # uncomment for non-Cascade
 # |> 
@@ -653,11 +606,10 @@ point_estimate_data_prelim$all_effort_interviews <- point_estimate_data_prelim$t
 # several days where boat effort estimate from trailers exceed total estimate from vehicles, could be sampling bias that's underrepresenting bank anglers hours / overrepresenting boat angler hours in interviews
 
 
-
 # Hahn manual - if no interview for given strata, treat effort counts as missing data (unsampled day), and use assumed value of CPUE in calculation of mean CPUE   
 
 # this left join is slicing off index counts with no corresponding interview
-point_estimate_data_prelim$effort_counts_and_interviews <- point_estimate_data_prelim$all_effort_interviews  |> 
+point_estimate_data_prelim$effort_counts_and_interviews <- point_estimate_data_prelim$angler_data_from_interviews  |> 
   left_join(point_estimate_data_prelim$mean_daily_effort_index_counts, by = c("event_date", "section", "angler_type")) |> 
     mutate(
     mean_daily_effort = DayL * anglers_per_index_count_from_interview * mean_index_count) |>
@@ -669,16 +621,16 @@ point_estimate_data_prelim$effort_counts_and_interviews <- point_estimate_data_p
 
 
 
-# daily effort incorporating bias term ratios between census and index counts of boat and bank anglers for each tie in survey date and section 
+
+## join census count data to index count data and apply bias term ratio to unexpanded index counts 
 
 ```{r}
 
 # calculate mean vehicle and trailer counts and corresponding anglers per vehicle / anglers per trailer by day, section, and count sequence to match temporal scale of census counts 
-# boat_effort_correction_factors <- point_estimate_data_prelim$boat_effort_correction_factors
 
 # index count derived estimate of the number of anglers during an effort count 
 
-point_estimate_data_prelim$anglers_per_index_count_daily <- point_estimate_data_prelim$total_effort_interviews |> 
+point_estimate_data_prelim$anglers_per_index_count_daily <- point_estimate_data_prelim$angler_data_from_interviews |> 
   select(
     event_date, section, anglers_per_index_count_from_interview, angler_type
   )
@@ -692,12 +644,8 @@ point_estimate_data_prelim$Daily_effort_per_count_groups <- point_estimate_data_
   select(-count_type) |> 
   mutate(angler_type = if_else(angler_type == "total", "bank", "boat")) # Cascade fix
   
-# view(point_estimate_data_prelim$anglers_per_index_count_daily)
-# view(point_estimate_data_prelim$Daily_effort_per_count_groups)
-# totals_per_count <- point_estimate_data_prelim$Daily_effort_per_count
 
-
-point_estimate_data_prelim$effort_counts_for_census_join <- point_estimate_data_prelim$all_effort_interviews |> 
+point_estimate_data_prelim$effort_counts_for_census_join <- point_estimate_data_prelim$angler_data_from_interviews |> 
   left_join(point_estimate_data_prelim$Daily_effort_per_count_groups, by = c("event_date", "section", "angler_type")) |> 
   mutate(
     index_count = anglers_per_index_count_from_interview * sum_index_count
@@ -705,8 +653,7 @@ point_estimate_data_prelim$effort_counts_for_census_join <- point_estimate_data_
   ungroup() |> 
   select(event_date, section, Week, Month, DayL, count_sequence, angler_type, index_count)
   
-# view(point_estimate_data_prelim$effort_counts_for_census_join)
-# view(point_estimate_data_prelim$Daily_effort_per_count_groups)
+
 # left join effort counts to census counts 
 
 point_estimate_data_prelim$census_counts_total <- point_estimate_data_prelim$effort_census |> 
@@ -720,9 +667,6 @@ point_estimate_data_prelim$census_counts_total <- point_estimate_data_prelim$eff
       angler_type == "boat_ang" ~ "boat"
     )
   )
-
-
-# view(point_estimate_data_prelim$census_counts_total)
 
 # point_estimate_data_prelim$census_counts_boat <- point_estimate_data_prelim$effort_census |>
 #   filter(angler_type == "boat_ang") |> 
@@ -756,22 +700,7 @@ point_estimate_data_prelim$census_counts_all <- point_estimate_data_prelim$censu
   summarise(
     TI_Expan_Total = sum(census_count) / sum(index_count))
 
-# view(point_estimate_data_prelim$census_counts_all)
-# TI values to multiply mean daily effort values by to get census calibrated mean daily effort estimates 
-# We are using the season long sum of each count type; could think of better approaches, since high count events will dominate this values, vs. some type of weighted approach (even as simple as taking the mean of TI's per section)
 
-# point_estimate_data_prelim$census_counts_season_sum <- point_estimate_data_prelim$census_counts_all |> 
-#   group_by(section, angler_group) |> 
-#   summarise(
-#     TI_Expan_Total = sum(census_count) / sum(index_count))
-#   )
-
-
-# census_counts_all |>  
-#   ggplot(aes(x = index_count, y = census_count, fill = angler_group)) +
-#   scale_fill_manual(values = c("blue", "orange")) +
-#   geom_point() +
-#   facet_wrap(.~section)
 days_join <- d_days |> 
   select(event_date, DayType, Month, Week, open_section_1)
 
@@ -789,10 +718,11 @@ point_estimate_data_prelim$effort_interviews_final <- point_estimate_data_prelim
   ) |>
   arrange(event_date)
 
-# view(point_estimate_data_prelim$effort_interviews_final)
 # ok, we have mean daily effort adjusted for tie in counts 
 
 ```
+
+## calculate number of sampled and unsampled days per day type and time period strata, add to daily effort-interview dataset  
 
 ```{r}
 total_days <- point_estimate_data_prelim$effort_interviews_final |>
@@ -824,21 +754,14 @@ point_estimate_data_prelim$effort_interviews_final <- point_estimate_data_prelim
   filter(!is.na(mean_daily_TI_Expan)) 
 
 
-# degfree1 <- point_estimate_data_prelim$effort_interviews_final |>
-#   select(degfree) |> 
-#   distinct()
-
-# view(point_estimate_data_prelim$effort_interviews_final)
-
 ```
 
 
-# daily catch per unit effort (cpue) from interview data
+# daily catch per unit effort (CPUE) from interviews 
 ```{r daily CPUE from interviews}
 
 #total hours creel and total catch sample a per day/angler type/section to compare with effort
 # KB 2017: However, a better estimate would be the “mean-of-ratios” CPUE (i.e., average CPUE per group divided by number of groups interviewed), which alleviates the potential for a “length-of-stay” bias caused by the inclusion of both complete and incomplete trip data in the estimate (Pollock et al. 1994). Length of stay bias occurs when anglers who fish longer are more likely to be interviewed and their resulting information is unequally weighted when calculating CPUE.
-
 
 point_estimate_data_prelim$interview_daily_totals <- point_estimate_data_prelim$interview |>
    mutate(
@@ -873,18 +796,15 @@ point_estimate_data_prelim$interview_daily_totals <- rows_upsert(point_estimate_
       mutate(event_date = as.Date(event_date, "%Y-%m-%d"))
     , by = c("event_date"))
 
-view(point_estimate_data_prelim$interview_daily_totals)
-# yes!!
 
 point_estimate_data_prelim$daily_cpue <- point_estimate_data_prelim$interview_daily_totals |> 
   select(section, event_date, angler_type, cpue_rom)
-view(point_estimate_data_prelim$daily_cpue)
 
 
 ```
 
 
-# daily catch estimates 
+# daily catch (effort * CPUE) estimates 
 ```{r daily catch estimates}
 
 # empty list for summarized estimates 
@@ -900,14 +820,14 @@ estimates$daily_effort_cpue_catch <- point_estimate_data_prelim$effort_interview
     catch_estimate = mean_daily_TI_Expan * cpue_rom
   )
 
-# view(estimates$daily_effort_cpue_catch)
 
 ```
 
 
 
-# monthly effort estimates 
+# time period specific estimates 
 
+## effort by time period strata 
 ```{r}
 
 # calculate effort by day type and angler type strata
@@ -939,12 +859,10 @@ estimates$monthly_effort_total <- estimates$monthly_effort_by_daytype |>
   distinct()
 
 
-view(estimates$monthly_effort_total)
-
 ```
 
 
-# monthly cpue estimates 
+## CPUE by time period strata  
 ```{r}
 # point_estimate_data_prelim$total_days_per_month <- point_estimate_data_prelim$interview_daily_totals |> 
 #   select(Month, N_days) |>
@@ -973,14 +891,13 @@ view(estimates$monthly_effort_total)
 #   filter(!is.na(Month)) |> 
 #   distinct()
 # 
-# view(estimates$interview_cpue_monthly_by_daytype)
 
 
 ```
 
 
 
-# monthly catch estimates 
+## catch by time period strata 
 ```{r}
 
 estimates$monthly_catch_by_daytype <- estimates$daily_effort_cpue_catch |>
