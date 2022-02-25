@@ -7,9 +7,9 @@ params:
   date_end: "2021-11-30"
   time_strata: "month"
   sections: "lut_water_body_location_d14_cascade_fall_salmon.csv"
-  species: "Chinook"
+  species: "Coho"
   fin_mark: "UM"
-  fate: "Released"
+  fate: "Kept"
 output:
   html_document:
     fig_caption: yes
@@ -62,6 +62,8 @@ lu_sections <- lut$sections
 # Proportional tie in expansion table 
 # value of 1 for p_TI means that the entire river section is surveyed during census counts?
 # What is "Indirect_TI_Expan" and how it is calculated?
+
+filepath_modeloutput <- "O:/Projects/Creel_Analysis_Dev/CreelPointEstimate/model_output/"
 
 ```
 
@@ -277,6 +279,9 @@ d_days <- rows_upsert(d_days,
     ,
     by ="event_date"
   )
+
+
+
 
 
 ```
@@ -595,7 +600,7 @@ point_estimate_data_prelim$angler_data_from_interviews <- point_estimate_data_pr
     angler_hours_total = sum(angler_hours_total),
     anglers_per_index_count_from_interview = daily_sum_angler / daily_sum_index_count_from_interview)
     
--
+
 # point_estimate_data_prelim$all_effort_interviews <- point_estimate_data_prelim$total_effort_interviews
 
 # uncomment for non-Cascade
@@ -818,8 +823,15 @@ estimates$daily_effort_cpue_catch <- point_estimate_data_prelim$effort_interview
   left_join(point_estimate_data_prelim$daily_cpue, by = c("section", "event_date", "angler_type")) |> 
   mutate(
     catch_estimate = mean_daily_TI_Expan * cpue_rom
-  )
+  ) |> 
+  mutate_if(is.numeric, round, 2)
 
+
+filepath_modeloutput <- "O:/Projects/Creel_Analysis_Dev/CreelPointEstimate/model_output/"
+
+
+write_csv(estimates$daily_effort_cpue_catch, paste(filepath_modeloutput, paste("Summary_Daily_Effort_Catch_CPUE", paste(params$species, params$fin_mark, params$fate, sep = "_"), paste0("Point_Estimate"), ".csv", sep="_"), sep="/"))
+          
 
 ```
 
@@ -856,8 +868,11 @@ estimates$monthly_effort_total <- estimates$monthly_effort_by_daytype |>
     lwr90CI = Total_effort - qt(1-(0.1/2),estimates$daily_effort_cpue_catch$degfree)*(Variance^0.5),
     upr90CI = Total_effort + qt(1-(0.1/2),estimates$daily_effort_cpue_catch$degfree)*(Variance^0.5)
   ) |> 
-  distinct()
+  distinct()|> 
+  mutate_if(is.numeric, round, 2)
 
+
+write_csv(estimates$monthly_effort_total, paste(filepath_modeloutput, paste("Summary_Monthly_Effort", paste(params$species, params$fin_mark, params$fate, sep = "_"), paste0("Point_Estimate"), ".csv", sep="_"), sep="/"))
 
 ```
 
@@ -926,11 +941,13 @@ estimates$monthly_catch_total <- estimates$monthly_catch_by_daytype |>
     lwr95CI = total_catch - qt(1-(0.05/2),estimates$daily_effort_cpue_catch$degfree)*(variance^0.5),
     upr95CI = total_catch + qt(1-(0.05/2),estimates$daily_effort_cpue_catch$degfree)*(variance^0.5)
   ) |> 
-  distinct()
+  distinct() |> 
+  mutate_if(is.numeric, round, 2)
+
+write_csv(estimates$monthly_catch_total, paste(filepath_modeloutput, paste("Summary_Monthly_Catch", paste(params$species, params$fin_mark, params$fate, sep = "_"), paste0("Point_Estimate"), ".csv", sep="_"), sep="/"))
 
 view(estimates$monthly_catch_total)
 ```
-
 
 
 # older Nooksack code 
