@@ -828,7 +828,7 @@ point_estimate_data_prelim$effort_interviews_final <- point_estimate_data_prelim
 
 ```
 
-## calculate number of sampled and unsampled days per day type and time period strata, add to daily effort-interview dataset  
+## calculate number of sampled and unsampled days per day type and time period strata, add to daily effort-interview dataset  ** requires user input - degrees freedom **
 
 ```{r}
 
@@ -849,8 +849,8 @@ point_estimate_data_prelim$effort_interviews_final <- point_estimate_data_prelim
   left_join(point_estimate_data_prelim$total_days, by = c("DayType", "Month", "angler_type")) |> 
   left_join(point_estimate_data_prelim$sampled_days, by = c("DayType", "Month", "angler_type")) |> 
   mutate(
-    n_days = replace_na(n_days, 0),
-    degfree = median(as.vector(c(1,25))) # EB need to code dynamic way to derive d.f. based on creel manual 
+    n_days = replace_na(n_days, 0)
+    # degfree = median(as.vector(c(1,25))) # EB need to code dynamic way to derive d.f. based on creel manual 
   ) |>
   filter(!is.na(mean_daily_TI_Expan)) 
 
@@ -1038,11 +1038,24 @@ Need to work on making the model period a script parameter so the user can easil
 ## effort by time period strata 
 ```{r}
 
+# create table with degrees of freedom by section and angler type to apply to monthly time strata
+
+point_estimate_data_prelim$degrees_freedom <- estimates$daily_effort_cpue_catch |>
+  distinct(section, angler_type, Month, n_days) |> 
+  group_by(section, angler_type) |> 
+  summarize(
+    min_n_days = min(n_days),
+    sum_n_days = sum(n_days),
+    degrees_freedom = min_n_days + sum_n_days / 2
+  )
+
+
 # calculate effort by day type and angler type strata
 
 estimates$monthly_effort_by_daytype <- estimates$daily_effort_cpue_catch |>
   group_by(section, angler_type, Month, DayType, n_days, N_days) |> 
   summarize(
+    n = n(),
     Sum_daily_effort_sampled_days = sum(mean_daily_TI_Expan),
     Mean_daily_effort = mean(mean_daily_TI_Expan),
     Variance_daily_effort = var(mean_daily_TI_Expan),
@@ -1054,15 +1067,16 @@ estimates$monthly_effort_by_daytype <- estimates$daily_effort_cpue_catch |>
 # Sum effort estimates across day types, retain grouping on angler type 
 
 estimates$monthly_effort_total <- estimates$monthly_effort_by_daytype |>
-  ungroup() |> 
+  ungroup() |>
+  left_join(point_estimate_data_prelim$degrees_freedom, by = c("section", "angler_type")) |> # add degrees of freedom per angler_type and section for monthly time period
   group_by(section, Month, angler_type) |> 
   summarise(
     Total_effort = sum(Total_effort),
     Variance = sum(Variance_total_daily_effort),
     SE = sqrt(Variance),
     CV = SE / Total_effort,
-    lwr90CI = Total_effort - qt(1-(0.1/2),estimates$daily_effort_cpue_catch$degfree)*(Variance^0.5),
-    upr90CI = Total_effort + qt(1-(0.1/2),estimates$daily_effort_cpue_catch$degfree)*(Variance^0.5)
+    lwr90CI = Total_effort - qt(1-(0.1/2),degrees_freedom)*(Variance^0.5),
+    upr90CI = Total_effort + qt(1-(0.1/2),degrees_freedom)*(Variance^0.5)
   ) |> 
   distinct(Month, angler_type, .keep_all = TRUE)|> 
   mutate_if(is.numeric, round, 2)
@@ -1134,14 +1148,15 @@ estimates$monthly_catch_by_daytype <- estimates$daily_effort_cpue_catch |>
 
 estimates$monthly_catch_total <- estimates$monthly_catch_by_daytype |>
   ungroup() |> 
+  left_join(point_estimate_data_prelim$degrees_freedom, by = c("section", "angler_type")) |> # add degrees of freedom per angler_type and section for monthly time period
   group_by(section, Month, catch_group, angler_type) |> 
   summarise(
     total_catch = sum(total_catch_expanded),
     variance = sum(variance_total_catch_expanded),
     SE = sqrt(variance),
     CV = SE / total_catch,
-    lwr95CI = total_catch - qt(1-(0.05/2),estimates$daily_effort_cpue_catch$degfree)*(variance^0.5),
-    upr95CI = total_catch + qt(1-(0.05/2),estimates$daily_effort_cpue_catch$degfree)*(variance^0.5)
+    lwr95CI = total_catch - qt(1-(0.05/2),degrees_freedom)*(variance^0.5),
+    upr95CI = total_catch + qt(1-(0.05/2),degrees_freedom)*(variance^0.5)
   ) |>
   distinct() |> 
   mutate_if(is.numeric, round, 2) |> 
@@ -1151,7 +1166,7 @@ view(estimates$monthly_catch_total)
 
 write_csv(estimates$monthly_catch_total, paste(filepath_modeloutput, paste(paste(params$proj_name, params$water_body, sep = "_"), paste("Point_Estimate", "Summary_Monthly_Catch", sep = "_"), paste(params$date_start, params$date_end, sep = "_"), ".csv", sep="_"), sep="/"))
 
-
+print(estimates$monthly_catch_total |> group_by(catch_group) |> summarise( total_catch = sum(total_catch)))
 ```
 
 
