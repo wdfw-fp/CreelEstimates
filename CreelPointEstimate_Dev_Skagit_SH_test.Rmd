@@ -2,11 +2,11 @@
 title: Creel Point Estimate Analysis
 params:
   proj_name: "District 14"
-  water_body: "Skagit River"
-  date_start: "2021-08-14"   
-  date_end: "2021-12-31"
+  water_body: "Skagit River,Sauk River"
+  date_start: "2021-02-01"   
+  date_end: "2021-04-13"
   time_strata: "month"
-  sections: "lut_water_body_location_d14_skagit_fall_salmon_PE.csv"
+  sections: "lut_water_body_location_d14_skagit_winter_sthd.csv"
 output:
   html_document:
     fig_caption: yes
@@ -51,7 +51,7 @@ lut <- map(
     river_loc = "input_files/lut_River.Locations_2019-01-07.csv",
     creel_models = "input_files/lut_Creel_Models_2021-01-20.csv",
     sections = file.path("input_files", params$sections),
-    census_expansion = "input_files/lut_Proportional_Expansions_for_Tie_In_Sections_Skagit_Fall_Salmon_2021.csv"
+    census_expansion = "input_files/lut_Proportional_Expansions_for_Tie_In_Sections_Skagit_Steelhead_2021_Example.csv"
   ),
   ~readr::read_csv(file.path(.x))
 )
@@ -257,18 +257,19 @@ d_days <- tibble(
 # #commented out during dev around Skagit_wgf, since no closures
 # #and because may move to params file path to closures csv or similar
 
+# 2021 Skagit Winter Steelhead C&R fishery only open 4 days / week
 d_days <- rows_upsert(d_days,
     bind_rows(
-      tibble(section = "2,3", closure_begin = "2021-08-19", closure_end = "2021-08-31"), # salmon opens on 9/1 for sections 3,4
-      tibble(section = "2", closure_begin = "2021-09-01", closure_end = "2021-09-01"), # treaty fishery closure
-      tibble(section = "2", closure_begin = "2021-09-07", closure_end = "2021-09-09"), # treaty fishery closure
-      tibble(section = "2", closure_begin = "2021-09-14", closure_end = "2021-09-16"), # treaty fishery closure
-      tibble(section = "1,2,3", closure_begin = "2021-09-18", closure_end = "2021-09-18"), # river out due to flows
-      tibble(section = "2", closure_begin = "2021-10-05", closure_end = "2021-10-06"), # treaty fishery closure
-      tibble(section = "2", closure_begin = "2021-10-12", closure_end = "2021-10-13"), # treaty fishery closure
-      tibble(section = "2", closure_begin = "2021-10-19", closure_end = "2021-10-20"), # treaty fishery closure
-      tibble(section = "1,2,3", closure_begin = "2021-11-13", closure_end = "2021-11-14"), # river out due to flows
-      tibble(section = "1,2,3", closure_begin = "2021-11-17", closure_end = "2021-11-18") # river out due to flows
+      tibble(section = "1,2", closure_begin = "2021-02-03", closure_end = "2021-02-05"), 
+      tibble(section = "1,2", closure_begin = "2021-02-10", closure_end = "2021-02-12"), 
+      tibble(section = "1,2", closure_begin = "2021-02-17", closure_end = "2021-02-19"), 
+      tibble(section = "1,2", closure_begin = "2021-02-24", closure_end = "2021-02-26"), 
+      tibble(section = "1,2", closure_begin = "2021-03-03", closure_end = "2021-03-05"), 
+      tibble(section = "1,2", closure_begin = "2021-03-10", closure_end = "2021-03-12"), 
+      tibble(section = "1,2", closure_begin = "2021-03-17", closure_end = "2021-03-19"), 
+      tibble(section = "1,2", closure_begin = "2021-03-24", closure_end = "2021-03-26"), 
+      tibble(section = "1,2", closure_begin = "2021-03-31", closure_end = "2021-04-02"), 
+      tibble(section = "1,2", closure_begin = "2021-04-07", closure_end = "2021-04-09") 
     ) |>
       rowwise() |>
       mutate(closure_date = paste(seq.Date(as.Date(closure_begin), as.Date(closure_end), by = "day"), collapse = ",")) |>
@@ -366,46 +367,46 @@ data_eval$interview <- creel$interview |>
 
 
 # effort count locations with data completeness problems 
-data_eval$remove_location <- bind_rows(
-  tibble(location = "Skagit City Access (SF Skagit, N. end of Fir Island)"),
-  tibble(location = "Rasar State Park"))
-
-# mistakes in data collection led to instances of incomplete effort counts, this chunk provides the user an option to censor those data by filtering them out of the final dataset 
-# count_id is a paste of event_date, section, count_sequence 
-
-creel$effort <- creel$effort |>
-   mutate(
-    count_id = paste(event_date, section, count_sequence, sep = "_")
-  )
-
-# declare individual count_sequences which contain missing counts and could / should be censored from analysis 
-
-data_eval$remove_count <- bind_rows(
-    tibble(count_id = "2021-08-19_1_1"),
-    tibble(count_id = "2021-08-20_1_3"),
-    tibble(count_id = "2021-09-17_2_4"),
-    tibble(count_id = "2021-09-19_2_2"),
-    tibble(count_id = "2021-09-23_3_1"),
-    tibble(count_id = "2021-09-23_2_1"),
-    tibble(count_id = "2021-09-23_1_3"),
-    tibble(count_id = "2021-09-26_1_3"),
-    tibble(count_id = "2021-09-26_2_2"),
-    tibble(count_id = "2021-10-21_3_3"),
-    tibble(count_id = "2021-10-31_3_1")
-    )
-
-# # n rows in effort data pre filter
-data_eval$counts_pre_filter <- nrow(creel$effort)
-
-creel$effort <- creel$effort |>
-  filter(!location %in% data_eval$remove_location$location, !count_id %in% data_eval$remove_count$count_id) |>
-  arrange(event_date, section, count_sequence)
-
-# # n rows in effort data post filter
-data_eval$counts_post_filter <- nrow(creel$effort)
-
-# number of counts removed from dataset
-print(data_eval$counts_pre_filter - data_eval$counts_post_filter)
+# data_eval$remove_location <- bind_rows(
+#   tibble(location = "Skagit City Access (SF Skagit, N. end of Fir Island)"),
+#   tibble(location = "Rasar State Park"))
+# 
+# # mistakes in data collection led to instances of incomplete effort counts, this chunk provides the user an option to censor those data by filtering them out of the final dataset 
+# # count_id is a paste of event_date, section, count_sequence 
+# 
+# creel$effort <- creel$effort |>
+#    mutate(
+#     count_id = paste(event_date, section, count_sequence, sep = "_")
+#   )
+# 
+# # declare individual count_sequences which contain missing counts and could / should be censored from analysis 
+# 
+# data_eval$remove_count <- bind_rows(
+#     tibble(count_id = "2021-08-19_1_1"),
+#     tibble(count_id = "2021-08-20_1_3"),
+#     tibble(count_id = "2021-09-17_2_4"),
+#     tibble(count_id = "2021-09-19_2_2"),
+#     tibble(count_id = "2021-09-23_3_1"),
+#     tibble(count_id = "2021-09-23_2_1"),
+#     tibble(count_id = "2021-09-23_1_3"),
+#     tibble(count_id = "2021-09-26_1_3"),
+#     tibble(count_id = "2021-09-26_2_2"),
+#     tibble(count_id = "2021-10-21_3_3"),
+#     tibble(count_id = "2021-10-31_3_1")
+#     )
+# 
+# # # n rows in effort data pre filter
+# data_eval$counts_pre_filter <- nrow(creel$effort)
+# 
+# creel$effort <- creel$effort |>
+#   filter(!location %in% data_eval$remove_location$location, !count_id %in% data_eval$remove_count$count_id) |>
+#   arrange(event_date, section, count_sequence)
+# 
+# # # n rows in effort data post filter
+# data_eval$counts_post_filter <- nrow(creel$effort)
+# 
+# # number of counts removed from dataset
+# print(data_eval$counts_pre_filter - data_eval$counts_post_filter)
 
 # Placeholder as option to replace NA's with 0's if/when deemed appropriate
 creel$effort <- creel$effort |>
@@ -522,6 +523,8 @@ point_estimate_data_prelim$mean_daily_effort_index_counts <- point_estimate_data
 
 ```{r point_estimate_data_prelim_interview, include = FALSE}
 
+# EB 3/2/2022 interview question "fish from boat or bank?" not yet used in this project, so need to classify angler type from interviews with different criteria 
+
 # derive needed fields from interview data and join fish catch data 
 point_estimate_data_prelim$interview <- point_estimate_data_prelim$interview |> 
   left_join(d_days, by = "event_date") |> #summary()
@@ -529,9 +532,9 @@ point_estimate_data_prelim$interview <- point_estimate_data_prelim$interview |>
     across(c(vehicle_count, trailer_count), ~replace_na(., 0)),
     trip_status = replace_na(trip_status, "Unknown"),
     angler_type = case_when(
-      is.na(fish_from_boat) ~ "bank",
-      fish_from_boat == "Bank" ~ "bank",
-      fish_from_boat == "Boat" ~ "boat"
+      is.na(boat_type) ~ "bank",
+      boat_type == "Pontoon/Kick/Kayak/Dinghy" ~ "bank",
+      boat_type %in% c("Drift Boat/ Raft", "Trailered Motorized Boat") ~ "boat"
       ),
     angler_type_ind = as.integer(factor(angler_type)),
     fishing_end_time = if_else(is.na(fishing_end_time), interview_time, fishing_end_time),
@@ -757,9 +760,9 @@ days_join <- d_days |>
   ) |> 
   pivot_longer(cols = c(at_1, at_2, at_3), values_to = "angler_type") |> 
   select(-name) |> 
-  mutate(s1 = 1, s2 = 2, s3 = 3
+  mutate(s1 = 1, s2 = 2
   ) |> 
-  pivot_longer(cols = c(s1,s2,s3), values_to = "section") |> 
+  pivot_longer(cols = c(s1,s2), values_to = "section") |> 
   select(-name)
 
 # join census (tie in) counts to index counts 
@@ -1047,7 +1050,7 @@ estimates$daily_effort_cpue_catch <- point_estimate_data_prelim$effort_interview
     catch_estimate = mean_daily_TI_Expan * cpue_rom
   ) |> 
   mutate_if(is.numeric, round, 2) |> 
-    filter(str_detect(catch_group, 'Coho|Chinook')) |>  # placeholder filter 
+    filter(str_detect(catch_group, 'Steelhead|Bull')) |>  # placeholder filter 
   arrange(catch_group, section, event_date, angler_type)
 
 write_csv(estimates$daily_effort_cpue_catch, paste(filepath_modeloutput, paste(paste(params$proj_name, params$water_body, sep = "_"), paste("Point_Estimate", "Summary_Daily_Effort_Catch_CPUE", sep = "_"), paste(params$date_start, params$date_end, sep = "_"), ".csv", sep="_"), sep="/"))
@@ -1133,7 +1136,7 @@ estimates$monthly_effort_total |>
                 position=position_dodge(.9)) +
   theme(legend.text=element_text(size=8)) +
   theme_bw(base_size = 12) + 
-  facet_wrap(. ~ section + angler_type, ncol = 3)
+  facet_wrap(. ~ section, ncol = 2)
 
 ```
 
@@ -1232,7 +1235,7 @@ print(monthly_catch_total_table)
 
 estimates$monthly_catch_total |> 
   # filter(!grepl(c("Steelhead"),Catch_Group)) |> 
-  filter(angler_type == "total" & catch_group %in% c("Coho_Adult_UM_Kept", "Coho_Adult_AD_Kept")) |>
+  filter(angler_type == "total") |>
   ggplot(aes(x = Month, y = total_catch)) +
   geom_bar(position = "dodge", stat = "identity", color = "black") +
   scale_fill_manual(values=c("#999999", "#E69F00")) +
@@ -1242,17 +1245,6 @@ estimates$monthly_catch_total |>
   theme_bw(base_size = 12) + 
   facet_wrap(. ~ catch_group + section)
 
-estimates$monthly_catch_total |> 
-  # filter(!grepl(c("Steelhead"),Catch_Group)) |> 
-  filter(angler_type == "total", catch_group %in% c("Coho_Adult_UM_Kept", "Coho_Adult_AD_Kept")) |>
-  ggplot(aes(x = Month, y = total_catch)) +
-  geom_bar(position = "dodge", stat = "identity", color = "black") +
-  scale_fill_manual(values=c("#999999", "#E69F00")) +
-  geom_errorbar(aes(ymin=lwr95CI, ymax=upr95CI), width=.2,
-                position=position_dodge(.9)) +
-  theme(legend.text=element_text(size=8)) +
-  theme_bw(base_size = 12) + 
-  facet_wrap(. ~ section + catch_group)
 
 ```
 
@@ -1387,7 +1379,6 @@ estimates$total_catch <- estimates$monthly_catch_total |>
   mutate_if(is.numeric, round, 2) |> 
   arrange(section, catch_group)
 
-
 view(estimates$total_catch)
 
 write_csv(estimates$total_catch, paste(filepath_modeloutput, paste(paste(params$proj_name, params$water_body, sep = "_"), paste("Point_Estimate", "Summary_Total_Catch", sep = "_"), paste(params$date_start, params$date_end, sep = "_"), ".csv", sep="_"), sep="/"))
@@ -1409,19 +1400,7 @@ print(total_catch_table)
 
 estimates$total_catch |> 
   # filter(!grepl(c("Steelhead"),Catch_Group)) |> 
-  filter(angler_type == "total" & catch_group %in% c("Coho_Adult_UM_Kept", "Coho_Adult_AD_Kept")) |>
-  ggplot(aes(x = catch_group, y = total_catch)) +
-  geom_bar(position = "dodge", stat = "identity", color = "black") +
-  scale_fill_manual(values=c("#999999", "#E69F00")) +
-  geom_errorbar(aes(ymin=lwr95CI, ymax=upr95CI), width=.2,
-                position=position_dodge(.9)) +
-  theme(legend.text=element_text(size=8)) +
-  theme_bw(base_size = 12) + 
-  facet_wrap(. ~ section)
-
-estimates$total_catch |> 
-  # filter(!grepl(c("Steelhead"),Catch_Group)) |> 
-  filter(angler_type == "total" & catch_group %in% c("Chinook_Adult_UM_Released")) |>
+  filter(angler_type == "total") |>
   ggplot(aes(x = catch_group, y = total_catch)) +
   geom_bar(position = "dodge", stat = "identity", color = "black") +
   scale_fill_manual(values=c("#999999", "#E69F00")) +
