@@ -658,8 +658,7 @@ point_estimate_data_prelim$interview_daily_totals <- point_estimate_data_prelim$
 point_estimate_data_prelim$effort_no_interview <- point_estimate_data_prelim$mean_daily_effort |> 
   left_join(point_estimate_data_prelim$angler_data_from_interviews, by = c("event_date", "section", "angler_type")) |> 
   filter(is.na(angler_hours_total)) |> 
-  arrange(section, event_date) |> 
-  distinct(section, event_date)
+  arrange(section, event_date)
 
 print(point_estimate_data_prelim$effort_no_interview)
 
@@ -935,98 +934,31 @@ point_estimate_data_prelim$interview_daily_totals <- point_estimate_data_prelim$
   bind_rows(point_estimate_data_prelim$interview_daily_totals_boat) |> 
   bind_rows(point_estimate_data_prelim$interview_daily_totals_bank)
 
+#  add implicit missing values of CPUE to dataset using tidyr complete() function
 
-# calculate mean cpue values by DayType, Month, Catch_Group to use for assumed values 
+point_estimate_data_prelim$interview_daily_totals_complete <- point_estimate_data_prelim$interview_daily_totals |>
+  select(section, event_date, angler_type, catch_group, catch_dailysum, cpue_rom) |> 
+  ungroup() |>
+  complete(section, event_date, angler_type, catch_group) |> 
+  left_join(d_days, by = "event_date")
+
+# calculate mean cpue values by DayType, Month, Catch_Group to use for assumed values and complete the dataframe with implicit missing values of summarized CPUE (These should all essentially be 0)
 
 point_estimate_data_prelim$cpue_summary <- point_estimate_data_prelim$interview_daily_totals |> 
   group_by(section, Month, DayType, angler_type, catch_group) |> 
   summarise(
-    cpue_rom = mean(cpue_rom) # EB using ratio of the means for now but should circle back to this soon
-  )
+    mean_strata_cpue = mean(cpue_rom) # EB using ratio of the means for now but should circle back to this soon
+  ) |> 
+  ungroup() |>
+  complete(section, Month, DayType, angler_type, catch_group,
+           fill = list(mean_strata_cpue = 0))
 
-# EB code below needs work. DFW creel manual states that days with known effort but no corresponding interview require the analyst to assume a value of CPUE/HPUE for that day. This is a rough attempt at that using values from point_estimate_data_prelim$cpue_summary
-# Using a rows upsert approach to add in CPUE for days with known effort but no interview. This spirals out of control with additional catch groups and should probably be done using a for loop or apply framework.. if really necessary. Could be topic of discussion with creel dev crew
-
-# point_estimate_data_prelim$interview_daily_totals <- rows_upsert(point_estimate_data_prelim$interview_daily_totals,
-#   bind_rows(
-#     # coho catch groups 
-#       tibble(event_date = "2021-11-19",  
-#              point_estimate_data_prelim$cpue_summary |> filter(section == 1, Month == 11, angler_type == "bank", 
-#                                     DayType == "Weekend", catch_group == "Coho_Adult_AD_Kept")),
-#       tibble(event_date = "2021-11-28", 
-#              point_estimate_data_prelim$cpue_summary |> filter(section == 1, Month == 11, angler_type == "bank", 
-#                                     DayType == "Weekday", catch_group == "Coho_Adult_AD_Kept")),
-#       tibble(event_date = "2021-11-29",  
-#              point_estimate_data_prelim$cpue_summary |> filter(section == 1, Month == 11, angler_type == "bank", 
-#                                     DayType == "Weekend", catch_group == "Coho_Adult_AD_Kept")),
-#       tibble(event_date = "2021-11-19",  
-#              point_estimate_data_prelim$cpue_summary |> filter(section == 1, Month == 11, angler_type == "bank", 
-#                                     DayType == "Weekend", catch_group == "Coho_Adult_AD_Released")),
-#       tibble(event_date = "2021-11-28",  
-#              point_estimate_data_prelim$cpue_summary |> filter(section == 1, Month == 11, angler_type == "bank", 
-#                                     DayType == "Weekday", catch_group == "Coho_Adult_AD_Released")),
-#       tibble(event_date = "2021-11-29",  
-#              point_estimate_data_prelim$cpue_summary |> filter(section == 1, Month == 11, angler_type == "bank", 
-#                                     DayType == "Weekend", catch_group == "Coho_Adult_AD_Released")),
-#       tibble(event_date = "2021-11-19",  
-#              point_estimate_data_prelim$cpue_summary |> filter(section == 1, Month == 11, angler_type == "bank", 
-#                                     DayType == "Weekend", catch_group == "Coho_Adult_UM_Kept")),
-#       tibble(event_date = "2021-11-28",  
-#              point_estimate_data_prelim$cpue_summary |> filter(section == 1, Month == 11, angler_type == "bank", 
-#                                     DayType == "Weekday", catch_group == "Coho_Adult_UM_Kept")),
-#       tibble(event_date = "2021-11-29",  
-#              point_estimate_data_prelim$cpue_summary |> filter(section == 1, Month == 11, angler_type == "bank", 
-#                                     DayType == "Weekend", catch_group == "Coho_Adult_UM_Kept")),
-#       tibble(event_date = "2021-11-19",  
-#              point_estimate_data_prelim$cpue_summary |> filter(section == 1, Month == 11, angler_type == "bank", 
-#                                     DayType == "Weekend", catch_group == "Coho_Adult_UM_Released")),
-#       tibble(event_date = "2021-11-28",  
-#              point_estimate_data_prelim$cpue_summary |> filter(section == 1, Month == 11, angler_type == "bank", 
-#                                     DayType == "Weekday", catch_group == "Coho_Adult_UM_Released")),
-#       tibble(event_date = "2021-11-29",  
-#              point_estimate_data_prelim$cpue_summary |> filter(section == 1, Month == 11, angler_type == "bank", 
-#                                     DayType == "Weekend", catch_group == "Coho_Adult_UM_Released")),
-#     
-#     # Chinook catch groups   
-#       tibble(event_date = "2021-11-19",  
-#              point_estimate_data_prelim$cpue_summary |> filter(section == 1, Month == 11, angler_type == "bank", 
-#                                     DayType == "Weekend", catch_group == "Chinook_Adult_AD_Released")),
-#       tibble(event_date = "2021-11-28",  
-#              point_estimate_data_prelim$cpue_summary |> filter(section == 1, Month == 11, angler_type == "bank", 
-#                                     DayType == "Weekday", catch_group == "Chinook_Adult_AD_Released")),
-#       tibble(event_date = "2021-11-29",  
-#              point_estimate_data_prelim$cpue_summary |> filter(section == 1, Month == 11, angler_type == "bank", 
-#                                     DayType == "Weekend", catch_group == "Chinook_Adult_AD_Released")),
-#       tibble(event_date = "2021-11-19",  
-#              point_estimate_data_prelim$cpue_summary |> filter(section == 1, Month == 11, angler_type == "bank", 
-#                                     DayType == "Weekend", catch_group == "Chinook_Adult_UM_Released")),
-#       tibble(event_date = "2021-11-28",  
-#              point_estimate_data_prelim$cpue_summary |> filter(section == 1, Month == 11, angler_type == "bank", 
-#                                     DayType == "Weekday", catch_group == "Chinook_Adult_UM_Released")),
-#       tibble(event_date = "2021-11-29",  
-#              point_estimate_data_prelim$cpue_summary |> filter(section == 1, Month == 11, angler_type == "bank", 
-#                                     DayType == "Weekend", catch_group == "Chinook_Adult_UM_Released")),
-#       tibble(event_date = "2021-11-19",  
-#              point_estimate_data_prelim$cpue_summary |> filter(section == 1, Month == 11, angler_type == "bank", 
-#                                     DayType == "Weekend", catch_group == "Chinook_Adult_UNK_Released")),
-#       tibble(event_date = "2021-11-28",  
-#              point_estimate_data_prelim$cpue_summary |> filter(section == 1, Month == 11, angler_type == "bank", 
-#                                     DayType == "Weekday", catch_group == "Chinook_Adult_UNK_Released")),
-#       tibble(event_date = "2021-11-29",  
-#              point_estimate_data_prelim$cpue_summary |> filter(section == 1, Month == 11, angler_type == "bank", 
-#                                     DayType == "Weekend", catch_group == "Chinook_Adult_UNK_Released"))
-#       ) |>
-#     rowwise() |>
-#       mutate(event_date = as.Date(event_date, "%Y-%m-%d"))
-#     , by = c("event_date", "catch_group"))
-
-# phew! that's gross! 
-
+# join mean_strata_cpue values to table with daily cpue values so we can use the mean strata cpue values on days with known effort but no corresponding interview
 # extract the columns we need from the interview and catch daily total table to calculate daily CPUE
 
-point_estimate_data_prelim$daily_cpue <- point_estimate_data_prelim$interview_daily_totals |> 
-  select(section, event_date, angler_type, catch_group, cpue_rom)
-
+point_estimate_data_prelim$daily_CPUE <- point_estimate_data_prelim$interview_daily_totals_complete |> 
+  left_join(point_estimate_data_prelim$cpue_summary, by = c("section", "Month", "angler_type", "DayType", "catch_group"))|> 
+  select(section, event_date, angler_type, catch_group, catch_dailysum, cpue_rom, mean_strata_cpue)
 
 ```
 
@@ -1040,15 +972,21 @@ point_estimate_data_prelim$daily_cpue <- point_estimate_data_prelim$interview_da
 estimates <- list()
 
 # join tables with daily effort (angler hours) and daily catch rate (cpue)
-
 estimates$daily_effort_cpue_catch <- point_estimate_data_prelim$effort_interviews_final |> 
-  left_join(point_estimate_data_prelim$daily_cpue, by = c("section", "event_date", "angler_type")) |> 
+  left_join(point_estimate_data_prelim$daily_CPUE, by = c("section", "event_date", "angler_type")) |> 
   mutate(
-    catch_estimate = mean_daily_TI_Expan * cpue_rom
-  ) |> 
+    catch_estimate = if_else(!is.na(cpue_rom), mean_daily_TI_Expan * cpue_rom, mean_daily_TI_Expan * mean_strata_cpue)
+    ) |> 
   mutate_if(is.numeric, round, 2) |> 
     filter(str_detect(catch_group, 'Coho|Chinook')) |>  # placeholder filter 
   arrange(catch_group, section, event_date, angler_type)
+
+estimates$daily_effort_cpue_catch |>
+  filter(section == 3, angler_type == "total") |> 
+  ggplot(aes(x = event_date, y = catch_estimate)) +
+  geom_point() +
+  geom_smooth() +
+  facet_wrap(.~ catch_group)
 
 write_csv(estimates$daily_effort_cpue_catch, paste(filepath_modeloutput, paste(paste(params$proj_name, params$water_body, sep = "_"), paste("Point_Estimate", "Summary_Daily_Effort_Catch_CPUE", sep = "_"), paste(params$date_start, params$date_end, sep = "_"), ".csv", sep="_"), sep="/"))
           
