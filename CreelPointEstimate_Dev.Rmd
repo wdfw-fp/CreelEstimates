@@ -3,9 +3,9 @@ title: Creel Point Estimate Analysis
 params:
   proj_name: "District 14"
   water_body: "Skagit River"
-  date_start: "2021-08-14"   
+  date_start: "2021-09-01"   
   date_end: "2021-12-31"
-  time_strata: "month"
+  model_period: "Week"
   sections: "lut_water_body_location_d14_skagit_fall_salmon_PE.csv"
 output:
   html_document:
@@ -17,7 +17,7 @@ output:
     code_folding: hide
 ---
 
-This file uses a workflow developed by the DFW creel dev crew to summarize and generate creel estimates (angler effort, catch, and catch per unit effort (cpue)) from freshwater monitoring data housed on data.wa.gov, using deterministic, maximum likelihood estimators (see Kale Bentley's original creel analyis files, Pollock et al. 1994).
+This file uses a workflow developed by the DFW creel dev crew to summarize and generate creel estimates (angler effort, catch, and catch per unit effort (cpue)) from freshwater monitoring data housed on data.wa.gov, using deterministic, maximum likelihood estimators (see Kale Bentley's original creel analysis files, Pollock et al. 1994).
 
 Pieces of the script require user / analysis specific inputs, including the initial parameters in the YAML, specification of closure / river out days in the dates section, specification of days with assumed cpue values (when there was known angling effort, but no corresponding interview), catch groups to retain for estimates, and ... ? 
 
@@ -236,7 +236,8 @@ d_days <- tibble(
       mutate(DayL = as.numeric(dusk - dawn)) |>
       pluck("DayL"),
     Week = as.numeric(format(event_date, "%V")),
-    Month = as.numeric(format(event_date, "%m"))) |> 
+    Month = as.numeric(format(event_date, "%m")),
+    ModelPeriod = params$model_period) |> 
   rowid_to_column(var = "day_index") |> 
   #make open section cols (only those actually used, not all in LU)
   left_join(
@@ -259,7 +260,7 @@ d_days <- tibble(
 
 d_days <- rows_upsert(d_days,
     bind_rows(
-      tibble(section = "2,3", closure_begin = "2021-08-19", closure_end = "2021-08-31"), # salmon opens on 9/1 for sections 3,4
+      # tibble(section = "2,3", closure_begin = "2021-08-19", closure_end = "2021-08-31"), # salmon opens on 9/1 for sections 3,4
       tibble(section = "2", closure_begin = "2021-09-01", closure_end = "2021-09-01"), # treaty fishery closure
       tibble(section = "2", closure_begin = "2021-09-07", closure_end = "2021-09-09"), # treaty fishery closure
       tibble(section = "2", closure_begin = "2021-09-14", closure_end = "2021-09-16"), # treaty fishery closure
@@ -381,8 +382,8 @@ creel$effort <- creel$effort |>
 # declare individual count_sequences which contain missing counts and could / should be censored from analysis 
 
 data_eval$remove_count <- bind_rows(
-    tibble(count_id = "2021-08-19_1_1"),
-    tibble(count_id = "2021-08-20_1_3"),
+    # tibble(count_id = "2021-08-19_1_1"),
+    # tibble(count_id = "2021-08-20_1_3"),
     tibble(count_id = "2021-09-17_2_4"),
     tibble(count_id = "2021-09-19_2_2"),
     tibble(count_id = "2021-09-23_3_1"),
@@ -548,9 +549,10 @@ point_estimate_data_prelim$interview <- point_estimate_data_prelim$interview |>
     summarise(fish_count = sum(fish_count), .groups = "drop")
     ,by = "interview_id"
   ) |> 
-  select(section, event_date, day_index, DayL, DayType, Week, Month, interview_id, interview_time, contains("angler"), catch_group, contains("count")) |>
+  select(section, event_date, day_index, DayL, DayType, Week, Month, ModelPeriod, interview_id, interview_time, contains("angler"), catch_group, contains("count")) |>
   mutate(across(fish_count, ~replace_na(., 0)),
-         catch_group = replace_na(catch_group, "no_catch")) |> 
+        catch_group = replace_na(catch_group, "no_catch"),
+        time_strata = if_else(ModelPeriod == "Month", Month, Week)) |> 
   filter(angler_hours > 0.5)
 
 # obtain unique catch_groups present in intermediate interview object 
@@ -594,7 +596,7 @@ An exception to this is the Cascade River, where only vehicles get counted, sinc
 # calculate total angler hours per day from interviews (includes boat and bank anglers), these hours will be multiplied by vehicle index counts to estimate total fishing effort
 
 point_estimate_data_prelim$interviews_total_effort <- point_estimate_data_prelim$interview |> 
-  group_by(section, event_date, day_index, DayL, Week, Month) |> 
+  group_by(section, event_date, day_index, DayL, time_strata) |> 
   summarize(
     daily_sum_angler = sum(angler_count),
     daily_sum_index_count_from_interview = sum(vehicle_count),
@@ -608,7 +610,7 @@ point_estimate_data_prelim$interviews_total_effort <- point_estimate_data_prelim
 
 point_estimate_data_prelim$interviews_boat_effort <- point_estimate_data_prelim$interview |>
   filter(angler_type == "boat") |> 
-  group_by(section, event_date, day_index, DayL, Week, Month) |> 
+  group_by(section, event_date, day_index, DayL, time_strata) |> 
   summarize(
     daily_sum_angler = sum(angler_count),
     daily_sum_index_count_from_interview = sum(vehicle_count),
@@ -648,7 +650,7 @@ point_estimate_data_prelim$effort_counts_and_interviews <- point_estimate_data_p
 # total hours from angler interviews and total catch sample a per day/angler type/section to compare with effort
 
 point_estimate_data_prelim$interview_daily_totals <- point_estimate_data_prelim$interview |>
-  group_by(event_date, day_index, Week, Month, section, angler_type) |>
+  group_by(event_date, day_index, time_strata, section, angler_type) |>
   summarise(
     angler_hours_total_dailysum = sum(angler_hours_total),
     catch_dailysum = sum(fish_count), .groups = "drop"
@@ -693,7 +695,7 @@ point_estimate_data_prelim$effort_counts_for_census_join <- point_estimate_data_
     index_count = anglers_per_index_count_from_interview * sum_index_count
   ) |> 
   ungroup() |> 
-  select(event_date, section, Week, Month, DayL, count_sequence, angler_type, index_count)
+  select(event_date, section, time_strata, DayL, count_sequence, angler_type, index_count)
   
 # left join effort counts to census counts 
 
@@ -741,7 +743,7 @@ point_estimate_data_prelim$census_counts_all <- point_estimate_data_prelim$censu
     !is.na(TI_Expan), !is.infinite(TI_Expan)
   ) |> 
   select(
-    event_date, day_index, Week, Month, DayL, section, DayL, angler_type, census_count, index_count, TI_Expan
+    event_date, day_index, time_strata, DayL, section, DayL, angler_type, census_count, index_count, TI_Expan
   ) |> 
   group_by(section, angler_type) |> 
   summarise(
@@ -751,8 +753,10 @@ point_estimate_data_prelim$census_counts_all <- point_estimate_data_prelim$censu
 # EB realized needed rows duplicated across angler_type and section for join later in script, so this is the current workaround 
 
 days_join <- d_days |> 
-  select(event_date, DayType, Month, Week, open_section_1) |> 
-  mutate(at_1 = "total", at_2 = "boat", at_3 = "bank"
+  select(event_date, DayType, Month, Week, ModelPeriod, open_section_1) |> 
+  mutate(
+    time_strata = if_else(ModelPeriod == "Month", Month, Week),
+    at_1 = "total", at_2 = "boat", at_3 = "bank"
   ) |> 
   pivot_longer(cols = c(at_1, at_2, at_3), values_to = "angler_type") |> 
   select(-name) |> 
@@ -781,7 +785,7 @@ days_join <- d_days |>
 point_estimate_data_prelim$effort_interviews_totalandboat <- point_estimate_data_prelim$effort_counts_and_interviews |>
   ungroup() |> 
   left_join(point_estimate_data_prelim$census_counts_all, by = c("section", "angler_type")) |> 
-  select(-c(Month, Week)) |> 
+  select(-c(time_strata)) |> 
   mutate(
     mean_daily_TI_Expan = mean_daily_effort * TI_Expan_Total
   ) 
@@ -815,7 +819,7 @@ point_estimate_data_prelim$effort_interviews_final <- point_estimate_data_prelim
   right_join(days_join, by = c("section", "event_date", "angler_type")) |> 
   mutate(
     creeled = if_else(!is.na(mean_daily_TI_Expan), "Y", "N")
-  ) |>
+  ) |> 
   arrange(event_date)
   
 ```
@@ -828,13 +832,13 @@ point_estimate_data_prelim$effort_interviews_final <- point_estimate_data_prelim
 
 point_estimate_data_prelim$total_days <- point_estimate_data_prelim$effort_interviews_final |>
   filter(open_section_1 == TRUE) |>
-  count(section, DayType, Month, angler_type, name = "N_days")
+  count(section, DayType, time_strata, angler_type, name = "N_days")
 
 # number of days sampled within monitoring period, here we're only considering a day sampled if it had effort counts and at least one interview to quantify 1) anglers per index count and 2) anglers hours to estimate CPUE
 
 point_estimate_data_prelim$sampled_days <- point_estimate_data_prelim$effort_interviews_final |>
   filter(!is.na(mean_daily_TI_Expan)) |> 
-count(section, DayType, Month, angler_type, name = "n_days")
+  count(section, DayType, time_strata, angler_type, name = "n_days")
 
 # total number days within monitoring period that we want to generate estimates for. Excludes specified closures in dates object
 
@@ -851,8 +855,8 @@ count(section, DayType, angler_type, name = "n_days_total")
 
 # add these objects to the table with index count data
 point_estimate_data_prelim$effort_interviews_final <- point_estimate_data_prelim$effort_interviews_final |> 
-  left_join(point_estimate_data_prelim$total_days, by = c("section", "DayType", "Month", "angler_type")) |> 
-  left_join(point_estimate_data_prelim$sampled_days, by = c("section", "DayType", "Month", "angler_type")) |>
+  left_join(point_estimate_data_prelim$total_days, by = c("section", "DayType", "time_strata", "angler_type")) |> 
+  left_join(point_estimate_data_prelim$sampled_days, by = c("section", "DayType", "time_strata", "angler_type")) |>
   left_join(point_estimate_data_prelim$total_days_total, by = c("section", "DayType", "angler_type")) |> 
   left_join(point_estimate_data_prelim$sampled_days_total, by = c("section", "DayType", "angler_type")) |> 
   filter(!is.na(mean_daily_TI_Expan)) 
@@ -875,7 +879,7 @@ point_estimate_data_prelim$interview_daily_totals_total <- point_estimate_data_p
    mutate(
     cpue_interview = fish_count / angler_hours_total 
   ) |> 
-  group_by(section, Month, DayType, event_date, day_index, catch_group) |> 
+  group_by(section, time_strata, DayType, event_date, day_index, catch_group) |> 
   summarise(
     angler_hours_total_dailysum = sum(angler_hours_total),
     catch_dailysum = sum(fish_count), .groups = "drop",
@@ -895,7 +899,7 @@ point_estimate_data_prelim$interview_daily_totals_boat <- point_estimate_data_pr
    mutate(
     cpue_interview = fish_count / angler_hours_total 
   ) |> 
-  group_by(section, Month, DayType, event_date, day_index, catch_group) |> 
+  group_by(section, time_strata, DayType, event_date, day_index, catch_group) |> 
   summarise(
     angler_hours_total_dailysum = sum(angler_hours_total),
     catch_dailysum = sum(fish_count), .groups = "drop",
@@ -915,7 +919,7 @@ point_estimate_data_prelim$interview_daily_totals_bank <- point_estimate_data_pr
    mutate(
     cpue_interview = fish_count / angler_hours_total 
   ) |> 
-  group_by(section, Month, DayType, event_date, day_index, catch_group) |> 
+  group_by(section, time_strata, DayType, event_date, day_index, catch_group) |> 
   summarise(
     angler_hours_total_dailysum = sum(angler_hours_total),
     catch_dailysum = sum(fish_count), .groups = "drop",
@@ -942,23 +946,25 @@ point_estimate_data_prelim$interview_daily_totals_complete <- point_estimate_dat
   complete(section, event_date, angler_type, catch_group) |> 
   left_join(d_days, by = "event_date")
 
-# calculate mean cpue values by DayType, Month, Catch_Group to use for assumed values and complete the dataframe with implicit missing values of summarized CPUE (These should all essentially be 0)
+test <- point_estimate_data_prelim$interview_daily_totals_complete
+
+# calculate mean cpue values by DayType, time_strata, Catch_Group to use for assumed values and complete the dataframe with implicit missing values of summarized CPUE (These should all essentially be 0)
 
 point_estimate_data_prelim$cpue_summary <- point_estimate_data_prelim$interview_daily_totals |> 
-  group_by(section, Month, DayType, angler_type, catch_group) |> 
+  group_by(section, time_strata, DayType, angler_type, catch_group) |> 
   summarise(
     mean_strata_cpue = mean(cpue_rom) # EB using ratio of the means for now but should circle back to this soon
   ) |> 
   ungroup() |>
-  complete(section, Month, DayType, angler_type, catch_group,
+  complete(section, time_strata, DayType, angler_type, catch_group,
            fill = list(mean_strata_cpue = 0))
 
 # join mean_strata_cpue values to table with daily cpue values so we can use the mean strata cpue values on days with known effort but no corresponding interview
 # extract the columns we need from the interview and catch daily total table to calculate daily CPUE
 
 point_estimate_data_prelim$daily_CPUE <- point_estimate_data_prelim$interview_daily_totals_complete |> 
-  left_join(point_estimate_data_prelim$cpue_summary, by = c("section", "Month", "angler_type", "DayType", "catch_group"))|> 
-  select(section, event_date, angler_type, catch_group, catch_dailysum, cpue_rom, mean_strata_cpue)
+  left_join(point_estimate_data_prelim$cpue_summary, by = c("section", "angler_type", "DayType", "catch_group"))|> 
+  select(section, time_strata, event_date, angler_type, catch_group, catch_dailysum, cpue_rom, mean_strata_cpue)
 
 ```
 
@@ -973,20 +979,15 @@ estimates <- list()
 
 # join tables with daily effort (angler hours) and daily catch rate (cpue)
 estimates$daily_effort_cpue_catch <- point_estimate_data_prelim$effort_interviews_final |> 
-  left_join(point_estimate_data_prelim$daily_CPUE, by = c("section", "event_date", "angler_type")) |> 
+  left_join(point_estimate_data_prelim$daily_CPUE, by = c("section", "time_strata", "event_date", "angler_type")) |> 
   mutate(
     catch_estimate = if_else(!is.na(cpue_rom), mean_daily_TI_Expan * cpue_rom, mean_daily_TI_Expan * mean_strata_cpue)
     ) |> 
   mutate_if(is.numeric, round, 2) |> 
-    filter(str_detect(catch_group, 'Coho|Chinook')) |>  # placeholder filter 
+    filter(str_detect(catch_group, 'Coho|Chinook')) |>
+  distinct() |> 
   arrange(catch_group, section, event_date, angler_type)
 
-estimates$daily_effort_cpue_catch |>
-  filter(section == 3, angler_type == "total") |> 
-  ggplot(aes(x = event_date, y = catch_estimate)) +
-  geom_point() +
-  geom_smooth() +
-  facet_wrap(.~ catch_group)
 
 write_csv(estimates$daily_effort_cpue_catch, paste(filepath_modeloutput, paste(paste(params$proj_name, params$water_body, sep = "_"), paste("Point_Estimate", "Summary_Daily_Effort_Catch_CPUE", sep = "_"), paste(params$date_start, params$date_end, sep = "_"), ".csv", sep="_"), sep="/"))
           
@@ -994,17 +995,19 @@ write_csv(estimates$daily_effort_cpue_catch, paste(filepath_modeloutput, paste(p
 
 
 
+
+
 # time period specific estimates 
 
 Need to work on making the model period a script parameter so the user can easily swap out time period strata among week, month, bi-month, etc. 
-
+Made progress on this on 3/10/2022
 ## effort by time period strata 
-```{r estimates$monthly_effort_total, message = FALSE, warning = FALSE,results = "asis",include=TRUE, echo=FALSE}
+```{r estimates$time_strata_effort_total, message = FALSE, warning = FALSE,results = "asis",include=TRUE, echo=FALSE}
 
-# create table with degrees of freedom by section and angler type to apply to monthly time strata
+# create table with degrees of freedom by section and angler type to apply to time strata estimates
 
 point_estimate_data_prelim$degrees_freedom <- estimates$daily_effort_cpue_catch |>
-  distinct(section, angler_type, Month, n_days) |> 
+  distinct(section, angler_type, time_strata, n_days) |> 
   group_by(section, angler_type) |> 
   summarize(
     min_n_days = min(n_days),
@@ -1014,8 +1017,8 @@ point_estimate_data_prelim$degrees_freedom <- estimates$daily_effort_cpue_catch 
 
 # calculate effort by day type and angler type strata
 
-estimates$monthly_effort_by_daytype <- estimates$daily_effort_cpue_catch |>
-  group_by(section, angler_type, Month, DayType, n_days, N_days) |> 
+estimates$time_strata_effort_by_daytype <- estimates$daily_effort_cpue_catch |>
+  group_by(section, angler_type, time_strata, DayType, n_days, N_days) |> 
   summarize(
     n = n(),
     sum_daily_effort_sampled_days = sum(mean_daily_TI_Expan),
@@ -1027,12 +1030,12 @@ estimates$monthly_effort_by_daytype <- estimates$daily_effort_cpue_catch |>
 
 # Sum effort estimates across day types, retain grouping on angler type 
 
-estimates$monthly_effort_total <- estimates$monthly_effort_by_daytype |>
+estimates$time_strata_effort_total <- estimates$time_strata_effort_by_daytype |>
   ungroup() |>
-  left_join(point_estimate_data_prelim$degrees_freedom, by = c("section", "angler_type")) |> # add degrees of freedom per angler_type and section for monthly time period
+  left_join(point_estimate_data_prelim$degrees_freedom, by = c("section", "angler_type")) |> # add degrees of freedom per angler_type and section for time_strata
   # left_join(lut$sections |> select(section, section_name),
   #           by = "section") |>
-  group_by(section, Month, angler_type) |> 
+  group_by(section, time_strata, angler_type) |> 
   summarise(
     total_effort = sum(total_effort),
     variance = sum(variance_total_daily_effort),
@@ -1041,30 +1044,30 @@ estimates$monthly_effort_total <- estimates$monthly_effort_by_daytype |>
     lwr95CI = total_effort - qt(1-(0.05/2),degrees_freedom)*(variance^0.5),
     upr95CI = total_effort + qt(1-(0.05/2),degrees_freedom)*(variance^0.5)
   ) |> 
-  distinct(Month, angler_type, .keep_all = TRUE)|> 
+  distinct(time_strata, angler_type, .keep_all = TRUE)|> 
   mutate_if(is.numeric, round, 2) 
 
-write_csv(estimates$monthly_effort_total, paste(filepath_modeloutput, paste(paste(params$proj_name, params$water_body, sep = "_"), paste("Point_Estimate", "Summary_Monthly_Effort", sep = "_"), paste(params$date_start, params$date_end, sep = "_"), ".csv", sep="_"), sep="/"))
+write_csv(estimates$time_strata_effort_total, paste(filepath_modeloutput, paste(paste(params$proj_name, params$water_body, sep = "_"), paste("Point_Estimate", "Summary_Effort", params$model_period, sep = "_"), paste(params$date_start, params$date_end, sep = "_"), ".csv", sep="_"), sep="/"))
 
-monthly_effort_total_table <- estimates$monthly_effort_total |>
+time_strata_effort_total_table <- estimates$time_strata_effort_total |>
   filter(angler_type == "total") |> 
   kbl(caption = "Total angler effort statistics in angler hours for boat and shore based fishing during the 2021 Skagit River fall salmon fishery from 08/14/2021 - 12/31/2021.",digits =2) |> 
   # kable_classic(full_width = F, html_font = "Cambria") |> 
   kable_styling(bootstrap_options = c("striped", "hover"))
 
-print(monthly_effort_total_table)
+print(time_strata_effort_total_table)
 
-estimates$monthly_effort_total |> filter(angler_type == "total") |> group_by(section) |> summarize(total_effort = sum(total_effort))
+estimates$time_strata_effort_total |> filter(angler_type == "total") |> group_by(section) |> summarize(total_effort = sum(total_effort))
 ```
 
-```{r, include=TRUE, fig.align="center",fig.width= 14, fig.height= 8, fig.cap=c("Figure 1. Monthly effort estimates (angler hours) during the 2021 Skagit River fall salmon fishery from 08/14/2021 - 12/31/2021. Error bars show 95 percent confidence intervals."),echo=FALSE,warning = FALSE}
+```{r, include=TRUE, fig.align="center",fig.width= 14, fig.height= 8, fig.cap=c("Figure 1. ____ effort estimates (angler hours) during the 2021 Skagit River fall salmon fishery from 08/14/2021 - 12/31/2021. Error bars show 95 percent confidence intervals."),echo=FALSE,warning = FALSE}
 options(scipen=10000)
 
-estimates$monthly_effort_total |>
+estimates$time_strata_effort_total |>
   # arrange(section) |> 
   # mutate(name=factor(section), levels=section) |> 
   # filter(!grepl(c("Steelhead"),Catch_Group)) |> 
-  ggplot(aes(x = Month, y = total_effort, fill = angler_type)) +
+  ggplot(aes(x = time_strata, y = total_effort, fill = angler_type)) +
   geom_bar(position = "dodge", stat = "identity", color = "black") +
   scale_fill_manual(values=c("#999999", "#E69F00", "lightblue")) +
   geom_errorbar(aes(ymin=lwr95CI, ymax=upr95CI), width=.2,
@@ -1114,12 +1117,12 @@ estimates$monthly_effort_total |>
 
 
 ## catch by time period strata 
-```{r estimates$monthly_catch_total, message = FALSE, warning = FALSE,results = "asis",include=TRUE, echo=FALSE}
+```{r estimates$time_strata_catch_total, message = FALSE, warning = FALSE,results = "asis",include=TRUE, echo=FALSE}
 
 # calculate catch by day type and angler type strata
 
-estimates$monthly_catch_by_daytype <- estimates$daily_effort_cpue_catch |>
-  group_by(section, angler_type, catch_group, Month, DayType, n_days, N_days) |> 
+estimates$time_strata_catch_by_daytype <- estimates$daily_effort_cpue_catch |>
+  group_by(section, angler_type, catch_group, time_strata, DayType, n_days, N_days) |> 
   summarize(
     total_catch_unexpanded = sum(catch_estimate),
     mean_daily_catch = total_catch_unexpanded / n_days,
@@ -1134,12 +1137,12 @@ estimates$monthly_catch_by_daytype <- estimates$daily_effort_cpue_catch |>
 
 # Sum catch estimates across day types, retain grouping on angler type 
 
-estimates$monthly_catch_total <- estimates$monthly_catch_by_daytype |>
+estimates$time_strata_catch_total <- estimates$time_strata_catch_by_daytype |>
   ungroup() |> 
-  left_join(point_estimate_data_prelim$degrees_freedom, by = c("section", "angler_type")) |> # add degrees of freedom per angler_type and section for monthly time period
+  left_join(point_estimate_data_prelim$degrees_freedom, by = c("section", "angler_type")) |> # add degrees of freedom per angler_type and section for time_strata
   # left_join(lut$sections |> select(section, section_name),
   #           by = "section") |> 
-  group_by(section, Month, catch_group, angler_type) |> 
+  group_by(section, time_strata, catch_group, angler_type) |> 
   summarise(
     total_catch = sum(total_catch_expanded),
     variance = sum(variance_total_catch_expanded),
@@ -1150,28 +1153,28 @@ estimates$monthly_catch_total <- estimates$monthly_catch_by_daytype |>
   ) |>
   distinct() |> 
   mutate_if(is.numeric, round, 2) |> 
-  arrange(section, catch_group, Month)
+  arrange(section, catch_group, time_strata)
 
-write_csv(estimates$monthly_catch_total, paste(filepath_modeloutput, paste(paste(params$proj_name, params$water_body, sep = "_"), paste("Point_Estimate", "Summary_Monthly_Catch", sep = "_"), paste(params$date_start, params$date_end, sep = "_"), ".csv", sep="_"), sep="/"))
+write_csv(estimates$time_strata_catch_total, paste(filepath_modeloutput, paste(paste(params$proj_name, params$water_body, sep = "_"), paste("Point_Estimate", "Summary_Catch", params$model_period, sep = "_"), paste(params$date_start, params$date_end, sep = "_"), ".csv", sep="_"), sep="/"))
 
 
-monthly_catch_total_table <- estimates$monthly_catch_total |>
+time_strata_catch_total_table <- estimates$time_strata_catch_total |>
   filter(angler_type == "total") |> 
-  kbl(caption = "Monthly catch statistics for coho and Chinook during the 2021 Skagit River fall salmon fishery from 08/14/2021 - 12/31/2021, combing both bank and boat angler types.",digits =2) |> 
+  kbl(caption = "___ catch statistics for coho and Chinook during the 2021 Skagit River fall salmon fishery from 08/14/2021 - 12/31/2021, combing both bank and boat angler types.",digits =2) |> 
   # kable_classic(full_width = F, html_font = "Cambria") |> 
   kable_styling(bootstrap_options = c("striped", "hover"))
 
-print(monthly_catch_total_table)
+print(time_strata_catch_total_table)
 
 ```
 
 
-```{r, include=TRUE, fig.align="center",fig.width= 14, fig.height= 8, fig.cap=c("Figure 1. Monthly harvest estimates for ad-clipped and unmarked coho during the 2021 Skagit River fall salmon fishery from 08/14/2021 - 12/31/2021. Error bars show 95 percent confidence intervals."),echo=FALSE,warning = FALSE}
+```{r, include=TRUE, fig.align="center",fig.width= 14, fig.height= 8, fig.cap=c("Figure 1. ___ harvest estimates for ad-clipped and unmarked coho during the 2021 Skagit River fall salmon fishery from 08/14/2021 - 12/31/2021. Error bars show 95 percent confidence intervals."),echo=FALSE,warning = FALSE}
 
-estimates$monthly_catch_total |> 
+estimates$time_strata_catch_total |> 
   # filter(!grepl(c("Steelhead"),Catch_Group)) |> 
   filter(angler_type == "total" & catch_group %in% c("Coho_Adult_UM_Kept", "Coho_Adult_AD_Kept")) |>
-  ggplot(aes(x = Month, y = total_catch)) +
+  ggplot(aes(x = time_strata, y = total_catch)) +
   geom_bar(position = "dodge", stat = "identity", color = "black") +
   scale_fill_manual(values=c("#999999", "#E69F00")) +
   geom_errorbar(aes(ymin=lwr95CI, ymax=upr95CI), width=.2,
@@ -1180,10 +1183,10 @@ estimates$monthly_catch_total |>
   theme_bw(base_size = 12) + 
   facet_wrap(. ~ catch_group + section)
 
-estimates$monthly_catch_total |> 
+estimates$time_strata_catch_total |> 
   # filter(!grepl(c("Steelhead"),Catch_Group)) |> 
   filter(angler_type == "total", catch_group %in% c("Coho_Adult_UM_Kept", "Coho_Adult_AD_Kept")) |>
-  ggplot(aes(x = Month, y = total_catch)) +
+  ggplot(aes(x = time_strata, y = total_catch)) +
   geom_bar(position = "dodge", stat = "identity", color = "black") +
   scale_fill_manual(values=c("#999999", "#E69F00")) +
   geom_errorbar(aes(ymin=lwr95CI, ymax=upr95CI), width=.2,
@@ -1200,7 +1203,7 @@ estimates$monthly_catch_total |>
 
 ## degrees of freedom for total estimates 
 ```{r}
-# create table with degrees of freedom by section and angler type to apply to monthly time strata
+# create table with degrees of freedom by section and angler type to apply to estimates across all days (total)
 
 point_estimate_data_prelim$degrees_freedom_total <- point_estimate_data_prelim$effort_interviews_final |> 
   distinct(section, angler_type, n_days_total) |>
@@ -1216,10 +1219,10 @@ point_estimate_data_prelim$degrees_freedom_total <- point_estimate_data_prelim$e
 
 
 ## effort 
-```{r estimates$monthly_effort_total, message = FALSE, warning = FALSE,results = "asis",include=TRUE, echo=FALSE}
+```{r estimates$time_strata_effort_total, message = FALSE, warning = FALSE,results = "asis",include=TRUE, echo=FALSE}
 
-# Adding together monthly effort estimates and associated variance and calculating SE, CV, and 95% CI's
-estimates$total_effort <- estimates$monthly_effort_total |>
+# Adding together time strata specific effort estimates and associated variance and calculating SE, CV, and 95% CI's
+estimates$total_effort <- estimates$time_strata_effort_total |>
   left_join(point_estimate_data_prelim$degrees_freedom_total, by = c("section", "angler_type")) |> 
   group_by(section, angler_type) |> 
   summarise(
@@ -1248,7 +1251,7 @@ print(total_effort_table)
 
 ```
 
-```{r, include=TRUE, fig.align="center",fig.width= 14, fig.height= 8, fig.cap=c("Figure 1. Monthly effort estimates (angler hours) during the 2021 Skagit River fall salmon fishery from 08/14/2021 - 12/31/2021. Error bars show 95 percent confidence intervals."),echo=FALSE,warning = FALSE}
+```{r, include=TRUE, fig.align="center",fig.width= 14, fig.height= 8, fig.cap=c("Figure 1. _____ effort estimates (angler hours) during the 2021 Skagit River fall salmon fishery from 08/14/2021 - 12/31/2021. Error bars show 95 percent confidence intervals."),echo=FALSE,warning = FALSE}
 options(scipen=10000)
 
 estimates$total_effort |>
@@ -1305,11 +1308,11 @@ estimates$total_effort |>
 
 
 ## catch by time period strata 
-```{r estimates$monthly_catch_total, message = FALSE, warning = FALSE,results = "asis",include=TRUE, echo=FALSE}
+```{r estimates$time_strata_catch_total, message = FALSE, warning = FALSE,results = "asis",include=TRUE, echo=FALSE}
 
-# Adding together monthly catch estimates and associated variance and calculating SE, CV, and 95% CI's
+# Adding together time_strata catch estimates and associated variance and calculating SE, CV, and 95% CI's
 
-estimates$total_catch <- estimates$monthly_catch_total |>
+estimates$total_catch <- estimates$time_strata_catch_total |>
   left_join(point_estimate_data_prelim$degrees_freedom_total, by = c("section", "angler_type")) |> 
   mutate(variance = replace_na(variance, 0)) |> 
   group_by(catch_group, section, angler_type) |> 
@@ -1343,7 +1346,7 @@ print(total_catch_table)
 
 
 
-```{r, include=TRUE, fig.align="center",fig.width= 14, fig.height= 8, fig.cap=c("Figure 1. Monthly harvest estimates for ad-clipped and unmarked coho during the 2021 Skagit River fall salmon fishery from 08/14/2021 - 12/31/2021. Error bars show 95 percent confidence intervals."),echo=FALSE,warning = FALSE}
+```{r, include=TRUE, fig.align="center",fig.width= 14, fig.height= 8, fig.cap=c("Figure 1. ____ harvest estimates for ad-clipped and unmarked coho during the 2021 Skagit River fall salmon fishery from 08/14/2021 - 12/31/2021. Error bars show 95 percent confidence intervals."),echo=FALSE,warning = FALSE}
 
 estimates$total_catch |> 
   # filter(!grepl(c("Steelhead"),Catch_Group)) |> 
