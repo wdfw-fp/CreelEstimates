@@ -28,7 +28,6 @@ Pieces of the script require user / analysis specific inputs, including the init
 knitr::opts_chunk$set(message = FALSE)
 
 library(tidyverse)
-library(rstan)
 library(kableExtra)
 
 #base endpoints
