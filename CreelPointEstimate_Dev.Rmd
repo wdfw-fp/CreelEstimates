@@ -3,8 +3,9 @@ title: Creel Point Estimate Analysis
 params:
   proj_name: "District 14"
   water_body: "Skagit River"
-  date_start: "2021-09-01"   
+  date_start: "2021-08-14"   
   date_end: "2021-12-31"
+  index_count_types: "Vehicle Only,Trailers Only"
   model_period: "Week"
   sections: "lut_water_body_location_d14_skagit_fall_salmon_PE.csv"
 output:
@@ -55,9 +56,11 @@ lut <- map(
   ~readr::read_csv(file.path(.x))
 )
 
+# extract the index count types of interest from the YAML and use these to filter the data
+index_count_types <- c(str_split(string = params$index_count_types, pattern = ",")[[1]])
 # file path for exported objects 
 
-filepath_modeloutput <- "O:/Projects/Creel_Analysis_Dev/CreelPointEstimate/model_output/"
+filepath_modeloutput <- "O:/Projects/Creel_Analysis_Dev/CreelPointEstimate/model_output/" # add in KB code to generate new folder for this, if doesn't already exist 
 
 ```
 
@@ -117,7 +120,8 @@ dwg_sent$effort <- URLencode(
   )
 )
 
-creel$effort <- read_csv(dwg_sent$effort)
+creel$effort <- read_csv(dwg_sent$effort) |> 
+  filter(!is.na(count_type))
 
 ```
 
@@ -257,18 +261,20 @@ d_days <- tibble(
 # #commented out during dev around Skagit_wgf, since no closures
 # #and because may move to params file path to closures csv or similar
 
+
+# EB 3/16/2022 the lack of closures currently breaks the script, need to make sure that closures are not required
 d_days <- rows_upsert(d_days,
     bind_rows(
-      # tibble(section = "2,3", closure_begin = "2021-08-19", closure_end = "2021-08-31"), # salmon opens on 9/1 for sections 3,4
+      # tibble(section = "1", closure_begin = "2017-03-17", closure_end = "2017-03-17"), # salmon opens on 9/1 for sections 3,4
       tibble(section = "2", closure_begin = "2021-09-01", closure_end = "2021-09-01"), # treaty fishery closure
-      tibble(section = "2", closure_begin = "2021-09-07", closure_end = "2021-09-09"), # treaty fishery closure
-      tibble(section = "2", closure_begin = "2021-09-14", closure_end = "2021-09-16"), # treaty fishery closure
-      tibble(section = "1,2,3", closure_begin = "2021-09-18", closure_end = "2021-09-18"), # river out due to flows
-      tibble(section = "2", closure_begin = "2021-10-05", closure_end = "2021-10-06"), # treaty fishery closure
-      tibble(section = "2", closure_begin = "2021-10-12", closure_end = "2021-10-13"), # treaty fishery closure
-      tibble(section = "2", closure_begin = "2021-10-19", closure_end = "2021-10-20"), # treaty fishery closure
-      tibble(section = "1,2,3", closure_begin = "2021-11-13", closure_end = "2021-11-14"), # river out due to flows
-      tibble(section = "1,2,3", closure_begin = "2021-11-17", closure_end = "2021-11-18") # river out due to flows
+      # tibble(section = "2", closure_begin = "2021-09-07", closure_end = "2021-09-09"), # treaty fishery closure
+      # tibble(section = "2", closure_begin = "2021-09-14", closure_end = "2021-09-16"), # treaty fishery closure
+      # tibble(section = "1,2,3", closure_begin = "2021-09-18", closure_end = "2021-09-18"), # river out due to flows
+      # tibble(section = "2", closure_begin = "2021-10-05", closure_end = "2021-10-06"), # treaty fishery closure
+      # tibble(section = "2", closure_begin = "2021-10-12", closure_end = "2021-10-13"), # treaty fishery closure
+      # tibble(section = "2", closure_begin = "2021-10-19", closure_end = "2021-10-20"), # treaty fishery closure
+      # tibble(section = "1,2,3", closure_begin = "2021-11-13", closure_end = "2021-11-14"), # river out due to flows
+      # tibble(section = "1,2,3", closure_begin = "2021-11-17", closure_end = "2021-11-18") # river out due to flows
     ) |>
       rowwise() |>
       mutate(closure_date = paste(seq.Date(as.Date(closure_begin), as.Date(closure_end), by = "day"), collapse = ",")) |>
@@ -294,19 +300,20 @@ d_days <- rows_upsert(d_days,
 data_eval <- list()
 
 # Visualize raw counts of vehicles and trailers during monitoring period
-# are periods with virtually 0 effort worth running through the model?
-data_eval$index_counts <-  creel$effort |>
-  filter(tie_in_indicator == 0) |>
-  group_by(section, event_date, count_sequence, count_type) |>
-  summarise(count_quantity = sum(count_quantity), .groups = "drop") |>
-  pivot_wider(names_from = count_type, values_from = count_quantity) |>
-  # select(-6) |>
-  # mutate(
-  #   `Trailers Only` = replace_na(`Trailers Only`, 0)
-  # ) |>
-  pivot_longer(names_to = "count_type", values_to = "count_quantity", cols = c(`Vehicle Only`)) |>
-  arrange(event_date, section)
 
+# extract the index count types of interest from the YAML and use these to filter the data
+# index_count_types <- c(str_split(string = params$index_count_types, pattern = ",")[[1]])
+# 
+# data_eval$index_counts <-  creel$effort |>
+#   filter(tie_in_indicator == 0, count_type %in% index_count_types) |>
+#   group_by(section, event_date, count_sequence, count_type) |>
+#   summarise(count_quantity = sum(count_quantity), .groups = "drop") |>
+#   pivot_wider(names_from = count_type, values_from = count_quantity) |>
+#   pivot_longer(names_to = "count_type", values_to = "count_quantity", cols = starts_with(c("B"))) |>
+#   arrange(event_date, section)
+# 
+# view(data_eval$index_counts)
+# 
 # data_eval$index_counts |>
 # ggplot(aes(x = event_date, y = count_quantity)) +
 #   geom_point(aes(fill=count_type), colour="black",pch=21, size=2) +
@@ -316,36 +323,36 @@ data_eval$index_counts <-  creel$effort |>
 
 
 # Assess data completeness by looking for deviations from the expected count of distinct effort count locations per section per day. Note - days can look complete if "no count" has been entered for a site, so this is just one view into potential data completeness issues
-data_eval$location_check <- creel$effort |>
-  filter(tie_in_indicator == 0) |>
-  select(event_date, section, location, count_sequence) |>
-  group_by(event_date, section, count_sequence) |>
-  summarise(
-    n_distinct_locations =  n_distinct(location),
-    distinct_locations = paste(unique(location), collapse = ","))
-
+# data_eval$location_check <- creel$effort |>
+#   filter(tie_in_indicator == 0) |>
+#   select(event_date, section, location, count_sequence) |>
+#   group_by(event_date, section, count_sequence) |>
+#   summarise(
+#     n_distinct_locations =  n_distinct(location),
+#     distinct_locations = paste(unique(location), collapse = ","))
+# 
 # data_eval$location_check |>  ggplot(aes(x = event_date, y = n_distinct_locations)) +
 #   geom_point() +
 #   theme_bw() +
 #   facet_wrap(.~ section)
 
 # Look at records where "no_count_reason" was used
-data_eval$no_count_records <- creel$effort |>
-  filter(tie_in_indicator == 0, !is.na(no_count_reason)) |>
-  arrange(event_date)
+# data_eval$no_count_records <- creel$effort |>
+#   filter(tie_in_indicator == 0, !is.na(no_count_reason)) |>
+#   arrange(event_date)
 
 # Evaluate on a daily basis the number of boat and bank interviews obtained
-data_eval$interview <- creel$interview |>
-  mutate(
-    interview_type = if_else(boat_used == "Yes", "Boat", "Bank")
-  ) |>
-  group_by(event_date, section, location, interview_type) |>
-  summarize(
-    n_interviews = n()
-  ) |>
-  pivot_wider(names_from = interview_type, values_from = n_interviews, values_fill = 0) |>
-  pivot_longer(names_to = "interview_type", values_to = "n_interviews", cols = starts_with("B")) |>
-  arrange(event_date, section)
+# data_eval$interview <- creel$interview |>
+#   mutate(
+#     interview_type = if_else(angler_type == "Bank", "Bank", "Boat")
+#   ) |>
+#   group_by(event_date, section, location, interview_type) |>
+#   summarize(
+#     n_interviews = n()
+#   ) |>
+#   pivot_wider(names_from = interview_type, values_from = n_interviews, values_fill = 0) |>
+#   pivot_longer(names_to = "interview_type", values_to = "n_interviews", cols = starts_with("B")) |>
+#   arrange(event_date, section)
 
 # data_eval$interview |>
 # ggplot(aes(x = event_date, y = n_interviews)) +
@@ -366,9 +373,9 @@ data_eval$interview <- creel$interview |>
 
 
 # effort count locations with data completeness problems 
-data_eval$remove_location <- bind_rows(
-  tibble(location = "Skagit City Access (SF Skagit, N. end of Fir Island)"),
-  tibble(location = "Rasar State Park"))
+# data_eval$remove_location <- bind_rows(
+#   tibble(location = "Skagit City Access (SF Skagit, N. end of Fir Island)"),
+#   tibble(location = "Rasar State Park"))
 
 # mistakes in data collection led to instances of incomplete effort counts, this chunk provides the user an option to censor those data by filtering them out of the final dataset 
 # count_id is a paste of event_date, section, count_sequence 
@@ -383,15 +390,15 @@ creel$effort <- creel$effort |>
 data_eval$remove_count <- bind_rows(
     # tibble(count_id = "2021-08-19_1_1"),
     # tibble(count_id = "2021-08-20_1_3"),
-    tibble(count_id = "2021-09-17_2_4"),
-    tibble(count_id = "2021-09-19_2_2"),
-    tibble(count_id = "2021-09-23_3_1"),
-    tibble(count_id = "2021-09-23_2_1"),
-    tibble(count_id = "2021-09-23_1_3"),
-    tibble(count_id = "2021-09-26_1_3"),
-    tibble(count_id = "2021-09-26_2_2"),
-    tibble(count_id = "2021-10-21_3_3"),
-    tibble(count_id = "2021-10-31_3_1")
+    # tibble(count_id = "2021-09-17_2_4"),
+    # tibble(count_id = "2021-09-19_2_2"),
+    # tibble(count_id = "2021-09-23_3_1"),
+    # tibble(count_id = "2021-09-23_2_1"),
+    # tibble(count_id = "2021-09-23_1_3"),
+    # tibble(count_id = "2021-09-26_1_3"),
+    # tibble(count_id = "2021-09-26_2_2"),
+    # tibble(count_id = "2021-10-21_3_3"),
+    # tibble(count_id = "2021-10-31_3_1")
     )
 
 # # n rows in effort data pre filter
@@ -447,17 +454,18 @@ point_estimate_data_prelim$effort_census <- point_estimate_data_prelim$effort_ce
   mutate(
     #angler_type = word(count_type, 1),
     angler_type = case_when(
-      word(count_type, 1) %in% c("Bank","Shore") ~ "bank",
-      word(count_type, 1) %in% c("Boat") ~ "boat"
+      word(count_type, 1) %in% c("Bank","bank","Shore") ~ "bank",
+      word(count_type, 1) %in% c("Boat","boat") ~ "boat"
     )
   ) |>
   #exclude any count_type strings we didn't whitelist into an angler_type
   #e.g., "Boats" which are not a thing we use because reasons
   filter(!is.na(angler_type)) |> 
-  group_by(event_date, day_index, section, count_sequence, angler_type) |>
+  group_by(event_date, day_index, section, count_sequence, angler_type) |> # question for KB - does grouping these data by section make sense for Kalama and other LCR steelhead data?
   summarize(count_quantity = sum(count_quantity), .groups = "drop") |>
   mutate(tie_in_indicator = 1) |> 
-  arrange(event_date, section, count_sequence) 
+  arrange(event_date, section, count_sequence) |> 
+  drop_na(count_sequence) # mismatch in sections on survey dates 3/22, 3/28, 3/31, dropping for now but circle back w/ KB
 
 
 ```
@@ -474,15 +482,17 @@ Aggregate index counts of vehicles, trailers, anglers, and boats.
 ## Skagit winter gamefish example also shows valid realworld situation
 ## section 1 has 'Vehicle Only' counts but not 'Trailers Only' due to low angler effort
 ## so excluding section 1 is legit, but needs to be clearly indicated...
+
 point_estimate_data_prelim$effort_index <- point_estimate_data_prelim$effort_index |> 
   filter(
     #!is.na(count_quantity)
     is.na(no_count_reason),
-    !is.na(count_type)
+    !is.na(count_type),
+    count_type %in% index_count_types # filter to analysis specific index count types 
     ) |>  
   select(event_date, water_body, water_body_desc, location, section, tie_in_indicator, count_sequence, count_type, count_quantity) |>
   left_join(d_days, by = "event_date") |> 
-  group_by(section, event_date, day_index, Week, Month, count_sequence, count_type) |> 
+  group_by(section, event_date, day_index, DayL, Week, Month, count_sequence, count_type) |> 
   summarise(count_quantity = sum(count_quantity), .groups = "drop") |> 
   # pivot_wider(names_from = count_type, values_from = count_quantity) |> 
   arrange(event_date, section, count_sequence) 
@@ -496,7 +506,7 @@ point_estimate_data_prelim$effort_index <- point_estimate_data_prelim$effort_ind
 
 # sum total of vehicle trailer counts per date, section, sampling event (count_sequence), and count_type (vehicles, trailers, etc.)
 point_estimate_data_prelim$Daily_effort_per_count_index_counts <- point_estimate_data_prelim$effort_index |> 
-  group_by(event_date, section, count_sequence, count_type) |> 
+  group_by(event_date, DayL, section, count_sequence, count_type) |> 
   summarize(
     sum_index_count = sum(count_quantity)
   ) 
@@ -504,13 +514,22 @@ point_estimate_data_prelim$Daily_effort_per_count_index_counts <- point_estimate
 # Mean count across multiple sampling events within a day 
 
 point_estimate_data_prelim$mean_daily_effort_index_counts <- point_estimate_data_prelim$Daily_effort_per_count_index_counts|> 
-  group_by(event_date, section, count_type) |> 
+  group_by(event_date, DayL, section, count_type) |> 
   summarise(
     mean_index_count = mean(sum_index_count)
   ) |> 
   mutate(
-    angler_type = if_else(count_type == "Trailers Only", "boat", "total")
+    angler_type =
+    case_when(
+      count_type == "Boat Anglers" ~ "boat",
+      count_type == "Bank Anglers" ~ "bank",
+      count_type == "Trailers Only" ~ "boat",
+      count_type == "Vehicle Only" ~ "total"
+    ) # EB note: test this with creel data using vehicle / trailer counts! 
   )
+  # mutate(
+  #   angler_type = if_else(count_type == "Trailers Only", "boat", "total") # think about modifying code here to incorporate index angler counts 
+  # )
   # mutate(
   #   angler_type = if_else(angler_type == "total", "bank", "boat") # Cascade only - all anglers are bank anglers so coercing "total" to "bank" to match grouping in interview data 
   # )
@@ -528,7 +547,7 @@ point_estimate_data_prelim$interview <- point_estimate_data_prelim$interview |>
   mutate(
     across(c(vehicle_count, trailer_count), ~replace_na(., 0)),
     trip_status = replace_na(trip_status, "Unknown"),
-    angler_type = case_when(
+    angler_type = case_when( # EB note; run this through multiple datasets to ensure that fish_from_boat is robust field to sort out angler_type from interviews 
       is.na(fish_from_boat) ~ "bank",
       fish_from_boat == "Bank" ~ "bank",
       fish_from_boat == "Boat" ~ "boat"
@@ -541,7 +560,7 @@ point_estimate_data_prelim$interview <- point_estimate_data_prelim$interview |>
   left_join(
     creel$catch |>
       mutate(
-    life_stage = replace_na(life_stage, "Adult"),
+    life_stage = replace_na(life_stage, "Adult"), # 2021 fall Skagit specific assumption on missing data, probably not appropriate for generalized version
     catch_group = paste(species, life_stage, fin_mark, fate, sep = "_")
   ) |> 
     group_by(interview_id, catch_group) |> 
@@ -554,27 +573,29 @@ point_estimate_data_prelim$interview <- point_estimate_data_prelim$interview |>
         time_strata = if_else(ModelPeriod == "Month", Month, Week)) |> 
   filter(angler_hours > 0.5)
 
+# EB 3/23/2022 Need to join catch information per interview later in the workflow; this approach is erroneously duplicating unique interviews 
+
 # obtain unique catch_groups present in intermediate interview object 
 
-point_estimate_data_prelim$species_present <- point_estimate_data_prelim$interview |> 
-  distinct(catch_group)
-
-# split off fish count data to pivot out on catch groups to extend catch group information to each interview, essentially inferring 0's in interviews when catch for a group is not reported
-
-point_estimate_data_prelim$catch_data_pivot_wide <- point_estimate_data_prelim$interview |> 
-  select(interview_id, catch_group, fish_count) |> 
-  pivot_wider(names_from = catch_group, values_from = fish_count, values_fill = 0) |> # pivot_wide to infer 0's
-  select(interview_id, contains(point_estimate_data_prelim$species_present$catch_group)) |>
-  group_by(interview_id) |> 
-  summarise(across(contains(point_estimate_data_prelim$species_present$catch_group), sum))
-
-# rejoin catch data to interview data and pivot long on counts per catch group
-
-point_estimate_data_prelim$interview <- point_estimate_data_prelim$interview |> 
-  select(-c(catch_group, fish_count)) |>
-  distinct(interview_id, .keep_all = TRUE) |> 
-  left_join(point_estimate_data_prelim$catch_data_pivot_wide, by = "interview_id") |>
-  pivot_longer(cols = contains(point_estimate_data_prelim$species_present$catch_group), names_to = "catch_group", values_to = "fish_count") # pivot_long to make calculations using fish count data
+# point_estimate_data_prelim$species_present <- point_estimate_data_prelim$interview |> 
+#   distinct(catch_group)
+# 
+# # split off fish count data to pivot out on catch groups to extend catch group information to each interview, essentially inferring 0's in interviews when catch for a group is not reported
+# 
+# point_estimate_data_prelim$catch_data_pivot_wide <- point_estimate_data_prelim$interview |> 
+#   select(interview_id, catch_group, fish_count) |> 
+#   pivot_wider(names_from = catch_group, values_from = fish_count, values_fill = 0) |> # pivot_wide to infer 0's
+#   select(interview_id, contains(point_estimate_data_prelim$species_present$catch_group)) |>
+#   group_by(interview_id) |> 
+#   summarise(across(contains(point_estimate_data_prelim$species_present$catch_group), sum))
+# 
+# # rejoin catch data to interview data and pivot long on counts per catch group
+# 
+# point_estimate_data_prelim$interview <- point_estimate_data_prelim$interview |> 
+#   select(-c(catch_group, fish_count)) |>
+#   distinct(interview_id, .keep_all = TRUE) |> 
+#   left_join(point_estimate_data_prelim$catch_data_pivot_wide, by = "interview_id") |>
+#   pivot_longer(cols = contains(point_estimate_data_prelim$species_present$catch_group), names_to = "catch_group", values_to = "fish_count") # pivot_long to make calculations using fish count data
 
 ```
 
@@ -588,14 +609,37 @@ Here calculating estimates of daily effort (angler-hours) from vehicle / trailer
 An exception to this is the Cascade River, where only vehicles get counted, since there's no boat angling / access on the 1 mile long fishery. 
 
 ## join daily angler data from interviews to daily summaries of index counts 
-```{r point_estimate_data_prelim$effort_counts_and_interviews, include = FALSE}
+```{r point_estimate_data_prelim$daily_effort_estimates, include = FALSE}
 
-# summarize interview data by section, angler-type (boat, bank), and event_date
 
-# calculate total angler hours per day from interviews (includes boat and bank anglers), these hours will be multiplied by vehicle index counts to estimate total fishing effort
+## EB working on incorporating direct angler index counts into script 
+
+# if(model_period_MoM == "Week") {
+#         #effort_total_byDateGear<- effort_total_byDateGear %>% rename(Time_Strata = weeknum) %>% select(-Year_Month)
+#         effort_total_byDateGearSection<- effort_total_byDateGearSection %>% rename(Time_Strata = weeknum) %>% select(-Year_Month)
+#       }else{
+#       if(model_period_MoM == "Month"){
+#         #effort_total_byDateGear<- effort_total_byDateGear %>% rename(Time_Strata = Year_Month) %>% select(-weeknum)
+#         effort_total_byDateGearSection<- effort_total_byDateGearSection %>% rename(Time_Strata = Year_Month) %>% select(-weeknum)
+#         }
+#       }
+
+
+if(str_detect(index_count_types, c("Bank Anglers", "Boat Anglers"))) {
+
+  point_estimate_data_prelim$angler_data_from_interviews <- point_estimate_data_prelim$interview |> 
+  group_by(section, event_date, day_index, DayL, time_strata, angler_type) |> 
+  summarize(
+    daily_sum_angler = sum(angler_count),
+    daily_sum_index_count_from_interview = "",
+    angler_hours_total = sum(angler_hours_total),
+    anglers_per_index_count_from_interview = "")
+  
+      }else{
+      if(str_detect(index_count_types, c("Vehicle Only", "Trailers Only"))){
 
 point_estimate_data_prelim$interviews_total_effort <- point_estimate_data_prelim$interview |> 
-  group_by(section, event_date, day_index, DayL, time_strata) |> 
+  group_by(section, event_date, day_index, time_strata) |> 
   summarize(
     daily_sum_angler = sum(angler_count),
     daily_sum_index_count_from_interview = sum(vehicle_count),
@@ -605,11 +649,9 @@ point_estimate_data_prelim$interviews_total_effort <- point_estimate_data_prelim
     angler_type = "total"
   )
 
-# filter to only boat anglers and calculate total boat angler hours per day from interviews, these hours will be multiplied by trailer index counts to estimate boat fishing effort 
-
 point_estimate_data_prelim$interviews_boat_effort <- point_estimate_data_prelim$interview |>
   filter(angler_type == "boat") |> 
-  group_by(section, event_date, day_index, DayL, time_strata) |> 
+  group_by(section, event_date, day_index, time_strata) |> 
   summarize(
     daily_sum_angler = sum(angler_count),
     daily_sum_index_count_from_interview = sum(vehicle_count),
@@ -617,11 +659,46 @@ point_estimate_data_prelim$interviews_boat_effort <- point_estimate_data_prelim$
     anglers_per_index_count_from_interview = daily_sum_angler / daily_sum_index_count_from_interview) |>
   mutate(
     angler_type = "boat")
-    
-# Bind these together so we have categories for 1) total hours to match with anglers per vehicle and 2) boat hours to match with anglers per trailer 
 
 point_estimate_data_prelim$angler_data_from_interviews <- point_estimate_data_prelim$interviews_total_effort |> 
   bind_rows(point_estimate_data_prelim$interviews_boat_effort) 
+        
+        }
+      }
+
+
+# summarize interview data by section, angler-type (boat, bank), and event_date
+
+# calculate total angler hours per day from interviews (includes boat and bank anglers), these hours will be multiplied by vehicle index counts to estimate total fishing effort
+
+# point_estimate_data_prelim$interviews_total_effort <- point_estimate_data_prelim$interview |> 
+#   group_by(section, event_date, day_index, DayL, time_strata) |> 
+#   summarize(
+#     daily_sum_angler = sum(angler_count),
+#     daily_sum_index_count_from_interview = sum(vehicle_count),
+#     angler_hours_total = sum(angler_hours_total),
+#     anglers_per_index_count_from_interview = daily_sum_angler / daily_sum_index_count_from_interview) |>
+#   mutate(
+#     angler_type = "total"
+#   )
+# 
+# # filter to only boat anglers and calculate total boat angler hours per day from interviews, these hours will be multiplied by trailer index counts to estimate boat fishing effort 
+# 
+# point_estimate_data_prelim$interviews_boat_effort <- point_estimate_data_prelim$interview |>
+#   filter(angler_type == "boat") |> 
+#   group_by(section, event_date, day_index, DayL, time_strata) |> 
+#   summarize(
+#     daily_sum_angler = sum(angler_count),
+#     daily_sum_index_count_from_interview = sum(vehicle_count),
+#     angler_hours_total = sum(angler_hours_total),
+#     anglers_per_index_count_from_interview = daily_sum_angler / daily_sum_index_count_from_interview) |>
+#   mutate(
+#     angler_type = "boat")
+#     
+# # Bind these together so we have categories for 1) total hours to match with anglers per vehicle and 2) boat hours to match with anglers per trailer 
+# 
+# point_estimate_data_prelim$angler_data_from_interviews <- point_estimate_data_prelim$interviews_total_effort |> 
+#   bind_rows(point_estimate_data_prelim$interviews_boat_effort) 
 
 
 # several days where boat effort estimate from trailers exceed total estimate from vehicles, could be sampling bias that's underrepresenting bank anglers hours / overrepresenting boat angler hours in interviews
@@ -633,11 +710,49 @@ point_estimate_data_prelim$angler_data_from_interviews <- point_estimate_data_pr
 # EB 2/28/2022 the join below slices off days 11/19, 11/28, 11/29 that need to be counted as unsampled days and included in the totals for N_days
 
 # this left join is slicing off index counts with no corresponding interview. 
-point_estimate_data_prelim$effort_counts_and_interviews <- point_estimate_data_prelim$angler_data_from_interviews  |> 
+# point_estimate_data_prelim$effort_counts_and_interviews <- point_estimate_data_prelim$angler_data_from_interviews  |> 
+#   left_join(point_estimate_data_prelim$mean_daily_effort_index_counts, by = c("event_date", "section", "angler_type")) |> 
+#     mutate(
+#     mean_daily_effort = DayL * anglers_per_index_count_from_interview * mean_index_count) |>
+#   arrange(event_date, section)
+
+
+
+if(str_detect(index_count_types, c("Bank Anglers", "Boat Anglers"))) {
+
+point_estimate_data_prelim$daily_effort_estimates <- point_estimate_data_prelim$mean_daily_effort_index_counts |> 
+    mutate(
+    mean_daily_effort = DayL * mean_index_count) |>
+  arrange(event_date, section)
+
+      }else{
+      if(str_detect(index_count_types, c("Vehicle Only", "Trailers Only"))){
+        
+point_estimate_data_prelim$daily_effort_estimates <- point_estimate_data_prelim$angler_data_from_interviews  |> 
   left_join(point_estimate_data_prelim$mean_daily_effort_index_counts, by = c("event_date", "section", "angler_type")) |> 
     mutate(
     mean_daily_effort = DayL * anglers_per_index_count_from_interview * mean_index_count) |>
   arrange(event_date, section)
+      }
+}
+
+# check to see if derived bank effort from total minus boat results in any negative values 
+
+# c1 <- point_estimate_data_prelim$daily_effort_estimates |>
+#   ungroup() |> 
+#   filter(angler_type == "boat") |> 
+#   select(event_date, section, boat_effort = mean_daily_effort)
+# 
+# c2 <- point_estimate_data_prelim$daily_effort_estimates |> 
+#   ungroup() |> 
+#   filter(angler_type == "total") |>
+#   select(event_date, section, total_effort = mean_daily_effort)
+#   
+# c3 <- c2 |> 
+#   left_join(c1, by = c("event_date", "section")) |>
+#   mutate(
+#     bank_derive = total_effort - boat_effort
+#   )
 
 ```
 
@@ -781,7 +896,7 @@ days_join <- d_days |>
 #   arrange(event_date)
 
 # calculate mean daily effort multipled by bias term (tie in ratio) from census counts
-point_estimate_data_prelim$effort_interviews_totalandboat <- point_estimate_data_prelim$effort_counts_and_interviews |>
+point_estimate_data_prelim$effort_interviews_totalandboat <- point_estimate_data_prelim$daily_effort_estimates |>
   ungroup() |> 
   left_join(point_estimate_data_prelim$census_counts_all, by = c("section", "angler_type")) |> 
   select(-c(time_strata)) |> 
