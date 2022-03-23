@@ -1,13 +1,13 @@
 ---
 title: Creel Point Estimate Analysis
 params:
-  proj_name: "District 14"
-  water_body: "Skagit River"
-  date_start: "2021-08-14"   
-  date_end: "2021-12-31"
-  index_count_types: "Vehicle Only,Trailers Only"
+  proj_name: "R5 Steelhead"
+  water_body: "Kalama River"
+  date_start: "2017-02-01"   
+  date_end: "2017-04-15"
+  index_count_types: "Bank Anglers,Boat Anglers"
   model_period: "Week"
-  sections: "lut_water_body_location_d14_skagit_fall_salmon_PE.csv"
+  sections: "lut_water_body_location_kalama_steelhead.csv"
 output:
   html_document:
     fig_caption: yes
