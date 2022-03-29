@@ -1,13 +1,13 @@
 ---
 title: Creel Point Estimate Analysis
 params:
-  proj_name: "R5 Steelhead"
-  water_body: "Kalama River"
-  date_start: "2017-02-01"   
-  date_end: "2017-04-15"
-  index_count_types: "Bank Anglers,Boat Anglers"
+  proj_name: "District 14"
+  water_body: "Skagit River"
+  date_start: "2021-08-19"   
+  date_end: "2021-12-15"
+  index_count_types: "Vehicle Only,Trailers Only"
   model_period: "Week"
-  sections: "lut_water_body_location_kalama_steelhead.csv"
+  sections: "lut_water_body_location_d14_skagit_fall_salmon_PE.csv"
 output:
   html_document:
     fig_caption: yes
@@ -789,17 +789,100 @@ print(point_estimate_data_prelim$effort_no_interview)
 
 # calculate mean vehicle and trailer counts and corresponding anglers per vehicle / anglers per trailer by day, section, and count sequence to match temporal scale of census counts 
 
+# days_join object to add all days in monitoring period into table for calculation of counts of sampled days (n_days) and total days in monitoring period (N_days) with a right_join()
+# EB realized needed rows duplicated across angler_type and section for join later in script, so this is the current workaround 
 
-# assign index counts to either boat or bank effort 
 
+days_join <- d_days |> 
+  select(event_date, DayType, Month, Week, ModelPeriod, open_section_1) |> 
+  mutate(
+    time_strata = if_else(ModelPeriod == "Month", Month, Week),
+    at_1 = "boat", at_2 = "total"
+  ) |> 
+  pivot_longer(cols = c(at_1, at_2), values_to = "angler_type") |> 
+  select(-name) |> 
+  mutate(s1 = 1, s2 = 2, s3 = 3
+  ) |> 
+  pivot_longer(cols = c(s1,s2,s3), values_to = "section") |> 
+  select(-name)
+
+
+
+if(str_detect(index_count_types, c("Bank Anglers", "Boat Anglers"))) {
+
+point_estimate_data_prelim$Daily_effort_per_count_groups <- point_estimate_data_prelim$Daily_effort_per_count_index_counts |>
+  mutate(
+    angler_type = if_else(count_type == "Boat Anglers", "boat", "bank")
+  ) |> 
+  select(-count_type) 
+  
+# index count derived estimates of angler counts
+
+point_estimate_data_prelim$effort_counts_for_census_join <- point_estimate_data_prelim$Daily_effort_per_count_groups |> 
+  rename(index_count =  sum_index_count) |> 
+  select(event_date, section, DayL, count_sequence, angler_type, index_count)
+  
+# left join effort counts to census counts 
+
+# calculate boat anglers counted per census count
+point_estimate_data_prelim$census_counts_both_types <- point_estimate_data_prelim$effort_census |>
+  group_by(event_date, section, angler_type, day_index, count_sequence) |> 
+  summarize(
+    count_quantity = sum(count_quantity)
+  )
+
+# calculate bias term ratios (ratio of census counts to angler count estimates from index counts)
+
+point_estimate_data_prelim$census_counts_all <- point_estimate_data_prelim$census_counts_both_types |> 
+  select(
+    event_date, section, count_sequence, 
+    census_count = count_quantity, angler_type
+  ) |> 
+  left_join(point_estimate_data_prelim$effort_counts_for_census_join, by = c("event_date", "section", "count_sequence","angler_type")) |>
+  mutate(
+    index_count = replace_na(index_count, 0), #EB placeholder,
+    TI_Expan = census_count / index_count) |> 
+  filter(
+    !is.na(TI_Expan), !is.infinite(TI_Expan) # filter out tie in ratios == NaN or Inf 
+  ) |> 
+  select(
+    event_date, day_index, DayL, section, DayL, angler_type, census_count, index_count, TI_Expan
+  ) |> 
+  group_by(section, angler_type) |> 
+  summarise(
+    TI_Expan_Total = sum(census_count) / sum(index_count)) 
+
+# join census (tie in) counts to index counts 
+
+# calculate mean daily effort multipled by bias term (tie in ratio) from census counts
+point_estimate_data_prelim$effort_interviews_bank_boat <- point_estimate_data_prelim$daily_effort_estimates |>
+  ungroup() |> 
+  left_join(point_estimate_data_prelim$census_counts_all, by = c("section", "angler_type")) |> # for the Kalama data 2/1 - 4/15 we don't have census data to calculate boat angler TI Expansion factors for sections 2,3. the mutate below is a workaround to keep the code moving, assuming if we can't develop a TI expansion factor, then use the unexpanded mean daily effort
+  mutate(
+    TI_Expan_Total = if_else(is.na(TI_Expan_Total), 1, TI_Expan_Total) 
+  ) |> 
+  mutate(
+    mean_daily_TI_Expan = mean_daily_effort * TI_Expan_Total
+  ) 
+
+point_estimate_data_prelim$effort_interviews_final <- point_estimate_data_prelim$effort_interviews_bank_boat |>
+  select(section, event_date, angler_type, mean_daily_TI_Expan) |> 
+  right_join(days_join, by = c("section", "event_date", "angler_type")) |>
+  mutate(
+    creeled = if_else(!is.na(mean_daily_TI_Expan), "Y", "N")
+  ) |> 
+  arrange(event_date)
+  
+  
+
+      }else{
+      if(str_detect(index_count_types, c("Vehicle Only", "Trailers Only"))){
+        
 point_estimate_data_prelim$Daily_effort_per_count_groups <- point_estimate_data_prelim$Daily_effort_per_count |>
   mutate(
     angler_type = if_else(count_type == "Trailers Only", "boat", "total")
   ) |> 
   select(-count_type) 
-
-# |>
-  # mutate(angler_type = if_else(angler_type == "total", "bank", "boat")) # Cascade fix
   
 # index count derived estimates of angler counts
 
@@ -838,7 +921,6 @@ point_estimate_data_prelim$census_counts_boat <- point_estimate_data_prelim$effo
     
 # Bind these together so we have categories for 1) total hours to match with anglers per vehicle and 2) boat hours to match with anglers per trailer 
 
-
 # filter out tie in ratios == NaN or Inf 
  
 # calculate bias term ratios (ratio of census counts to angler count estimates from index counts)
@@ -863,37 +945,8 @@ point_estimate_data_prelim$census_counts_all <- point_estimate_data_prelim$censu
   summarise(
     TI_Expan_Total = sum(census_count) / sum(index_count))
 
-# days_join object to add all days in monitoring period into table for calculation of counts of sampled days (n_days) and total days in monitoring period (N_days) with a right_join()
-# EB realized needed rows duplicated across angler_type and section for join later in script, so this is the current workaround 
-
-days_join <- d_days |> 
-  select(event_date, DayType, Month, Week, ModelPeriod, open_section_1) |> 
-  mutate(
-    time_strata = if_else(ModelPeriod == "Month", Month, Week),
-    at_1 = "total", at_2 = "boat", at_3 = "bank"
-  ) |> 
-  pivot_longer(cols = c(at_1, at_2, at_3), values_to = "angler_type") |> 
-  select(-name) |> 
-  mutate(s1 = 1, s2 = 2, s3 = 3
-  ) |> 
-  pivot_longer(cols = c(s1,s2,s3), values_to = "section") |> 
-  select(-name)
 
 # join census (tie in) counts to index counts 
-
-# point_estimate_data_prelim$effort_interviews_final <- point_estimate_data_prelim$effort_counts_and_interviews |>
-#   ungroup() |> 
-#   left_join(point_estimate_data_prelim$census_counts_all, by = c("section", "angler_type")) |> 
-#   select(-c(Month, Week)) |> 
-#   mutate(
-#     mean_daily_TI_Expan = mean_daily_effort * TI_Expan_Total
-#   ) |>
-#   ungroup() |> 
-#   right_join(days_join, by = c("section", "event_date", "angler_type")) |> 
-#   mutate(
-#     creeled = if_else(!is.na(mean_daily_TI_Expan), "Y", "N")
-#   ) |>
-#   arrange(event_date)
 
 # calculate mean daily effort multipled by bias term (tie in ratio) from census counts
 point_estimate_data_prelim$effort_interviews_totalandboat <- point_estimate_data_prelim$daily_effort_estimates |>
@@ -935,6 +988,157 @@ point_estimate_data_prelim$effort_interviews_final <- point_estimate_data_prelim
     creeled = if_else(!is.na(mean_daily_TI_Expan), "Y", "N")
   ) |> 
   arrange(event_date)
+      }
+      }
+
+
+
+
+# # assign index counts to either boat or bank effort 
+# 
+# point_estimate_data_prelim$Daily_effort_per_count_groups <- point_estimate_data_prelim$Daily_effort_per_count |>
+#   mutate(
+#     angler_type = if_else(count_type == "Trailers Only", "boat", "total")
+#   ) |> 
+#   select(-count_type) 
+# 
+# # |>
+#   # mutate(angler_type = if_else(angler_type == "total", "bank", "boat")) # Cascade fix
+#   
+# # index count derived estimates of angler counts
+# 
+# point_estimate_data_prelim$effort_counts_for_census_join <- point_estimate_data_prelim$angler_data_from_interviews |> 
+#   left_join(point_estimate_data_prelim$Daily_effort_per_count_groups, by = c("event_date", "section", "angler_type")) |> 
+#   mutate(
+#     index_count = anglers_per_index_count_from_interview * sum_index_count
+#   ) |> 
+#   ungroup() |> 
+#   select(event_date, section, time_strata, DayL, count_sequence, angler_type, index_count)
+#   
+# # left join effort counts to census counts 
+# 
+# # calculate total anglers counted per census count (boat + bank anglers) 
+# 
+# point_estimate_data_prelim$census_counts_total <- point_estimate_data_prelim$effort_census |> 
+#   group_by(event_date, section, day_index, count_sequence) |> 
+#   summarize(
+#     count_quantity = sum(count_quantity)
+#   ) |>
+#   mutate(
+#     angler_type = "total"
+#   )
+# 
+# # calculate boat anglers counted per census count
+# 
+# point_estimate_data_prelim$census_counts_boat <- point_estimate_data_prelim$effort_census |>
+#   filter(angler_type == "boat") |> 
+#   group_by(event_date, section, day_index, count_sequence) |> 
+#   summarize(
+#     count_quantity = sum(count_quantity)
+#   ) |>
+#   mutate(
+#     angler_type = "boat"
+#   )
+#     
+# # Bind these together so we have categories for 1) total hours to match with anglers per vehicle and 2) boat hours to match with anglers per trailer 
+# 
+# 
+# # filter out tie in ratios == NaN or Inf 
+#  
+# # calculate bias term ratios (ratio of census counts to angler count estimates from index counts)
+# 
+# point_estimate_data_prelim$census_counts_all <- point_estimate_data_prelim$census_counts_total |> 
+#   bind_rows(point_estimate_data_prelim$census_counts_boat) |> 
+#   select(
+#     event_date, section, count_sequence, 
+#     census_count = count_quantity, angler_type
+#   ) |> 
+#   left_join(point_estimate_data_prelim$effort_counts_for_census_join, by = c("event_date", "section", "count_sequence","angler_type")) |>
+#   mutate(
+#     index_count = replace_na(index_count, 0), #EB placeholder,
+#     TI_Expan = census_count / index_count) |> 
+#   filter(
+#     !is.na(TI_Expan), !is.infinite(TI_Expan)
+#   ) |> 
+#   select(
+#     event_date, day_index, time_strata, DayL, section, DayL, angler_type, census_count, index_count, TI_Expan
+#   ) |> 
+#   group_by(section, angler_type) |> 
+#   summarise(
+#     TI_Expan_Total = sum(census_count) / sum(index_count))
+# 
+# # days_join object to add all days in monitoring period into table for calculation of counts of sampled days (n_days) and total days in monitoring period (N_days) with a right_join()
+# # EB realized needed rows duplicated across angler_type and section for join later in script, so this is the current workaround 
+# 
+# days_join <- d_days |> 
+#   select(event_date, DayType, Month, Week, ModelPeriod, open_section_1) |> 
+#   mutate(
+#     time_strata = if_else(ModelPeriod == "Month", Month, Week),
+#     at_1 = "total", at_2 = "boat", at_3 = "bank"
+#   ) |> 
+#   pivot_longer(cols = c(at_1, at_2, at_3), values_to = "angler_type") |> 
+#   select(-name) |> 
+#   mutate(s1 = 1, s2 = 2, s3 = 3
+#   ) |> 
+#   pivot_longer(cols = c(s1,s2,s3), values_to = "section") |> 
+#   select(-name)
+# 
+# # join census (tie in) counts to index counts 
+# 
+# # point_estimate_data_prelim$effort_interviews_final <- point_estimate_data_prelim$effort_counts_and_interviews |>
+# #   ungroup() |> 
+# #   left_join(point_estimate_data_prelim$census_counts_all, by = c("section", "angler_type")) |> 
+# #   select(-c(Month, Week)) |> 
+# #   mutate(
+# #     mean_daily_TI_Expan = mean_daily_effort * TI_Expan_Total
+# #   ) |>
+# #   ungroup() |> 
+# #   right_join(days_join, by = c("section", "event_date", "angler_type")) |> 
+# #   mutate(
+# #     creeled = if_else(!is.na(mean_daily_TI_Expan), "Y", "N")
+# #   ) |>
+# #   arrange(event_date)
+# 
+# # calculate mean daily effort multipled by bias term (tie in ratio) from census counts
+# point_estimate_data_prelim$effort_interviews_totalandboat <- point_estimate_data_prelim$daily_effort_estimates |>
+#   ungroup() |> 
+#   left_join(point_estimate_data_prelim$census_counts_all, by = c("section", "angler_type")) |> 
+#   select(-c(time_strata)) |> 
+#   mutate(
+#     mean_daily_TI_Expan = mean_daily_effort * TI_Expan_Total
+#   ) 
+# 
+# # subtract boat effort from the total effort to estimate bank effort. 
+# # EB: Doing this because total pool of vehicles represents both bank and boat anglers, and this is how separating effort has occurred in the Excel workbooks. Curious if a similar approach is used in the BSS model, and this if method of separating effort is the best / most appropriate approach 
+# 
+# point_estimate_data_prelim$effort_interviews_bank_1 <- point_estimate_data_prelim$effort_interviews_totalandboat |>
+#   select(section, event_date, angler_type, mean_daily_TI_Expan) |> 
+#   pivot_wider(names_from = angler_type, values_from = mean_daily_TI_Expan, values_fill = 0) |> 
+#   mutate(
+#     mean_daily_TI_Expan_bank = total - boat
+#   )
+#   
+# # joining estimated bank effort to initial table with total and boat hours and then using distinct call to filter to only the newly derived bank hours while retaining the other table data needed to bind this data back to the initial dataset 
+# point_estimate_data_prelim$effort_interviews_bank_2 <- point_estimate_data_prelim$effort_interviews_totalandboat |> 
+#   left_join(point_estimate_data_prelim$effort_interviews_bank_1, by = c("section", "event_date")) |> 
+#   distinct(section, event_date, mean_daily_TI_Expan_bank, .keep_all = TRUE) |> 
+#   mutate(
+#     angler_type = "bank"
+#   ) |>
+#   select(-c(mean_daily_TI_Expan, total, boat)) |> 
+#   rename(
+#     mean_daily_TI_Expan = mean_daily_TI_Expan_bank
+#   )
+# 
+# # Binding the bank hours back to the initial table
+# point_estimate_data_prelim$effort_interviews_final <- point_estimate_data_prelim$effort_interviews_totalandboat |> 
+#   bind_rows(point_estimate_data_prelim$effort_interviews_bank_2) |> 
+#   ungroup() |> 
+#   right_join(days_join, by = c("section", "event_date", "angler_type")) |> 
+#   mutate(
+#     creeled = if_else(!is.na(mean_daily_TI_Expan), "Y", "N")
+#   ) |> 
+#   arrange(event_date)
   
 ```
 
