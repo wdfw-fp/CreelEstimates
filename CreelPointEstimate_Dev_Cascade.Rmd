@@ -1619,7 +1619,7 @@ point_estimate_data_prelim$degrees_freedom_total <- point_estimate_data_prelim$e
   summarize(
     min_n_days = min(n_days),
     sum_n_days = sum(n_days),
-    degrees_freedom = min_n_days + sum_n_days / 2
+    degrees_freedom_total = min_n_days + sum_n_days / 2
   )
 
 ```
@@ -1720,6 +1720,7 @@ estimates$total_effort |>
 # Adding together time_strata catch estimates and associated variance and calculating SE, CV, and 95% CI's
 
 estimates$total_catch <- estimates$time_strata_catch_total |>
+  
   left_join(point_estimate_data_prelim$degrees_freedom_total, by = c("section", "angler_type")) |> 
   mutate(variance = replace_na(variance, 0)) |> 
   group_by(catch_group, section, angler_type) |> 

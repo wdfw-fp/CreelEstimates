@@ -1435,7 +1435,8 @@ estimates$time_strata_effort_total <- estimates$time_strata_effort_by_daytype |>
     upr95CI = total_effort + qt(1-(0.05/2),degrees_freedom)*(variance^0.5)
   ) |> 
   distinct(time_strata, angler_type, .keep_all = TRUE)|> 
-  mutate_if(is.numeric, round, 2) 
+  mutate_if(is.numeric, round, 2) |> 
+  filter(angler_type %in% c("bank","boat"))
 
 write_csv(estimates$time_strata_effort_total, paste(filepath_modeloutput, paste(paste(params$proj_name, params$water_body, sep = "_"), paste("Point_Estimate", "Summary_Effort", params$model_period, sep = "_"), paste(params$date_start, params$date_end, sep = "_"), ".csv", sep="_"), sep="/"))
 
@@ -1463,7 +1464,7 @@ estimates$time_strata_effort_total |>
                 position=position_dodge(.9)) +
   theme(legend.text=element_text(size=8)) +
   theme_bw(base_size = 12) + 
-  facet_wrap(. ~ section + angler_type, ncol = 3)
+  facet_wrap(. ~ section + angler_type, ncol = 2)
 
 ```
 
@@ -1493,7 +1494,7 @@ estimates$time_strata_catch_by_daytype <- estimates$daily_effort_cpue_catch |>
 # Sum catch estimates across day types, retain grouping on angler type 
 
 estimates$time_strata_catch_total <- estimates$time_strata_catch_by_daytype |>
-  ungroup() |> 
+  ungroup() |>
  # add degrees of freedom per angler_type and section for time_strata
   # left_join(lut$sections |> select(section, section_name),
   #           by = "section") |> 
@@ -1511,6 +1512,7 @@ estimates$time_strata_catch_total <- estimates$time_strata_catch_by_daytype |>
   ) |>
   distinct() |> 
   mutate_if(is.numeric, round, 2) |> 
+  filter(angler_type %in% c("bank", "boat")) |> 
   arrange(section, catch_group, time_strata)
 
 
@@ -1531,13 +1533,12 @@ print(time_strata_catch_total_table)
 
 estimates$time_strata_catch_total |> 
   # filter(!grepl(c("Steelhead"),Catch_Group)) |> 
-  filter(catch_group %in% c("Chinook_Adult_AD_Kept", "Chinook_Adult_UM_Released")) |>
+  filter(catch_group %in% c("Coho_Adult_AD_Kept", "Coho_Adult_UM_Kept")) |>
   ggplot(aes(x = time_strata, y = total_catch)) +
   geom_point(position = "dodge", stat = "identity", color = "black") +
   scale_fill_manual(values=c("#999999", "#E69F00")) +
   geom_errorbar(aes(ymin=lwr95CI, ymax=upr95CI), width=.2,
                 position=position_dodge(.9)) +
-  geom_line() +
   theme(legend.text=element_text(size=8)) +
   theme_bw(base_size = 12) + 
   facet_wrap(. ~ catch_group + angler_type)
@@ -1558,14 +1559,16 @@ estimates$time_strata_catch_total |>
 
 
 
-
 ## CPUE by time period strata  
 ```{r, inclue = FALSE}
 
 # EB circle back to this for calculating CPUE / HPUE and associated uncertainty over time period of interest 
 
 effort_rename <- estimates$time_strata_effort_total |> 
-              select(total_effort,
+              select(section,
+                     time_strata,
+                     total_effort,
+                     angler_type,
                      effort_lwr95CI = lwr95CI,
                      effort_upr95CI = upr95CI,
                      effort_SE = SE,
@@ -1573,7 +1576,9 @@ effort_rename <- estimates$time_strata_effort_total |>
 
 estimates$cpue_time_strata <- estimates$time_strata_catch_total  |>
   select(
+    section,
     time_strata,
+    angler_type,
     total_catch,
     catch_variance = variance,
     catch_SE = SE,
@@ -1581,14 +1586,15 @@ estimates$cpue_time_strata <- estimates$time_strata_catch_total  |>
     catch_lwr95CI = lwr95CI,
     catch_upr95CI = upr95CI
   ) |> 
-  left_join(effort_rename) |> 
+  left_join(effort_rename, by = c("section","angler_type","time_strata")) |> 
   mutate(
     cpue_time_strata = total_catch / total_effort,
     cpue_lwr95_time_strata = catch_lwr95CI / effort_lwr95CI,
     cpue_upr95_time_strata = catch_upr95CI / effort_upr95CI,
     cpue_lwr95_time_strata = if_else(is.na(cpue_lwr95_time_strata),0, cpue_lwr95_time_strata),
     cpue_upr95_time_strata = if_else(is.na(cpue_upr95_time_strata),0, cpue_upr95_time_strata)) |> 
-    mutate_if(is.numeric, round, 2)
+    mutate_if(is.numeric, round, 2) |> 
+  distinct()
 
 write_csv(estimates$cpue_time_strata, paste(filepath_modeloutput, paste(paste(params$proj_name, params$water_body, sep = "_"), paste("Point_Estimate", "Catch_CPUE_time_strata", params$model_period, sep = "_"), paste(params$date_start, params$date_end, sep = "_"), ".csv", sep="_"), sep="/"))
 
@@ -1603,7 +1609,7 @@ estimates$cpue_time_strata |>
   geom_line() +
   theme(legend.text=element_text(size=8)) +
   theme_bw(base_size = 12) + 
-  facet_wrap(. ~ catch_group)
+  facet_wrap(. ~ catch_group + section)
 
 ```
 
@@ -1628,11 +1634,12 @@ point_estimate_data_prelim$degrees_freedom_total <- point_estimate_data_prelim$e
 ```
 
 
-## effort 
+## total effort across monitoring period
 ```{r estimates$time_strata_effort_total, message = FALSE, warning = FALSE,results = "asis",include=TRUE, echo=FALSE}
 
 # Adding together time strata specific effort estimates and associated variance and calculating SE, CV, and 95% CI's
 estimates$total_effort <- estimates$time_strata_effort_total |>
+  select(-c(min_n_days, sum_n_days, degrees_freedom)) |> 
   left_join(point_estimate_data_prelim$degrees_freedom_total, by = c("section", "angler_type")) |> 
   group_by(section, angler_type) |> 
   summarise(
@@ -1680,49 +1687,14 @@ estimates$total_effort |>
 ```
 
 
-## CPUE by time period strata  
-```{r, inclue = FALSE}
 
-# EB circle back to this for calculating CPUE / HPUE and associated uncertainty over time period of interest 
-
-# point_estimate_data_prelim$total_days_per_month <- point_estimate_data_prelim$interview_daily_totals |> 
-#   select(Month, N_days) |>
-#   distinct() |> 
-#   group_by(Month) |> 
-#   summarize(
-#     N_total_days = sum((N_days))
-#   )
-# 
-# estimates$interview_cpue_monthly_by_daytype <- point_estimate_data_prelim$interview_daily_totals |>
-#   ungroup() |> 
-#   left_join(point_estimate_data_prelim$total_days_per_month, by = "Month") |>
-#   mutate(
-#     degfree = min(n_days) - 1) |> 
-#   group_by(section, Month, angler_type) |> 
-#   summarize(
-#     ratio_daytype1 = n() / N_total_days,
-#     ratio_daytype2 = n_days / N_total_days,
-#     mean_cpue = round(mean(cpue_rom), 4),
-#     cpue_ratio_daytype = ratio_daytype1 * mean_cpue,
-#     variance_daily_cpue = var(cpue_rom),
-#     SE = sqrt(variance_daily_cpue),
-#     CV = SE / mean_cpue,
-#     lwr90CI = mean_cpue - qt(1-(0.1/2),degfree)*(variance_daily_cpue^0.5),
-#     upr90CI = mean_cpue + qt(1-(0.1/2),degfree)*(variance_daily_cpue^0.5)) |> 
-#   filter(!is.na(Month)) |> 
-#   distinct()
-# 
-
-```
-
-
-
-## catch by time period strata 
+## total catch across monitoring period 
 ```{r estimates$time_strata_catch_total, message = FALSE, warning = FALSE,results = "asis",include=TRUE, echo=FALSE}
 
 # Adding together time_strata catch estimates and associated variance and calculating SE, CV, and 95% CI's
 
 estimates$total_catch <- estimates$time_strata_catch_total |>
+  select(-c(min_n_days, sum_n_days, degrees_freedom)) |> 
   left_join(point_estimate_data_prelim$degrees_freedom_total, by = c("section", "angler_type")) |> 
   mutate(variance = replace_na(variance, 0)) |> 
   group_by(catch_group, section, angler_type) |> 
@@ -1736,6 +1708,7 @@ estimates$total_catch <- estimates$time_strata_catch_total |>
   ) |>
   distinct() |> 
   mutate_if(is.numeric, round, 2) |> 
+  filter(angler_type %in% c("bank", "boat")) |> 
   arrange(section, catch_group)
 
 
