@@ -20,7 +20,7 @@ output:
 
 This file uses a workflow developed by the DFW creel dev crew to summarize and generate creel estimates (angler effort, catch, and catch per unit effort (cpue)) from freshwater monitoring data housed on data.wa.gov, using direct expansion estimators (see Kale Bentley's original creel analysis files, Pollock et al. 1994).
 
-Pieces of the script require user / analysis specific inputs, including the initial parameters in the YAML, specification of closure / river out days in the dates section, specification of days with assumed cpue values (when there was known angling effort, but no corresponding interview), catch groups to retain for estimates, and ... ? 
+Pieces of the script require user / analysis specific inputs, including the initial parameters in the YAML, specification of closure / river out days in the dates section, and catch groups to retain for estimates.
 
 # setup
 
@@ -265,6 +265,8 @@ d_days <- tibble(
 # EB 3/16/2022 the lack of closures currently breaks the script, need to make sure that closures are not required
 d_days <- rows_upsert(d_days,
     bind_rows(
+      # tibble(section = "1", closure_begin = "2021-05-31", closure_end = "2021-05-31")
+      # ,
       tibble(section = "2,3", closure_begin = "2021-08-19", closure_end = "2021-08-31"),
       tibble(section = "2", closure_begin = "2021-09-01", closure_end = "2021-09-01"), # treaty fishery closure
       tibble(section = "2", closure_begin = "2021-09-07", closure_end = "2021-09-09"), # treaty fishery closure
@@ -1277,10 +1279,18 @@ point_estimate_data_prelim$interview_and_catch <- point_estimate_data_prelim$int
   select(-c(catch_group, fish_count)) |>
   distinct(interview_id, .keep_all = TRUE) |>
   left_join(point_estimate_data_prelim$catch_data_pivot_wide, by = "interview_id") |>
-  pivot_longer(cols = contains(point_estimate_data_prelim$species_present$catch_group), names_to = "catch_group", values_to = "fish_count") # pivot_long to make calculations using fish count data
+  pivot_longer(cols = contains(point_estimate_data_prelim$species_present$catch_group), names_to = "catch_group", values_to = "fish_count")
+
+# chinooktest <- test |> 
+#   filter(catch_group == "Chinook_Adult_UM_Released") |> 
+#   summarise(
+#     sum = sum(fish_count)
+#   )
+# pivot_long to make calculations using fish count data
 
 
 # CPUE for total effort (pooled CPUE)
+
 
 point_estimate_data_prelim$interview_daily_totals_total <- point_estimate_data_prelim$interview_and_catch |>
    mutate(
@@ -1298,6 +1308,13 @@ point_estimate_data_prelim$interview_daily_totals_total <- point_estimate_data_p
   mutate(
     angler_type = "total"
   )
+
+# chinooktest <- test |>
+#   filter(catch_group == "Chinook_Adult_UM_Released") |>
+#   summarise(
+#     sum = sum(catch_dailysum)
+#   )
+
 
 
 # circle back to this 3/29/2022 - whether or not to include "total" angler group using vehicle counts
@@ -1319,6 +1336,13 @@ point_estimate_data_prelim$interview_daily_totals_angler_type <- point_estimate_
   )
 
 
+# chinooktest <- test |>
+#   filter(catch_group == "Chinook_Adult_UM_Released") |>
+#   summarise(
+#     sum = sum(catch_dailysum)
+#   )
+
+
 # # bind together total, boat, and bank tables
 point_estimate_data_prelim$interview_daily_totals <- point_estimate_data_prelim$interview_daily_totals_total |>
   bind_rows(point_estimate_data_prelim$interview_daily_totals_angler_type)
@@ -1326,15 +1350,27 @@ point_estimate_data_prelim$interview_daily_totals <- point_estimate_data_prelim$
 
 #  add implicit missing values of CPUE to dataset using tidyr complete() function
 
+
+
+# test <- point_estimate_data_prelim$interview_daily_totals |>
+#   ungroup() |> 
+#   select(section, event_date, angler_type, catch_group, catch_dailysum, cpue_rom, cpue_mor) |> 
+#   complete(section, event_date, angler_type, catch_group) |>
+#   left_join(d_days, by = c("event_date")) |> 
+#   mutate(
+#   time_strata = if_else(ModelPeriod == "Month", Month, Week))
+
+
+
 point_estimate_data_prelim$interview_daily_totals_complete <- point_estimate_data_prelim$interview_daily_totals |>
   ungroup() |> 
   select(section, event_date, angler_type, catch_group, catch_dailysum, cpue_rom, cpue_mor) |> 
-  complete(section, event_date, angler_type, catch_group) |>
+  complete(section, event_date, angler_type, catch_group, fill = list(catch_dailysum = 0)) |>
+  distinct() |> 
   left_join(d_days, by = c("event_date")) |> 
   mutate(
   time_strata = if_else(ModelPeriod == "Month", Month, Week))
 
-test <- point_estimate_data_prelim$interview_daily_totals_complete
 
 # calculate mean cpue values by DayType, time_strata, Catch_Group to use for assumed values and complete the dataframe with implicit missing values of summarized CPUE 
 
@@ -1353,6 +1389,15 @@ point_estimate_data_prelim$cpue_summary <- point_estimate_data_prelim$interview_
 point_estimate_data_prelim$daily_CPUE <- point_estimate_data_prelim$interview_daily_totals_complete |> 
   left_join(point_estimate_data_prelim$cpue_summary, by = c("section", "angler_type", "time_strata", "DayType", "catch_group"))|> 
   select(section, time_strata, event_date, angler_type, catch_group, catch_dailysum, cpue_rom, cpue_mor, mean_strata_cpue_mor)
+
+# chinooktest <- test |>
+#   filter(catch_group == "Chinook_Adult_UM_Released") |>
+#   group_by(angler_type) |> 
+#   summarise(
+#     sum = sum(catch_dailysum)
+#   )
+
+
 ```
 
 
@@ -1573,15 +1618,18 @@ estimates$cpue_time_strata <- estimates$time_strata_catch_total  |>
     catch_CV = CV,
     catch_lwr95CI = lwr95CI,
     catch_upr95CI = upr95CI
+  ) |>
+  mutate(
+    daily_catch_estimate = total_catch / 7
   ) |> 
   left_join(effort_rename, by = c("section","angler_type","time_strata")) |> 
+  mutate_if(is.numeric, round, 2) |> 
   mutate(
     cpue_time_strata = replace_na(total_catch / total_effort, 0),
     cpue_lwr95_time_strata = catch_lwr95CI / effort_lwr95CI,
     cpue_upr95_time_strata = catch_upr95CI / effort_upr95CI,
     cpue_lwr95_time_strata = if_else(is.na(cpue_lwr95_time_strata),0, cpue_lwr95_time_strata),
     cpue_upr95_time_strata = if_else(is.na(cpue_upr95_time_strata),0, cpue_upr95_time_strata)) |> 
-    mutate_if(is.numeric, round, 2) |> 
   distinct()
 
 write_csv(estimates$cpue_time_strata, paste(filepath_modeloutput, paste(paste(params$proj_name, params$water_body, sep = "_"), paste("Point_Estimate", "Catch_CPUE_time_strata", params$model_period, sep = "_"), paste(params$date_start, params$date_end, sep = "_"), ".csv", sep="_"), sep="/"))
@@ -1596,7 +1644,35 @@ write_csv(estimates$cpue_time_strata, paste(filepath_modeloutput, paste(paste(pa
 
 
 estimates$cpue_time_strata |> 
-  filter(catch_group %in% c("Coho_Adult_UM_Kept")) |> 
+  filter(catch_group %in% c( "Chinook_Adult_UM_Released")) |> 
+  ggplot(aes(x = time_strata, y = total_catch, fill = angler_type)) +
+  geom_ribbon(aes(ymin = catch_lwr95CI, ymax = catch_upr95CI, group = angler_type)) +
+  geom_line() +
+  # scale_x_date() +
+  # geom_point(position = "dodge", stat = "identity", color = "black") +
+  scale_fill_manual(values=c("steelblue", "#E69F00")) +
+  # geom_errorbar(aes(ymin= cpue_lwr95_time_strata , ymax= cpue_upr95_time_strata), width=.2,
+  #               position=position_dodge(.9)) +
+  # theme(legend.text=element_text(size=8)) +
+  theme_bw(base_size = 12) +
+  facet_wrap(. ~ catch_group + section + angler_type, nrow = 3)
+
+estimates$cpue_time_strata |> 
+  filter(catch_group %in% c("Chinook_Adult_UNK_Released")) |> 
+  ggplot(aes(x = time_strata, y = total_catch, fill = angler_type)) +
+  geom_ribbon(aes(ymin = catch_lwr95CI, ymax = catch_upr95CI, group = angler_type)) +
+  geom_line() +
+  # scale_x_date() +
+  # geom_point(position = "dodge", stat = "identity", color = "black") +
+  scale_fill_manual(values=c("steelblue", "#E69F00")) +
+  # geom_errorbar(aes(ymin= cpue_lwr95_time_strata , ymax= cpue_upr95_time_strata), width=.2,
+  #               position=position_dodge(.9)) +
+  # theme(legend.text=element_text(size=8)) +
+  theme_bw(base_size = 12) +
+  facet_wrap(. ~ catch_group + section + angler_type, nrow = 3)
+
+estimates$cpue_time_strata |> 
+  filter(catch_group %in% c("Chinook_Adult_AD_Released")) |> 
   ggplot(aes(x = time_strata, y = total_catch, fill = angler_type)) +
   geom_ribbon(aes(ymin = catch_lwr95CI, ymax = catch_upr95CI, group = angler_type)) +
   geom_line() +

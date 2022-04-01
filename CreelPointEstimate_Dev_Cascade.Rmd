@@ -265,7 +265,9 @@ d_days <- tibble(
 # EB 3/16/2022 the lack of closures currently breaks the script, need to make sure that closures are not required
 d_days <- rows_upsert(d_days,
     bind_rows(
-      tibble(section = "1", closure_begin = "2021-09-18", closure_end = "2021-09-18"), # river out due to flows 
+      # tibble(section = "1", closure_begin = "2021-05-31", closure_end = "2021-05-31")
+      # , # river out due to flows 
+      tibble(section = "1", closure_begin = "2021-09-18", closure_end = "2021-09-18"), # river out due to flows
       tibble(section = "1", closure_begin = "2021-09-19", closure_end = "2021-09-20"), # treaty fishery closure
       tibble(section = "1", closure_begin = "2021-09-26", closure_end = "2021-09-27"), # treaty fishery closure
       tibble(section = "1", closure_begin = "2021-10-03", closure_end = "2021-10-04"), # treaty fishery closure
@@ -1466,13 +1468,10 @@ estimates$time_strata_effort_total |>
 
 
 
-
-
 ## catch by time period strata 
 ```{r estimates$time_strata_catch_total, message = FALSE, warning = FALSE,results = "asis",include=TRUE, echo=FALSE}
 
 # calculate catch by day type and angler type strata
-
 estimates$time_strata_catch_by_daytype <- estimates$daily_effort_cpue_catch |>
   group_by(section, angler_type, catch_group, time_strata, DayType, n_days, N_days) |> 
   summarize(
@@ -1481,16 +1480,19 @@ estimates$time_strata_catch_by_daytype <- estimates$daily_effort_cpue_catch |>
     total_catch_expanded = mean_daily_catch * N_days,
     variance_catch_estimate = var(catch_estimate),
     n_days = mean(n_days),
-    N_days = mean(N_days),
+    N_days = mean(N_days)) |> 
+  mutate(
+    variance_catch_estimate = replace_na(variance_catch_estimate, 0),
     variance_total_catch_expanded = if_else(n_days < N_days, (N_days^2) * (variance_catch_estimate / n_days) * (1-(n_days/N_days)),  (N_days^2) * (variance_catch_estimate / n_days))
   ) |> 
   distinct()
 
+# cannot calculate variance for estimates when n = 1 for daytype strata within a week
 
 # Sum catch estimates across day types, retain grouping on angler type 
 
 estimates$time_strata_catch_total <- estimates$time_strata_catch_by_daytype |>
-  ungroup() |> 
+  ungroup() |>
  # add degrees of freedom per angler_type and section for time_strata
   # left_join(lut$sections |> select(section, section_name),
   #           by = "section") |> 
@@ -1508,6 +1510,7 @@ estimates$time_strata_catch_total <- estimates$time_strata_catch_by_daytype |>
   ) |>
   distinct() |> 
   mutate_if(is.numeric, round, 2) |> 
+  # filter(angler_type %in% c("bank", "boat")) |> 
   arrange(section, catch_group, time_strata)
 
 
@@ -1526,33 +1529,19 @@ print(time_strata_catch_total_table)
 
 ```{r, include=TRUE, fig.align="center",fig.width= 14, fig.height= 8, fig.cap=c("Figure 1. ___ harvest estimates for ad-clipped and unmarked coho during the 2021 Skagit River fall salmon fishery from 08/14/2021 - 12/31/2021. Error bars show 95 percent confidence intervals."),echo=FALSE,warning = FALSE}
 
-estimates$time_strata_catch_total |> 
-  # filter(!grepl(c("Steelhead"),Catch_Group)) |> 
-  filter(catch_group %in% c("Chinook_Adult_AD_Kept", "Chinook_Adult_UM_Released")) |>
-  ggplot(aes(x = time_strata, y = total_catch)) +
-  geom_point(position = "dodge", stat = "identity", color = "black") +
-  scale_fill_manual(values=c("#999999", "#E69F00")) +
-  geom_errorbar(aes(ymin=lwr95CI, ymax=upr95CI), width=.2,
-                position=position_dodge(.9)) +
-  geom_line() +
-  theme(legend.text=element_text(size=8)) +
-  theme_bw(base_size = 12) + 
-  facet_wrap(. ~ catch_group + angler_type)
-
 # estimates$time_strata_catch_total |> 
 #   # filter(!grepl(c("Steelhead"),Catch_Group)) |> 
-#   filter(angler_type == "total", catch_group %in% c("Coho_Adult_UM_Kept", "Coho_Adult_AD_Kept")) |>
-#   ggplot(aes(x = time_strata, y = total_catch)) +
-#   geom_bar(position = "dodge", stat = "identity", color = "black") +
+#   filter(catch_group %in% c("Coho_Adult_AD_Kept", "Coho_Adult_UM_Kept")) |>
+#   ggplot(aes(x = time_strata, y = total_catch, color = as.factor(section))) +
+#   geom_point(position = "dodge", stat = "identity") +
 #   scale_fill_manual(values=c("#999999", "#E69F00")) +
 #   geom_errorbar(aes(ymin=lwr95CI, ymax=upr95CI), width=.2,
 #                 position=position_dodge(.9)) +
 #   theme(legend.text=element_text(size=8)) +
 #   theme_bw(base_size = 12) + 
-#   facet_wrap(. ~ section + catch_group)
+#   facet_wrap(. ~ catch_group + angler_type)
 
 ```
-
 
 
 
@@ -1562,7 +1551,10 @@ estimates$time_strata_catch_total |>
 # EB circle back to this for calculating CPUE / HPUE and associated uncertainty over time period of interest 
 
 effort_rename <- estimates$time_strata_effort_total |> 
-              select(total_effort,
+              select(section,
+                     time_strata,
+                     total_effort,
+                     angler_type,
                      effort_lwr95CI = lwr95CI,
                      effort_upr95CI = upr95CI,
                      effort_SE = SE,
@@ -1570,7 +1562,9 @@ effort_rename <- estimates$time_strata_effort_total |>
 
 estimates$cpue_time_strata <- estimates$time_strata_catch_total  |>
   select(
+    section,
     time_strata,
+    angler_type,
     total_catch,
     catch_variance = variance,
     catch_SE = SE,
@@ -1578,29 +1572,86 @@ estimates$cpue_time_strata <- estimates$time_strata_catch_total  |>
     catch_lwr95CI = lwr95CI,
     catch_upr95CI = upr95CI
   ) |> 
-  left_join(effort_rename) |> 
+    mutate(
+    daily_catch_estimate = total_catch / 7
+  ) |> 
+  left_join(effort_rename, by = c("section","angler_type","time_strata")) |> 
+  mutate_if(is.numeric, round, 2) |> 
   mutate(
-    cpue_time_strata = total_catch / total_effort,
+    cpue_time_strata = replace_na(total_catch / total_effort, 0),
     cpue_lwr95_time_strata = catch_lwr95CI / effort_lwr95CI,
     cpue_upr95_time_strata = catch_upr95CI / effort_upr95CI,
     cpue_lwr95_time_strata = if_else(is.na(cpue_lwr95_time_strata),0, cpue_lwr95_time_strata),
     cpue_upr95_time_strata = if_else(is.na(cpue_upr95_time_strata),0, cpue_upr95_time_strata)) |> 
-    mutate_if(is.numeric, round, 2)
+  distinct()
 
 write_csv(estimates$cpue_time_strata, paste(filepath_modeloutput, paste(paste(params$proj_name, params$water_body, sep = "_"), paste("Point_Estimate", "Catch_CPUE_time_strata", params$model_period, sep = "_"), paste(params$date_start, params$date_end, sep = "_"), ".csv", sep="_"), sep="/"))
 
 
+# results$CPUE |> 
+#   ggplot(aes(x = event_date, y = `50%`, fill = angler_type, color = angler_type)) +
+#   geom_ribbon(aes(ymin = `2.5%`, ymax = `97.5%`), alpha = 0.5) +
+#   geom_line() + geom_point() +
+#   scale_x_date() +
+#   facet_wrap(~section_name + angler_type, ncol = 2)
+
+
 estimates$cpue_time_strata |> 
-  filter(catch_group %in% c("Chinook_Adult_AD_Kept", "Chinook_Adult_AD_Relased","Chinook_Adult_UM_Released")) |> 
-  ggplot(aes(x = time_strata, y = cpue_time_strata)) +
-  geom_point(position = "dodge", stat = "identity", color = "black") +
-  # scale_fill_manual(values=c("#999999", "#E69F00")) +
-  geom_errorbar(aes(ymin= cpue_lwr95_time_strata , ymax= cpue_upr95_time_strata), width=.2,
-                position=position_dodge(.9)) +
+  filter(catch_group %in% c("Chinook_Adult_UM_Released", "Chinook_Adult_UNK_Released", "Chinook_Adult_AD_Released")) |> 
+  ggplot(aes(x = time_strata, y = total_catch, fill = angler_type)) +
+  geom_ribbon(aes(ymin = catch_lwr95CI, ymax = catch_upr95CI, group = angler_type)) +
   geom_line() +
-  theme(legend.text=element_text(size=8)) +
-  theme_bw(base_size = 12) + 
+  # scale_x_date() +
+  # geom_point(position = "dodge", stat = "identity", color = "black") +
+  scale_fill_manual(values=c("steelblue", "#E69F00")) +
+  # geom_errorbar(aes(ymin= cpue_lwr95_time_strata , ymax= cpue_upr95_time_strata), width=.2,
+  #               position=position_dodge(.9)) +
+  # theme(legend.text=element_text(size=8)) +
+  theme_bw(base_size = 12) +
   facet_wrap(. ~ catch_group)
+
+
+estimates$cpue_time_strata |> 
+  filter(catch_group %in% c( "Chinook_Adult_UM_Released")) |> 
+  ggplot(aes(x = time_strata, y = total_catch, fill = angler_type)) +
+  geom_ribbon(aes(ymin = catch_lwr95CI, ymax = catch_upr95CI, group = angler_type)) +
+  geom_line() +
+  # scale_x_date() +
+  # geom_point(position = "dodge", stat = "identity", color = "black") +
+  scale_fill_manual(values=c("steelblue", "#E69F00")) +
+  # geom_errorbar(aes(ymin= cpue_lwr95_time_strata , ymax= cpue_upr95_time_strata), width=.2,
+  #               position=position_dodge(.9)) +
+  # theme(legend.text=element_text(size=8)) +
+  theme_bw(base_size = 12) +
+  facet_wrap(. ~ catch_group, nrow = 3)
+
+estimates$cpue_time_strata |> 
+  filter(catch_group %in% c("Chinook_Adult_UNK_Released")) |> 
+  ggplot(aes(x = time_strata, y = total_catch, fill = angler_type)) +
+  geom_ribbon(aes(ymin = catch_lwr95CI, ymax = catch_upr95CI, group = angler_type)) +
+  geom_line() +
+  # scale_x_date() +
+  # geom_point(position = "dodge", stat = "identity", color = "black") +
+  scale_fill_manual(values=c("steelblue", "#E69F00")) +
+  # geom_errorbar(aes(ymin= cpue_lwr95_time_strata , ymax= cpue_upr95_time_strata), width=.2,
+  #               position=position_dodge(.9)) +
+  # theme(legend.text=element_text(size=8)) +
+  theme_bw(base_size = 12) +
+  facet_wrap(. ~ catch_group + section + angler_type, nrow = 3)
+
+estimates$cpue_time_strata |> 
+  filter(catch_group %in% c("Chinook_Adult_AD_Released")) |> 
+  ggplot(aes(x = time_strata, y = total_catch, fill = angler_type)) +
+  geom_ribbon(aes(ymin = catch_lwr95CI, ymax = catch_upr95CI, group = angler_type)) +
+  geom_line() +
+  # scale_x_date() +
+  # geom_point(position = "dodge", stat = "identity", color = "black") +
+  scale_fill_manual(values=c("steelblue", "#E69F00")) +
+  # geom_errorbar(aes(ymin= cpue_lwr95_time_strata , ymax= cpue_upr95_time_strata), width=.2,
+  #               position=position_dodge(.9)) +
+  # theme(legend.text=element_text(size=8)) +
+  theme_bw(base_size = 12) +
+  facet_wrap(. ~ catch_group + section + angler_type, nrow = 3)
 
 ```
 
