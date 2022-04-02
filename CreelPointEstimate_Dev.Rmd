@@ -1298,9 +1298,10 @@ point_estimate_data_prelim$interview_daily_totals_total <- point_estimate_data_p
   ) |>
   group_by(section, DayType, event_date, time_strata, day_index, catch_group) |>
   summarise(
+    n_groups = n(),
     angler_hours_total_dailysum = sum(angler_hours_total),
     catch_dailysum = sum(fish_count),
-    cpue_mor = mean(cpue_interview)  # mean of ratios CPUE estimator
+    cpue_mor = mean(cpue_interview) / n_groups  # mean of ratios CPUE estimator
   ) |>
   mutate(
     cpue_rom = catch_dailysum / angler_hours_total_dailysum # ratio of the means CPUE estimator
@@ -1327,9 +1328,10 @@ point_estimate_data_prelim$interview_daily_totals_angler_type <- point_estimate_
   ) |>
   group_by(section, DayType, event_date, day_index, time_strata, catch_group, angler_type) |>
   summarise(
+    n_groups = n(),
     angler_hours_total_dailysum = sum(angler_hours_total),
     catch_dailysum = sum(fish_count), .groups = "drop",
-    cpue_mor = mean(cpue_interview)  # mean of ratios CPUE estimator
+    cpue_mor = mean(cpue_interview) / n_groups  # mean of ratios CPUE estimator
   ) |>
   mutate(
     cpue_rom = catch_dailysum / angler_hours_total_dailysum # ratio of the means CPUE estimator
@@ -1374,21 +1376,35 @@ point_estimate_data_prelim$interview_daily_totals_complete <- point_estimate_dat
 
 # calculate mean cpue values by DayType, time_strata, Catch_Group to use for assumed values and complete the dataframe with implicit missing values of summarized CPUE 
 
+# ratio of the means 
+
 point_estimate_data_prelim$cpue_summary <- point_estimate_data_prelim$interview_daily_totals |> 
   group_by(section, time_strata, DayType, angler_type, catch_group) |> 
   summarise(
-    mean_strata_cpue_mor = mean(cpue_mor) # Fisheries Techniques (Jones and Pollock 2012) suggest MOR for roving survey design
+    mean_strata_cpue_rom = mean(cpue_rom) # Fisheries Techniques (Jones and Pollock 2012) suggest MOR for roving survey design
   ) |> 
   ungroup() |>
   complete(section, time_strata, DayType, angler_type, catch_group,
-           fill = list(mean_strata_cpue_mor = 0))
+           fill = list(mean_strata_cpue_rom = 0))
+
+# mean of the ratios 
+
+# point_estimate_data_prelim$cpue_summary <- point_estimate_data_prelim$interview_daily_totals |> 
+#   group_by(section, time_strata, DayType, angler_type, catch_group) |> 
+#   summarise(
+#     mean_strata_cpue_mor = mean(cpue_mor) # Fisheries Techniques (Jones and Pollock 2012) suggest MOR for roving survey design
+#   ) |> 
+#   ungroup() |>
+#   complete(section, time_strata, DayType, angler_type, catch_group,
+#            fill = list(mean_strata_cpue_mor = 0))
+
 
 # join mean_strata_cpue values to table with daily cpue values so we can use the mean strata cpue values on days with known effort but no corresponding interview
 # extract the columns we need from the interview and catch daily total table to calculate daily CPUE
 
 point_estimate_data_prelim$daily_CPUE <- point_estimate_data_prelim$interview_daily_totals_complete |> 
   left_join(point_estimate_data_prelim$cpue_summary, by = c("section", "angler_type", "time_strata", "DayType", "catch_group"))|> 
-  select(section, time_strata, event_date, angler_type, catch_group, catch_dailysum, cpue_rom, cpue_mor, mean_strata_cpue_mor)
+  select(section, time_strata, event_date, angler_type, catch_group, catch_dailysum, cpue_rom, cpue_mor, mean_strata_cpue_rom)
 
 # chinooktest <- test |>
 #   filter(catch_group == "Chinook_Adult_UM_Released") |>
@@ -1409,11 +1425,13 @@ point_estimate_data_prelim$daily_CPUE <- point_estimate_data_prelim$interview_da
 
 estimates <- list()
 
+# ratio of the means 
+
 # join tables with daily effort (angler hours) and daily catch rate (cpue)
 estimates$daily_effort_cpue_catch <- point_estimate_data_prelim$effort_interviews_final |> 
   left_join(point_estimate_data_prelim$daily_CPUE, by = c("section", "time_strata", "event_date", "angler_type")) |> 
   mutate(
-    catch_estimate = if_else(!is.na(cpue_mor), mean_daily_TI_Expan * cpue_mor, mean_daily_TI_Expan * mean_strata_cpue_mor)
+    catch_estimate = if_else(!is.na(cpue_rom), mean_daily_TI_Expan * cpue_rom, mean_daily_TI_Expan * mean_strata_cpue_rom)
     ) |>
   mutate_if(is.numeric, round, 2) |> 
     filter(str_detect(catch_group, 'Coho|Chinook')) |>
@@ -1421,6 +1439,23 @@ estimates$daily_effort_cpue_catch <- point_estimate_data_prelim$effort_interview
   arrange(catch_group, section, event_date, angler_type)
 
   # filter(angler_type %in% c("boat", "bank"))
+
+# mean of the ratios 
+
+# join tables with daily effort (angler hours) and daily catch rate (cpue)
+# estimates$daily_effort_cpue_catch <- point_estimate_data_prelim$effort_interviews_final |> 
+#   left_join(point_estimate_data_prelim$daily_CPUE, by = c("section", "time_strata", "event_date", "angler_type")) |> 
+#   mutate(
+#     catch_estimate = if_else(!is.na(cpue_rom), mean_daily_TI_Expan * cpue_rom, mean_daily_TI_Expan * mean_strata_cpue_rom)
+#     ) |>
+#   mutate_if(is.numeric, round, 2) |> 
+#     filter(str_detect(catch_group, 'Coho|Chinook')) |>
+#   distinct() |> 
+#   arrange(catch_group, section, event_date, angler_type)
+# 
+#   # filter(angler_type %in% c("boat", "bank"))
+
+
 
 
 write_csv(estimates$daily_effort_cpue_catch, paste(filepath_modeloutput, paste(paste(params$proj_name, params$water_body, sep = "_"), paste("Point_Estimate", "Summary_Daily_Effort_Catch_CPUE", sep = "_"), paste(params$date_start, params$date_end, sep = "_"), ".csv", sep="_"), sep="/"))
