@@ -2,7 +2,7 @@
 title: Creel Point Estimate Analysis
 params:
   proj_name: "R5 Steelhead"
-  water_body: "Kalama River"
+  water_body:  "Kalama River"
   date_start: "2016-04-30"   
   date_end: "2017-04-30"
   index_count_types: "Bank Anglers,Boat Anglers"
@@ -177,13 +177,13 @@ creel$catch <- creel$catch |>
   )
   
 
-catch_check <- creel$catch |> 
-  group_by(catch_group) |> 
-  summarize(
-    count_sum = sum(fish_count)
-  )
+# catch_check <- creel$catch |> 
+#   group_by(catch_group) |> 
+#   summarize(
+#     count_sum = sum(fish_count)
+#   )
 
-view(catch_check)
+# view(catch_check)
 ```
 
 
@@ -281,6 +281,10 @@ d_days <- tibble(
 
 d_days <- rows_upsert(d_days,
     bind_rows(
+      # 2022 Upper Skagit Chinook 
+      # tibble(section = "1", closure_begin = "2021-05-31", closure_end = "2021-05-31")
+      # , 
+      
       # 2021 Skagit winter steelhead closure dates
       # tibble(section = "1,2", closure_begin = "2021-02-03", closure_end = "2021-02-05"), 
       # tibble(section = "1,2", closure_begin = "2021-02-10", closure_end = "2021-02-12"), 
@@ -292,8 +296,10 @@ d_days <- rows_upsert(d_days,
       # tibble(section = "1,2", closure_begin = "2021-03-24", closure_end = "2021-03-26"), 
       # tibble(section = "1,2", closure_begin = "2021-03-31", closure_end = "2021-04-02"), 
       # tibble(section = "1,2", closure_begin = "2021-04-07", closure_end = "2021-04-09") 
-      tibble(section = "1", closure_begin = "2016-04-30", closure_end = "2016-04-30") # placeholder closure date; need to supply at least one
-      # tibble(section = "1,2,3", closure_begin = "2016-04-30", closure_end = "2016-04-30") # placeholder closure date; need to supply at least onedate here because we use open / closed dates to determine times_strata estimation periods (field n_days further down in code)
+      # tibble(section = "1", closure_begin = "2016-04-30", closure_end = "2016-04-30") # placeholder closure date; need to supply at least one
+      
+      # kalama 
+      tibble(section = "1,2,3", closure_begin = "2016-04-30", closure_end = "2016-04-30") # placeholder closure date; need to supply at least onedate here because we use open / closed dates to determine times_strata estimation periods (field n_days further down in code)
       # ,
       # tibble(section = "2,3", closure_begin = "2021-08-19", closure_end = "2021-08-31"),
       # tibble(section = "2", closure_begin = "2021-09-01", closure_end = "2021-09-01"), # treaty fishery closure
@@ -305,6 +311,17 @@ d_days <- rows_upsert(d_days,
       # tibble(section = "2", closure_begin = "2021-10-19", closure_end = "2021-10-20"), # treaty fishery closure
       # tibble(section = "1,2,3", closure_begin = "2021-11-13", closure_end = "2021-11-14"), # river out due to flows
       # tibble(section = "1,2,3", closure_begin = "2021-11-17", closure_end = "2021-11-18") # river out due to flows
+      
+      # tibble(section = "3,4,5", closure_begin = "2021-08-19", closure_end = "2021-08-31"),
+      # tibble(section = "3", closure_begin = "2021-09-01", closure_end = "2021-09-01"), # treaty fishery closure
+      # tibble(section = "3", closure_begin = "2021-09-07", closure_end = "2021-09-09"), # treaty fishery closure
+      # tibble(section = "3", closure_begin = "2021-09-14", closure_end = "2021-09-16"), # treaty fishery closure
+      # tibble(section = "1,2,3,4,5", closure_begin = "2021-09-18", closure_end = "2021-09-18"), # river out due to flows
+      # tibble(section = "3", closure_begin = "2021-10-05", closure_end = "2021-10-06"), # treaty fishery closure
+      # tibble(section = "3", closure_begin = "2021-10-12", closure_end = "2021-10-13"), # treaty fishery closure
+      # tibble(section = "3", closure_begin = "2021-10-19", closure_end = "2021-10-20"), # treaty fishery closure
+      # tibble(section = "1,2,3,4,5", closure_begin = "2021-11-13", closure_end = "2021-11-14"), # river out due to flows
+      # tibble(section = "1,2,3,4,5", closure_begin = "2021-11-17", closure_end = "2021-11-18") # river out due to flows
     ) |>
       rowwise() |>
       mutate(closure_date = paste(seq.Date(as.Date(closure_begin), as.Date(closure_end), by = "day"), collapse = ",")) |>
@@ -327,7 +344,7 @@ d_days <- rows_upsert(d_days,
 
 ```{r count and interview evaluation, include = FALSE}
 
-# data_eval <- list()
+data_eval <- list()
 
 # Visualize raw counts of vehicles and trailers during monitoring period
 
@@ -406,17 +423,17 @@ d_days <- rows_upsert(d_days,
 # data_eval$remove_location <- bind_rows(
 #   tibble(location = "Skagit City Access (SF Skagit, N. end of Fir Island)"),
 #   tibble(location = "Rasar State Park"))
-
-# mistakes in data collection led to instances of incomplete effort counts, this chunk provides the user an option to censor those data by filtering them out of the final dataset 
-# count_id is a paste of event_date, section, count_sequence 
-
+# 
+# # mistakes in data collection led to instances of incomplete effort counts, this chunk provides the user an option to censor those data by filtering them out of the final dataset 
+# # count_id is a paste of event_date, section, count_sequence 
+# 
 # creel$effort <- creel$effort |>
 #    mutate(
 #     count_id = paste(event_date, section, count_sequence, sep = "_")
 #   )
-
-# declare individual count_sequences which contain missing counts and could / should be censored from analysis 
-
+# 
+# # declare individual count_sequences which contain missing counts and could / should be censored from analysis 
+# 
 # data_eval$remove_count <- bind_rows(
 #     tibble(count_id = "2021-08-19_1_1"),
 #     tibble(count_id = "2021-08-20_1_3"),
@@ -430,7 +447,7 @@ d_days <- rows_upsert(d_days,
 #     tibble(count_id = "2021-10-21_3_3"),
 #     tibble(count_id = "2021-10-31_3_1")
 #     )
-
+# 
 # # n rows in effort data pre filter
 # data_eval$counts_pre_filter <- nrow(creel$effort)
 # 
@@ -446,7 +463,7 @@ d_days <- rows_upsert(d_days,
 # 
 # # Placeholder as option to replace NA's with 0's if/when deemed appropriate
 # creel$effort <- creel$effort |>
-  # mutate(count_quantity = if_else(!is.na(no_count_reason), 0, count_quantity))
+# mutate(count_quantity = if_else(!is.na(no_count_reason), 0, count_quantity))
 
 
 ```
@@ -580,7 +597,8 @@ point_estimate_data_prelim$interview <- point_estimate_data_prelim$interview |>
     angler_hours = round(as.numeric(fishing_end_time - fishing_start_time) / 3600, 5),
     angler_hours_total = angler_count * angler_hours,
     time_strata = if_else(ModelPeriod == "Month", Month, Week)
-  ) 
+  ) |> 
+  filter(angler_hours_total > 0.5)
 
 ```
 
@@ -597,21 +615,9 @@ An exception to this is the Cascade River, where only vehicles get counted, sinc
 
 # summarize angler data from interviews
 
+# if index counts are vehicles and trailers, calculate angler per vehicle ("total" represents all anglers in the fishery) and angler per trailer ("boat") values
 
-# index counts that are direct counts of bank anglers and boat anglers
-
-if(str_detect(index_count_types, c("Bank Anglers", "Boat Anglers"))) {
-
-# point_estimate_data_prelim$angler_data_from_interviews <- point_estimate_data_prelim$interview |> 
-#   group_by(section, event_date, day_index, DayL, time_strata, angler_type) |> 
-#   summarize(
-#     daily_sum_angler = sum(angler_count),
-#     # daily_sum_index_count_from_interview = "", # filler to match formatting of vehicle / trailer chunk below 
-#     angler_hours_total = sum(angler_hours_total),
-#     # anglers_per_index_count_from_interview = "")
-  
-      }else{
-      if(str_detect(index_count_types, c("Vehicle Only", "Trailers Only"))){ # index counts of vehicles and trailers
+if(str_detect(index_count_types, c("Vehicle Only", "Trailers Only"))){ 
 
 point_estimate_data_prelim$interviews_total_effort <- point_estimate_data_prelim$interview |>
   group_by(section, event_date) |> 
@@ -639,8 +645,8 @@ point_estimate_data_prelim$angler_data_from_interviews <- point_estimate_data_pr
   bind_rows(point_estimate_data_prelim$interviews_boat_effort) 
         
         }
-      }
 
+# Day length expansion of angler hours  
 
 if(str_detect(index_count_types, c("Bank Anglers", "Boat Anglers"))) {
 
@@ -658,7 +664,8 @@ point_estimate_data_prelim$daily_effort_estimates <- point_estimate_data_prelim$
   left_join(d_days, by = "event_date") |> 
     mutate(
     mean_daily_effort = DayL * anglers_per_index_count_from_interview * mean_index_count) |>
-  arrange(event_date, section)
+  arrange(event_date, section) |> 
+filter(!is.na(mean_index_count)) #circle back on this 
 
       }
 }
@@ -677,6 +684,7 @@ point_estimate_data_prelim$daily_effort_estimates <- point_estimate_data_prelim$
 # 
 # c3 <- c2 |>
 #   left_join(c1, by = c("event_date", "section")) |>
+#   mutate(boat_effort = replace_na(boat_effort, 0)) |>
 #   mutate(
 #     bank_derive = total_effort - boat_effort
 #   )
@@ -724,7 +732,7 @@ point_estimate_data_prelim$daily_effort_estimates <- point_estimate_data_prelim$
 # need to change this so it dynamically adjusts to index_count_types
 
 # Kalama exmaple
-days_join <- d_days |>
+point_estimate_data_prelim$days_join <- d_days |>
   select(event_date, DayType, Month, Week, ModelPeriod, open_section_1) |>
   mutate(
     time_strata = if_else(ModelPeriod == "Month", Month, Week),
@@ -738,7 +746,7 @@ days_join <- d_days |>
   select(-name)
 
 # Skagit winter steelhead 2021
-# days_join <- d_days |> 
+# point_estimate_data_prelim$days_join <- d_days |> 
 #   select(event_date, DayType, Month, Week, ModelPeriod, open_section_1) |> 
 #   mutate(
 #     time_strata = if_else(ModelPeriod == "Month", Month, Week),
@@ -749,6 +757,20 @@ days_join <- d_days |>
 #   mutate(s1 = 1, s2 = 2
 #   ) |> 
 #   pivot_longer(cols = c(s1,s2), values_to = "section") |> 
+#   select(-name)
+
+# Skagit fall coho 2021
+# point_estimate_data_prelim$days_join <- d_days |>
+#   select(event_date, DayType, Month, Week, ModelPeriod, open_section_1) |>
+#   mutate(
+#     time_strata = if_else(ModelPeriod == "Month", Month, Week),
+#     at_1 = "bank", at_2 = "boat", at_3 = "total"
+#   ) |>
+#   pivot_longer(cols = c(at_1,at_2,at_3), values_to = "angler_type") |>
+#   select(-name) |>
+#   mutate(s1 = 1
+#   ) |>
+#   pivot_longer(cols = c(s1), values_to = "section") |>
 #   select(-name)
 
 
@@ -784,27 +806,24 @@ point_estimate_data_prelim$census_counts_all <- point_estimate_data_prelim$censu
   ) |> 
   left_join(point_estimate_data_prelim$effort_counts_for_census_join, by = c("event_date", "section", "count_sequence","angler_type")) |>
   mutate(
-    index_count = replace_na(index_count, 0), #EB placeholder,
-    TI_expan = census_count / index_count) |> 
-  filter(
-    !is.na(TI_expan), !is.infinite(TI_expan) # filter out tie in ratios == NaN or Inf 
-  ) |> 
+  TI_expan = replace_na(census_count / index_count, 1)) |>
+  filter(!is.na(index_count)) |> 
   select(
     event_date, section, angler_type, census_count, index_count, TI_expan
   ) |> 
   group_by(section, angler_type) |> 
   summarise(
     TI_expan_mean = mean(TI_expan), # could weigh each survey equally using mean of ratios vs. ratio of season long totals
-    TI_expan_total = sum(census_count) / sum(index_count)) |> 
+    TI_expan_weighted = sum(census_count) / sum(index_count)) |> 
   left_join(lut$census_expansion, by = c("angler_type", "section")) |>
   rename(TI_expan_indirect = Indirect_TI_Expan) |> 
   mutate(
     census_expansion_method = params$census_expansion,
     TI_expan_mean = replace_na(TI_expan_mean, 1),
-    TI_expan_total = replace_na(TI_expan_total, 1),
-    TI_expan_direct = TI_expan_total / p_TI) |> 
+    TI_expan_weighted = replace_na(TI_expan_weighted, 1),
+    TI_expan_direct = TI_expan_weighted / p_TI) |> 
   mutate(
-    TI_expan_final = if_else(census_expansion_method == "direct", TI_expan_direct, TI_expan_indirect)
+    TI_expan_final = ifelse(census_expansion_method == "direct", TI_expan_direct, TI_expan_indirect)
   ) 
 
 
@@ -825,7 +844,7 @@ point_estimate_data_prelim$effort_interviews_bank_boat <- point_estimate_data_pr
 
 point_estimate_data_prelim$effort_interviews_final <- point_estimate_data_prelim$effort_interviews_bank_boat |>
   select(section, event_date, angler_type, mean_daily_TI_expan) |> 
-  right_join(days_join, by = c("section", "event_date", "angler_type")) |>
+  right_join(point_estimate_data_prelim$days_join, by = c("section", "event_date", "angler_type")) |>
   mutate(
     creeled = if_else(!is.na(mean_daily_TI_expan) & open_section_1 == TRUE, "Y", "N")
   ) |> 
@@ -879,8 +898,6 @@ point_estimate_data_prelim$census_counts_boat <- point_estimate_data_prelim$effo
 # Bind these together so we have categories for 1) total hours to match with anglers per vehicle and 2) boat hours to match with anglers per trailer 
 # calculate bias term ratios (ratio of census counts to angler count estimates from index counts)
 
-# point_estimate_data_prelim$census_counts_all
-
 point_estimate_data_prelim$census_counts_all <- point_estimate_data_prelim$census_counts_total |> 
   bind_rows(point_estimate_data_prelim$census_counts_boat) |> 
   select(
@@ -889,27 +906,24 @@ point_estimate_data_prelim$census_counts_all <- point_estimate_data_prelim$censu
   ) |> 
   left_join(point_estimate_data_prelim$effort_counts_for_census_join, by = c("event_date", "section", "count_sequence","angler_type")) |>
   mutate(
-    index_count = replace_na(index_count, 0), #EB placeholder,
-    TI_expan = census_count / index_count) |> 
-  filter(
-    !is.na(TI_expan), !is.infinite(TI_expan) # filter out tie in ratios == NaN or Inf 
-  ) |> 
+  TI_expan = replace_na(census_count / index_count, 1)) |>
+  filter(!is.na(index_count)) |> 
   select(
     event_date, section, angler_type, census_count, index_count, TI_expan
   ) |> 
   group_by(section, angler_type) |> 
   summarise(
     TI_expan_mean = mean(TI_expan), # could weigh each survey equally using mean of ratios vs. ratio of season long totals
-    TI_expan_total = sum(census_count) / sum(index_count)) |> 
+    TI_expan_weighted = sum(census_count) / sum(index_count)) |> 
   left_join(lut$census_expansion, by = c("angler_type", "section")) |>
   rename(TI_expan_indirect = Indirect_TI_Expan) |> 
   mutate(
     census_expansion_method = params$census_expansion,
     TI_expan_mean = replace_na(TI_expan_mean, 1),
-    TI_expan_total = replace_na(TI_expan_total, 1),
-    TI_expan_direct = TI_expan_total / p_TI) |> 
+    TI_expan_weighted = replace_na(TI_expan_weighted, 1),
+    TI_expan_direct = TI_expan_weighted / p_TI) |> 
   mutate(
-    TI_expan_final = if_else(census_expansion_method == "direct", TI_expan_direct, TI_expan_indirect)
+    TI_expan_final = ifelse(census_expansion_method == "direct", TI_expan_direct, TI_expan_indirect)
   ) 
 
 
@@ -950,7 +964,7 @@ point_estimate_data_prelim$effort_interviews_final <- point_estimate_data_prelim
   bind_rows(point_estimate_data_prelim$effort_interviews_bank_2) |> 
   ungroup() |> 
   # right_join(days_join, by = c("section", "event_date", "angler_type")) |> 
-  right_join(days_join) |> 
+  right_join(point_estimate_data_prelim$days_join) |> 
   mutate(
     creeled = if_else(!is.na(mean_daily_TI_expan), "Y", "N")
   ) |> 
@@ -981,18 +995,12 @@ point_estimate_data_prelim$sampled_days <- point_estimate_data_prelim$effort_int
 
 # total number days within monitoring period that we want to generate estimates for. Excludes specified closures in dates object
 
-
 point_estimate_data_prelim$total_days_total <- d_days |>
   pivot_longer(cols = starts_with("open_section"), names_to = "closure_section", values_to = "closure_value") |>
   mutate(section = as.numeric(gsub("^.*_", "", closure_section)),
          time_strata = if_else(ModelPeriod == "Month", Month, Week)) |> 
   filter(closure_value == TRUE) |> 
   count(section, DayType, name = "N_days_total")
-
-
-# point_estimate_data_prelim$total_days_total <- point_estimate_data_prelim$effort_interviews_final |>
-#   filter(open_section_1 == TRUE) |>
-#   count(section, DayType, angler_type, name = "N_days_total")
 
 # number of days sampled within monitoring period
 
@@ -1018,35 +1026,13 @@ point_estimate_data_prelim$effort_interviews_final <- point_estimate_data_prelim
 # daily catch per unit effort (CPUE) from interviews 
 ```{r daily CPUE from interviews, include = FALSE}
 
-# KB 2017: H better estimate would be the “mean-of-ratios” CPUE (i.e., average CPUE per group divided by number of groups interviewed), which alleviates the potential for a “length-of-stay” bias caused by the inclusion of both complete and incomplete trip data in the estimate (Pollock et al. 1994). Length of stay bias occurs when anglers who fish longer are more likely to be interviewed and their resulting information is unequally weighted when calculating CPUE.
-
-
 # Calculating CPUE for the different angler_types
-
-# point_estimate_data_prelim$interview_and_catch <- point_estimate_data_prelim$interview |> 
-  # left_join(
-  #   creel$catch |>
-  #     mutate(
-  #   catch_group = paste(species, life_stage, fin_mark, fate, sep = "_")
-  # ) |> 
-  #   group_by(interview_id, catch_group) |> 
-  #   summarise(fish_count = sum(fish_count), .groups = "drop")
-  #   ,by = "interview_id"
-  # ) |> 
-  # select(section, event_date, day_index, DayL, DayType, Week, Month, time_strata, interview_id, interview_time, contains("angler"), catch_group, contains("count")) |>
-  # mutate(across(fish_count, ~replace_na(., 0)),
-  #       catch_group = replace_na(catch_group, "no_catch")) |> 
-  #   distinct(interview_id, .keep_all = TRUE) 
-# |>
-#   filter(angler_hours_total > 0.5)
-
 
 point_estimate_data_prelim$catch_data <- creel$catch |> 
     group_by(interview_id, catch_group) |> 
     summarise(fish_count = sum(fish_count), .groups = "drop") |> 
   mutate(across(fish_count, ~replace_na(., 0)),
         catch_group = replace_na(catch_group, "no_catch"))
-
 
 # obtain unique catch_groups present in intermediate interview object
 
@@ -1062,67 +1048,26 @@ point_estimate_data_prelim$catch_data_pivot_wide <- point_estimate_data_prelim$c
   group_by(interview_id) |>
   summarise(across(contains(point_estimate_data_prelim$species_present$catch_group), sum))
 
-sum(point_estimate_data_prelim$catch_data_pivot_wide$Steelhead_Adult_UM_Released)
-
 # rejoin catch data to interview data and pivot long on counts per catch group
 
 point_estimate_data_prelim$interview_and_catch <- point_estimate_data_prelim$interview |>
   # select(-c(catch_group, fish_count)) |>
-  filter(!is.na(angler_hours)) |> 
+  filter(!is.na(angler_hours)) |>
+  filter(angler_hours_total >= 0.5) |> 
   distinct(interview_id, .keep_all = TRUE) |>
   left_join(point_estimate_data_prelim$catch_data_pivot_wide, by = "interview_id") |>
   pivot_longer(cols = contains(point_estimate_data_prelim$species_present$catch_group), names_to = "catch_group", values_to = "fish_count") |>
   mutate(fish_count = replace_na(fish_count, 0)) |> 
   filter(catch_group == "Steelhead_Adult_UM_Released")
 
-sum(point_estimate_data_prelim$interview_and_catch$fish_count)
+# check fish_count and angler hours to see if anything is lost during pivot_wide, pivot_long
+# point_estimate_data_prelim$interview_and_catch |>
+#   filter(catch_group == "Steelhead_Adult_UM_Released") |>
+#   summarize(fish_count = sum(fish_count),
+#             hours_count = sum(angler_hours_total))
 
 
-# obtain unique catch_groups present in intermediate interview object
-
-# point_estimate_data_prelim$species_present <- point_estimate_data_prelim$interview_and_catch |>
-#   distinct(catch_group)
-# 
-# # # split off fish count data to pivot out on catch groups to extend catch group information to each interview, essentially inferring 0's in interviews when catch for a group is not reported
-# 
-# point_estimate_data_prelim$catch_data_pivot_wide <- point_estimate_data_prelim$interview_and_catch |>
-#   select(interview_id, catch_group, fish_count) |>
-#   pivot_wider(names_from = catch_group, values_from = fish_count, values_fill = 0) |> # pivot_wide to infer 0's
-#   select(interview_id, contains(point_estimate_data_prelim$species_present$catch_group)) |>
-#   group_by(interview_id) |>
-#   summarise(across(contains(point_estimate_data_prelim$species_present$catch_group), sum))
-# 
-# sum(point_estimate_data_prelim$catch_data_pivot_wide$Steelhead_Adult_UM_Released)
-# 
-# # rejoin catch data to interview data and pivot long on counts per catch group
-# 
-# point_estimate_data_prelim$interview_and_catch <- point_estimate_data_prelim$interview_and_catch |>
-#   select(-c(catch_group, fish_count)) |>
-#   distinct(interview_id, .keep_all = TRUE) |>
-#   left_join(point_estimate_data_prelim$catch_data_pivot_wide, by = "interview_id") |>
-#   pivot_longer(cols = contains(point_estimate_data_prelim$species_present$catch_group), names_to = "catch_group", values_to = "fish_count")
-
-# CPUE for total effort (pooled)
-
-# point_estimate_data_prelim$interview_daily_totals_total <- point_estimate_data_prelim$interview_and_catch |>
-#    mutate(
-#     cpue_interview = fish_count / angler_hours_total
-#   ) |>
-#   group_by(section, DayType, event_date, time_strata, day_index, catch_group) |>
-#   summarise(
-#     n_groups = n(),
-#     angler_hours_total_dailysum = sum(angler_hours_total),
-#     catch_dailysum = sum(fish_count),
-#     cpue_mor = mean(cpue_interview)  # mean of ratios CPUE estimator
-#   ) |>
-#   mutate(
-#     cpue_rom = catch_dailysum / angler_hours_total_dailysum # ratio of the means CPUE estimator
-#   ) |>
-#   mutate(
-#     angler_type = "total"
-#   )
-
-# CPUE for bank and boat effort 
+# mean angler hours by section, time_strata, angler_type to use in case there is non-zero catch, but no angler hours to use to calculate CPUE (should be a rare situation)
 
 point_estimate_data_prelim$angler_hours_summary <- point_estimate_data_prelim$interview_and_catch |>
   group_by(section, time_strata, DayType, angler_type, catch_group) |>
@@ -1133,16 +1078,13 @@ point_estimate_data_prelim$angler_hours_summary <- point_estimate_data_prelim$in
   complete(section, time_strata, DayType, angler_type, catch_group,
            fill = list(mean_strata_angler_hours = 0))
 
-view(point_estimate_data_prelim$angler_hours_summary)
+# CPUE for bank and boat effort 
 
-
-
-point_estimate_data_prelim$interview_daily_totals_angler_type <- point_estimate_data_prelim$interview_and_catch |>
+point_estimate_data_prelim$interview_daily_totals <- point_estimate_data_prelim$interview_and_catch |>
   left_join(point_estimate_data_prelim$angler_hours_summary) |> 
    mutate(
     cpue_interview = if_else(angler_hours_total > 0, fish_count / angler_hours_total, fish_count / mean_strata_angler_hours)
   ) |>
-  # filter(catch_group == "Steelhead_Adult_UM_Released") |> 
   group_by(section, DayType, event_date, day_index, time_strata, catch_group, angler_type) |>
   summarise(
     n_groups = n(),
@@ -1155,30 +1097,8 @@ point_estimate_data_prelim$interview_daily_totals_angler_type <- point_estimate_
   )
 
 
-
-# pooled CPUE tabled on 4/7/2022, circle back at some point 
-
-# CPUE for bank and boat effort 
-# cpuecheck <- point_estimate_data_prelim$interview_and_catch |>
-#    mutate(
-#     cpue_interview = fish_count / angler_hours_total
-#   ) |>
-#   group_by(section, DayType, event_date, day_index, time_strata, catch_group, angler_type) |>
-#   summarise(
-#     n_groups = n(),
-#     angler_hours_total_dailysum = sum(angler_hours_total),
-#     catch_dailysum = sum(fish_count),
-#     cpue_mor = mean(cpue_interview)  # mean of ratios CPUE estimator
-#   ) |>
-#   mutate(
-#     cpue_rom = catch_dailysum / angler_hours_total_dailysum # ratio of the means CPUE estimator
-#   ) |> 
-#   filter(catch_group == "Steelhead_Adult_UM_Released")
-# 
-# sum(cpuecheck$catch_dailysum)
-
 # bind together total, boat, and bank tables
-point_estimate_data_prelim$interview_daily_totals <- point_estimate_data_prelim$interview_daily_totals_angler_type
+# point_estimate_data_prelim$interview_daily_totals <- point_estimate_data_prelim$interview_daily_totals_angler_type
    # |>
 #   bind_rows(point_estimate_data_prelim$interview_daily_totals_total)
 
@@ -1186,83 +1106,24 @@ point_estimate_data_prelim$interview_daily_totals <- point_estimate_data_prelim$
 
 #  add implicit missing values of CPUE to dataset using tidyr complete() function
 
-# before <- point_estimate_data_prelim$interview_daily_totals |>
-#   ungroup() |> 
-#   select(section, event_date, angler_type, catch_group, catch_dailysum, cpue_rom, cpue_mor) |> 
-#   filter(catch_group == "Steelhead_Adult_UM_Released", section == 1, angler_type == "bank")
-# 
-# after <- point_estimate_data_prelim$interview_daily_totals_complete <- point_estimate_data_prelim$interview_daily_totals |>
-#   ungroup() |> 
-#   select(section, event_date, angler_type, catch_group, catch_dailysum, cpue_rom, cpue_mor) |> 
-#   complete(section, event_date, angler_type, catch_group, fill = list(catch_dailysum = 0)) |>
-#   distinct() |> 
-#   filter(catch_group == "Steelhead_Adult_UM_Released", section == 1, angler_type == "bank")
-
-
-
 point_estimate_data_prelim$interview_daily_totals_complete <- point_estimate_data_prelim$interview_daily_totals |>
   ungroup() |>
   select(section, event_date, angler_type, catch_group,
          total_angler_hours = angler_hours_total_dailysum,
-         catch_dailysum, cpue_rom, cpue_mor) |> 
-  filter(catch_group == "Steelhead_Adult_UM_Released") |> # placeholder spot to filter catch groups
-  complete(section, event_date, angler_type, fill = list(catch_dailysum = 0)) |> 
-  filter(!(is.na(angler_type))) |> 
-  mutate(catch_group = "Steelhead_Adult_UM_Released") |> 
+         catch_dailysum, cpue_rom, cpue_mor) |>
+  mutate(angler_type = replace_na(angler_type, "bank")) |> #kalama steelhead 
+  # filter(catch_group == "Chinook_Adult_UM_Released") |> # placeholder spot to filter catch groups
+  # complete(section, event_date, angler_type, fill = list(catch_dailysum = 0)) |>
+  complete(section, event_date, angler_type, catch_group, fill = list(catch_dailysum = 0)) |>
+  filter(!(is.na(angler_type))) |>
+  # mutate(catch_group = "Chinook_Adult_UNK_Released") |>
   # distinct() |>
   left_join(d_days, by = c("event_date")) |> 
   mutate(
   time_strata = if_else(ModelPeriod == "Month", Month, Week))
 
-  
 
-# point_estimate_data_prelim$interview_daily_totals_complete <- point_estimate_data_prelim$interview_daily_totals |>
-#   ungroup() |> 
-#   select(section, event_date, angler_type, catch_group, catch_dailysum, cpue_rom, cpue_mor) |> 
-#   complete(section, event_date, angler_type, catch_group, fill = list(catch_dailysum = 0)) |>
-#   distinct() |> 
-#   left_join(d_days, by = c("event_date")) |> 
-#   mutate(
-#   time_strata = if_else(ModelPeriod == "Month", Month, Week))
-
-
-# calculate mean cpue values by DayType, time_strata, Catch_Group to use for assumed values and complete the dataframe with implicit missing values of summarized CPUE 
-
-# ratio of the means 
-
-# point_estimate_data_prelim$cpue_summary <- point_estimate_data_prelim$interview_daily_totals |> 
-#   group_by(section, time_strata, DayType, angler_type, catch_group) |> 
-#   summarise(
-#     mean_strata_cpue_rom = mean(cpue_rom) # Fisheries Techniques (Jones and Pollock 2012) suggest MOR for roving survey design
-#   ) |> 
-#   ungroup() |>
-#   complete(section, time_strata, DayType, angler_type, catch_group,
-#            fill = list(mean_strata_cpue_rom = 0))
-
-# mean of the ratios 
-
-
-# before <- point_estimate_data_prelim$interview_daily_totals |>
-#   group_by(section, time_strata, DayType, angler_type, catch_group) |>
-#   summarise(
-#     mean_strata_cpue_mor = mean(cpue_mor), # Fisheries Techniques (Jones and Pollock 2012) suggest MOR for roving survey design
-#     mean_strata_cpue_rom = mean(cpue_rom)
-#   ) |> 
-#   filter(mean_strata_cpue_mor > 0)
-# 
-# after <- point_estimate_data_prelim$interview_daily_totals |>
-#   group_by(section, time_strata, DayType, angler_type, catch_group) |>
-#   summarise(
-#     mean_strata_cpue_mor = mean(cpue_mor), # Fisheries Techniques (Jones and Pollock 2012) suggest MOR for roving survey design
-#     mean_strata_cpue_rom = mean(cpue_rom)
-#   ) |>
-#   ungroup() |>
-#   complete(section, time_strata, DayType, angler_type, catch_group,
-#            fill = list(mean_strata_cpue_mor = 0, mean_strata_cpue_rom = 0))|> 
-#   filter(mean_strata_cpue_mor > 0)
-
-
-
+# calculate mean CPUE values by strata to use on days with known effort but a lack of interviews 
 point_estimate_data_prelim$cpue_summary <- point_estimate_data_prelim$interview_daily_totals |>
   group_by(section, time_strata, DayType, angler_type, catch_group) |>
   summarise(
@@ -1273,25 +1134,34 @@ point_estimate_data_prelim$cpue_summary <- point_estimate_data_prelim$interview_
   complete(section, time_strata, DayType, angler_type, catch_group,
            fill = list(mean_strata_cpue_mor = 0, mean_strata_cpue_rom = 0))
 
+# calculate mean daily effort by strata to use on days with interviews but a lack of quantified effort
+
+point_estimate_data_prelim$effort_summary <- point_estimate_data_prelim$effort_interviews_final |> 
+  filter(!is.na(DayType)) |>
+  group_by(section, time_strata, angler_type,) |>
+  summarise(
+    mean_strata_effort = mean(mean_daily_TI_expan)
+  ) |>
+  ungroup() |>
+  complete(section, time_strata, angler_type,
+           fill = list(mean_strata_effort = 0))
 
 
-# view(point_estimate_data_prelim$cpue_summary)
+point_estimate_data_prelim$effort_join <- point_estimate_data_prelim$effort_interviews_final |> 
+  filter(!is.na(DayType)) |> 
+  select(section, time_strata, event_date, angler_type, mean_daily_TI_expan, n_days, N_days, n_days_total, N_days_total) |> 
+left_join(point_estimate_data_prelim$effort_summary) |> 
+  mutate(
+    mean_daily_TI_expan = if_else(mean_daily_TI_expan == 0, mean_strata_effort, mean_daily_TI_expan)
+  )
+
+
 # join mean_strata_cpue values to table with daily cpue values so we can use the mean strata cpue values on days with known effort but no corresponding interview
 # extract the columns we need from the interview and catch daily total table to calculate daily CPUE
-
 
 point_estimate_data_prelim$daily_CPUE <- point_estimate_data_prelim$interview_daily_totals_complete |> 
   left_join(point_estimate_data_prelim$cpue_summary, by = c("section", "angler_type", "time_strata", "DayType", "catch_group"))|> 
   select(section, time_strata, event_date, DayType, angler_type, catch_group, catch_dailysum, total_angler_hours, cpue_rom, cpue_mor, mean_strata_cpue_rom, mean_strata_cpue_mor)
-
-
-# SH_check <- point_estimate_data_prelim$daily_CPUE |> 
-#   filter(catch_group == "Steelhead_Adult_UM_Released" & angler_type %in% c("bank", "boat")) |> 
-#   summarize(
-#     raw_catch = sum(catch_dailysum)
-#   )
-
-# losing 1 steelhead relative to raw catch data.. need to track down why, probably lost when joining interview to catch tables
 
 ```
 
@@ -1304,71 +1174,14 @@ point_estimate_data_prelim$daily_CPUE <- point_estimate_data_prelim$interview_da
 
 estimates <- list()
 
-# ratio of the means 
-
-# join tables with daily effort (angler hours) and daily catch rate (cpue)
-# estimates$daily_effort_cpue_catch <- point_estimate_data_prelim$effort_interviews_final |> 
-#   left_join(point_estimate_data_prelim$daily_CPUE, by = c("section", "time_strata", "event_date", "angler_type")) |> 
-#   mutate(
-#     catch_estimate = if_else(!is.na(cpue_rom), mean_daily_TI_Expan * cpue_rom, mean_daily_TI_Expan * mean_strata_cpue_rom)
-#     ) |>
-#   mutate_if(is.numeric, round, 2) |> 
-#     filter(str_detect(catch_group, 'Coho|Chinook')) |>
-#   distinct() |> 
-#   arrange(catch_group, section, event_date, angler_type)
-
-  # filter(angler_type %in% c("boat", "bank"))
-
-# mean of the ratios 
-
-# join tables with daily effort (angler hours) and daily catch rate (cpue)
-
-# EB 4/6/2022 - revisit this to keep assessing if this is correct 
-
-# estimates$daily_effort_cpue_catch <- point_estimate_data_prelim$effort_interviews_final |>
-#   left_join(point_estimate_data_prelim$daily_CPUE, by = c("section", "time_strata", "event_date", "angler_type")) |>
-#     filter(angler_type %in% c("bank","boat")) |>
-#   mutate(
-#     catch_estimate_mor = if_else(!is.na(cpue_mor), mean_daily_TI_expan * cpue_mor, mean_daily_TI_expan * mean_strata_cpue_mor)
-#     # catch_estimate_rom = if_else(!is.na(cpue_rom), mean_daily_TI_expan * cpue_rom, mean_daily_TI_expan * mean_strata_cpue_rom),
-#     # catch_estimate = catch_estimate_mor
-#     ) |>
-#   mutate_if(is.numeric, round, 2) |>
-#     # filter(str_detect(catch_group, 'Coho|Chinook')) |> # filter to specific species 
-#   distinct() |>
-#   # filter(!is.na(mean_daily_TI_expan)) |> 
-#   arrange(catch_group, section, event_date, angler_type)
-
-point_estimate_data_prelim$effort_summary <- point_estimate_data_prelim$effort_interviews_final |> 
-  filter(!is.na(DayType)) |>
-  group_by(section, time_strata, angler_type,) |>
-  summarise(
-    mean_strata_effort = mean(mean_daily_TI_expan)
-  ) |>
-  ungroup() |>
-  complete(section, time_strata, angler_type,
-           fill = list(mean_strata_effort = 0))
-
-view(point_estimate_data_prelim$effort_summary)
-
-
-effort_join <- point_estimate_data_prelim$effort_interviews_final |> 
-  filter(!is.na(DayType)) |> 
-  select(section, time_strata, event_date, angler_type, mean_daily_TI_expan, n_days, N_days, n_days_total, N_days_total) |> 
-left_join(point_estimate_data_prelim$effort_summary) |> 
-  mutate(
-    mean_daily_TI_expan = if_else(mean_daily_TI_expan == 0, mean_strata_effort, mean_daily_TI_expan)
-  )
-
 
 estimates$daily_effort_cpue_catch <- point_estimate_data_prelim$daily_CPUE  |>
-  # left_join(point_estimate_data_prelim$effort_interviews_final, by = c("section", "time_strata", "event_date", "angler_type")) |>
-   left_join(effort_join) |>
+   left_join(point_estimate_data_prelim$effort_join) |>
   mutate(total_angler_hours = replace_na(total_angler_hours, 0)) |> 
     filter(angler_type %in% c("bank","boat")) |>
   mutate(
     catch_estimate = if_else(!is.na(cpue_mor), mean_daily_TI_expan * cpue_mor, mean_daily_TI_expan * mean_strata_cpue_mor)
-    # catch_estimate_rom = if_else(!is.na(cpue_rom), mean_daily_TI_expan * cpue_rom, mean_daily_TI_expan * mean_strata_cpue_rom),
+    # catch_estimate_rom = if_else(!is.na(cpue_rom), mean_daily_TI_expan * cpue_rom, mean_daily_TI_expan * mean_strata_cpue_rom), # option to use ratio of the means CPUE estimator
     # catch_estimate = catch_estimate_mor
     ) |>
   mutate_if(is.numeric, round, 2) |>
@@ -1377,34 +1190,24 @@ estimates$daily_effort_cpue_catch <- point_estimate_data_prelim$daily_CPUE  |>
   #   catch_estimate = replace_na(catch_estimate, 0)
   # ) |> 
     # filter(str_detect(catch_group, 'Coho|Chinook')) |> # filter to specific species 
+    filter(str_detect(catch_group, 'Steelhead')) |> # filter to specific species
   distinct() |>
   # filter(!is.na(mean_daily_TI_expan)) |> 
-  arrange(catch_group, section, event_date, angler_type)
+  arrange(catch_group, section, event_date, angler_type) |> 
+  filter(!is.na(mean_daily_TI_expan))
 
-view(estimates$daily_effort_cpue_catch)
-# estimates$daily_effort_cpue_catch <- point_estimate_data_prelim$daily_CPUE |> 
-#   left_join(point_estimate_data_prelim$effort_interviews_final, by = c("section", "time_strata", "event_date", "angler_type")) |>
-#   filter(angler_type %in% c("bank","boat")) |> 
+# weekly_catch <- estimates$daily_effort_cpue_catch |> 
+#   group_by(section, DayType, time_strata, angler_type, catch_group) |> 
+#   summarize(
+#     total_catch = sum(catch_estimate),
+#     total_hours = sum(total_angler_hours)
+#   ) |> 
+#   group_by(section, time_strata, angler_type, catch_group) |> 
 #   mutate(
-#     catch_estimate_mor = if_else(!is.na(cpue_mor), mean_daily_TI_expan * cpue_mor, mean_daily_TI_expan * mean_strata_cpue_mor),
-#     catch_estimate_rom = if_else(!is.na(cpue_rom), mean_daily_TI_expan * cpue_rom, mean_daily_TI_expan * mean_strata_cpue_rom),
-#     catch_estimate = catch_estimate_mor
-#     ) |>
-#   mutate_if(is.numeric, round, 2) |>
-#     # filter(str_detect(catch_group, 'Coho|Chinook')) |> # filter to specific species 
-#   distinct() |>
-#   filter(!is.na(mean_daily_TI_expan)) |> 
-#   arrange(catch_group, section, event_date, angler_type)
-  # filter(angler_type %in% c("boat", "bank"))
-
-
-weekly_test <- estimates$daily_effort_cpue_catch |> 
-  group_by(time_strata, angler_type) |> 
-  summarize(
-    total_catch = sum(catch_estimate),
-    total_hours = sum(total_angler_hours)
-  )
-
+#     total_catch = sum(total_catch),
+#     total_hours = sum(total_hours),
+#     CPUE_Weekly = total_catch / total_hours
+#   )
 
 
 write_csv(estimates$daily_effort_cpue_catch, paste(model_output, paste(paste(params$proj_name, params$water_body, sep = "_"), paste("Point_Estimate", "Summary_Daily_Effort_Catch_CPUE", sep = "_"), paste(params$date_start, params$date_end, sep = "_"), ".csv", sep="_"), sep="/"))
@@ -1476,6 +1279,11 @@ total_effort <- estimates$time_strata_effort_total |>
     total_effort = sum(total_effort)
   )
 
+# weekly_test <- weekly_effort |> 
+#   left_join(weekly_catch) |> 
+#   mutate(
+#     weekly_catch_estimate = CPUE_Weekly * total_effort
+#   )
 
 write_csv(estimates$time_strata_effort_total, paste(model_output, paste(paste(params$proj_name, params$water_body, sep = "_"), paste("Point_Estimate", "Summary_Effort", params$model_period, sep = "_"), paste(params$date_start, params$date_end, sep = "_"), ".csv", sep="_"), sep="/"))
 
@@ -1559,7 +1367,8 @@ estimates$time_strata_catch_total <- estimates$time_strata_catch_by_daytype |>
 
 total_catch <- estimates$time_strata_catch_total |> 
   filter(!is.na(total_catch)) |> 
-  ungroup() |> 
+  ungroup() |>
+  group_by(section, catch_group) |> 
   summarize(
     total_catch = sum(total_catch)
   )
@@ -1582,7 +1391,8 @@ print(time_strata_catch_total_table)
 ```{r, include=TRUE, fig.align="center",fig.width= 14, fig.height= 8, fig.cap=c("Figure 1. ___ harvest estimates for ad-clipped and unmarked coho during the 2021 Skagit River fall salmon fishery from 08/14/2021 - 12/31/2021. Error bars show 95 percent confidence intervals."),echo=FALSE,warning = FALSE}
 
 estimates$time_strata_catch_total |>
-  filter(catch_group %in% c("Steelhead_Adult_UM_Released")) |>
+  # filter(catch_group %in% c("Chinook_Adult_UM_Released", "Chinook_Adult_AD_Released")) |>
+    filter(catch_group %in% c("Steelhead_Adult_UM_Released")) |>
   # rename(Week = time_strata) |>
   # left_join(d_days, by = "Week") |>
   # left_join(lut$sections |>
@@ -1596,7 +1406,7 @@ estimates$time_strata_catch_total |>
   #   month_label = format(Month, format = "%b")) |> 
   ggplot(aes(x = time_strata, y = total_catch, fill = as.factor(section))) +
   geom_bar(position = "dodge", stat = "identity") +
-  scale_fill_manual(values=c("#999999", "#E69F00", "blue")) +
+  scale_fill_manual(values=c("#999999", "#E69F00", "blue", "brown", "grey")) +
   geom_errorbar(aes(ymin=lwr95CI, ymax=upr95CI), width=.2,
                 position=position_dodge(.9)) +
   theme(legend.text=element_text(size=8)) +
@@ -1613,7 +1423,7 @@ estimates$time_strata_catch_total |>
 
 # EB circle back to this for calculating CPUE / HPUE and associated uncertainty over time period of interest 
 
-effort_rename <- estimates$time_strata_effort_total |> 
+estimates$effort_rename <- estimates$time_strata_effort_total |> 
               select(section,
                      time_strata,
                      total_effort,
@@ -1622,6 +1432,38 @@ effort_rename <- estimates$time_strata_effort_total |>
                      effort_upr95CI = upr95CI,
                      effort_SE = SE,
                      effort_CV = CV)
+
+# estimates$cpue_time_strata <- estimates$time_strata_catch_total  |>
+#   select(
+#     section,
+#     time_strata,
+#     angler_type,
+#     total_catch,
+#     catch_variance = variance,
+#     catch_SE = SE,
+#     catch_CV = CV,
+#     catch_lwr95CI = lwr95CI,
+#     catch_upr95CI = upr95CI
+#   ) |>
+#   mutate(
+#     daily_catch_estimate = total_catch / 7
+#   ) |> 
+#   left_join(effort_rename, by = c("section","angler_type","time_strata")) |> 
+#   mutate_if(is.numeric, round, 2) |> 
+#   mutate(
+#     cpue_time_strata = replace_na(total_catch / total_effort, 0),
+#     cpue_lwr95_time_strata = catch_lwr95CI / effort_lwr95CI,
+#     cpue_upr95_time_strata = catch_upr95CI / effort_upr95CI,
+#     cpue_lwr95_time_strata = if_else(is.na(cpue_lwr95_time_strata),0, cpue_lwr95_time_strata),
+#     cpue_upr95_time_strata = if_else(is.na(cpue_upr95_time_strata),0, cpue_upr95_time_strata)) |> 
+#   distinct() 
+
+
+estimates$days_join_2 <- d_days |> 
+  group_by(Week, Month) |>
+  slice(1) |>
+  ungroup() |> 
+  distinct(Week, .keep_all = TRUE)
 
 estimates$cpue_time_strata <- estimates$time_strata_catch_total  |>
   select(
@@ -1638,7 +1480,7 @@ estimates$cpue_time_strata <- estimates$time_strata_catch_total  |>
   mutate(
     daily_catch_estimate = total_catch / 7
   ) |> 
-  left_join(effort_rename, by = c("section","angler_type","time_strata")) |> 
+  left_join(estimates$effort_rename, by = c("section","angler_type","time_strata")) |> 
   mutate_if(is.numeric, round, 2) |> 
   mutate(
     cpue_time_strata = replace_na(total_catch / total_effort, 0),
@@ -1646,7 +1488,11 @@ estimates$cpue_time_strata <- estimates$time_strata_catch_total  |>
     cpue_upr95_time_strata = catch_upr95CI / effort_upr95CI,
     cpue_lwr95_time_strata = if_else(is.na(cpue_lwr95_time_strata),0, cpue_lwr95_time_strata),
     cpue_upr95_time_strata = if_else(is.na(cpue_upr95_time_strata),0, cpue_upr95_time_strata)) |> 
-  distinct()
+  distinct() |>
+  mutate(Week = time_strata) |> 
+  left_join(estimates$days_join_2, by = "Week") 
+
+
 
 write_csv(estimates$cpue_time_strata, paste(model_output, paste(paste(params$proj_name, params$water_body, sep = "_"), paste("Point_Estimate", "Catch_CPUE_time_strata", params$model_period, sep = "_"), paste(params$date_start, params$date_end, sep = "_"), ".csv", sep="_"), sep="/"))
 
@@ -1661,10 +1507,10 @@ write_csv(estimates$cpue_time_strata, paste(model_output, paste(paste(params$pro
 
 estimates$cpue_time_strata |> 
   filter(catch_group %in% c( "Steelhead_Adult_UM_Released")) |> 
-  ggplot(aes(x = time_strata, y = total_catch, fill = angler_type)) +
+  ggplot(aes(x = event_date, y = total_catch, fill = angler_type)) +
   geom_ribbon(aes(ymin = catch_lwr95CI, ymax = catch_upr95CI, group = angler_type)) +
   geom_line() +
-  # scale_x_date() +
+  scale_x_date() +
   # geom_point(position = "dodge", stat = "identity", color = "black") +
   scale_fill_manual(values=c("steelblue", "#E69F00")) +
   # geom_errorbar(aes(ymin= cpue_lwr95_time_strata , ymax= cpue_upr95_time_strata), width=.2,
