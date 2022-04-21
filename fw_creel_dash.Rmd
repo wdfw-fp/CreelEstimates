@@ -43,7 +43,7 @@ proj_levels <- list(
 #lookup objects created below
 load("fw_creel_dash_envi.RData")
 
-creel <- reactiveValues() #will hold resulting data objects
+creel <- reactiveValues() #will hold resulting data objects ##event = NULL, effort = NULL, interview = NULL, catch = NULL
 
 ```
 
@@ -61,7 +61,7 @@ sections_all <- list.files("input_files", pattern = "lut_water_body_location_", 
   set_names() |> 
   map(readr::read_csv)
 
-census_expansion_all <- list.files("input_files", pattern = "lut_Proportional", full.names = T) |> 
+census_expansion_all <- list.files("input_files", pattern = "Proportional", full.names = T) |> 
   set_names() |> 
   map(readr::read_csv)
 
@@ -74,12 +74,12 @@ names(census_expansion_all) <- tools::file_path_sans_ext(basename(names(census_e
 ```
 
 
-Data {.sidebar}
+Data {.sidebar data-width=350}
 ============================================
 
 ###
 
-```{r}
+```{r input_selectors}
 selectInput(inputId = 'proj_name', label = 'Project Name', choices = names(proj_levels)
             , selected = "District 14"
             )
@@ -92,9 +92,28 @@ dateRangeInput(inputId = 'dates', label = "Date range"
                , start = "2021-09-16", end = "2021-10-16" 
                )
 
+
 selectInput(inputId = 'sections', label = 'Sections', choices = names(sections_all), multiple = FALSE
             , selected = "lut_water_body_location_d14_cascade_fall_salmon"
             )
+selectInput(inputId = 'river_loc', label = 'River Lat/Lon', choices = names(river_loc_all), multiple = FALSE
+            , selected = "lut_River.Locations_2019-01-07"
+            )
+selectInput(inputId = 'census_exp', label = 'Census Expansion', choices = names(census_expansion_all), multiple = FALSE
+            , selected = "lut_Proportional_Expansions_for_Tie_In_Sections_Cascade_Fall_Salmon_2021"
+            )
+
+
+radioButtons(inputId = 'model_period', label = "Model period", choices = c("Week", "Month")
+             , selected = "Week"
+             )
+
+checkboxGroupInput(inputId = 'index_count_types', label = "Index count types", 
+             choices = c(
+               "Bank Anglers","Boat Anglers",
+                "Vehicle Only","Trailers Only"),
+             selected = c("Vehicle Only","Trailers Only")
+             )
 
 
 # #can add option to manually upload ...
@@ -104,17 +123,38 @@ selectInput(inputId = 'sections', label = 'Sections', choices = names(sections_a
 
 ###
 
-```{r}
+```{r dwg_fetch}
 actionButton("fetch", label = "Fetch raw data")
 
 #fire the requests on button push
 #!! note this excludes effort and interview rows
 #!! with no section assigned from section LU
 
+# creel <- list()
+# input <- list()
+# input$proj_name <- "District 14"
+# input$water_body <- "Cascade River"
+# input$dates <- c(as.Date("2021-09-16", "%Y-%m-%d"), as.Date("2021-10-16", "%Y-%m-%d"))
+# 
+# input$sections <- "lut_water_body_location_d14_cascade_fall_salmon"
+# input$river_loc <- "lut_River.Locations_2019-01-07"
+# input$census_exp <- "lut_Proportional_Expansions_for_Tie_In_Sections_Cascade_Fall_Salmon_2021"
+# 
+# input$model_period <- "Week"
+# input$index_count_types <- c("Vehicle Only","Trailers Only")
+
+sections <- reactive({
+  dplyr::select(sections_all[[input$sections]], water_body_desc, location = location_code, section)
+})
+
+river_loc <- reactive({
+  river_loc_all[[input$river_loc]]
+})
+
+
+#this is "event reactive", so should not trigger on fiddling with inputs
+#but only when "fetch" button is clicked (see last few lines of chunk)
 reactive({
-  sections <- sections_all[[input$sections]] |> 
-    select(water_body_desc, location = location_code, section)
-  
   creel$event <- paste0(
     dwg_base$event,
     "?$where=project_name in('", input$proj_name, "')",
@@ -139,7 +179,7 @@ reactive({
       readr::read_csv(show_col_types = F) |>
       dplyr::filter(!is.na(count_type)) |> 
       dplyr::select(-created_datetime, -modified_datetime) |> 
-      dplyr::left_join(sections, by = c("location")) |> 
+      dplyr::left_join(sections(), by = c("location")) |> 
       dplyr::filter(!is.na(section))
 
     creel$interview <- paste0(
@@ -154,7 +194,7 @@ reactive({
       dplyr::select(
         -created_datetime, -modified_datetime,
         -state_residence, -zip_code) |> 
-      dplyr::left_join(sections, by = c("location")) |> 
+      dplyr::left_join(sections(), by = c("location")) |> 
       dplyr::filter(!is.na(section))
     
     creel$catch <- paste0(
@@ -170,95 +210,392 @@ reactive({
         life_stage = replace_na(life_stage, "Adult"), # placeholder pending data corrections in fish apps 
         catch_group = paste(species, life_stage, fin_mark, fate, sep = "_") # fish catch groups to estimate catch of 
       )
+    
+    ##seems somewhat inefficient to (potentially) rebuild, but takes a reactive dependence on input$dates and river_loc...
+    #and this whole chunk depends on button push, so "lazy" against fiddling
+    creel$d_days <- tibble::tibble(
+      event_date = seq.Date(input$dates[1], input$dates[2], by = "day"),
+      Day = weekdays(event_date),
+      DayType = if_else(
+        Day == "Saturday" | Day == "Sunday" | Day %in% dates_holidays_2015_2030,
+        "Weekend", "Weekday"),
+      DayType_num = if_else(str_detect(DayType, "end"),1,0),
+      DayL = suncalc::getSunlightTimes(
+        date = event_date,
+        tz = "America/Los_Angeles",
+        lat = river_loc()$Lat,
+        lon = river_loc()$Long,
+        keep=c("dawn", "dusk")
+      ) |>
+        mutate(DayL = as.numeric(dusk - dawn)) |>
+        pluck("DayL"),
+      Week = as.numeric(format(event_date, "%V")),
+      Month = as.numeric(format(event_date, "%m")),
+      ModelPeriod = input$model_period
+    ) |>
+      tibble::rowid_to_column(var = "day_index") |>
+      #make open section cols (only those actually used, not all in LU)
+      left_join(
+        expand_grid(
+          event_date = seq.Date(input$dates[1], input$dates[2], by = "day"),
+          s = paste0("open_section_", sort(unique(creel$effort$section))),
+          closure_code = TRUE
+        ) |>
+          pivot_wider(names_from = s, values_from = closure_code)
+        ,
+        by = "event_date")
+
+    #closures, super ugly, needs rethinking
+    creel$d_days <- rows_upsert(
+      creel$d_days,
+      bind_rows(
+        # 2022 Upper Skagit Chinook
+        # tibble(section = "1", closure_begin = "2021-05-31", closure_end = "2021-05-31")
+
+        # 2021 Skagit winter steelhead closure dates
+        # tibble(section = "1,2", closure_begin = "2021-02-03", closure_end = "2021-02-05"),
+        # tibble(section = "1,2", closure_begin = "2021-02-10", closure_end = "2021-02-12"),
+        # tibble(section = "1,2", closure_begin = "2021-02-17", closure_end = "2021-02-19"),
+        # tibble(section = "1,2", closure_begin = "2021-02-24", closure_end = "2021-02-26"),
+        # tibble(section = "1,2", closure_begin = "2021-03-03", closure_end = "2021-03-05"),
+        # tibble(section = "1,2", closure_begin = "2021-03-10", closure_end = "2021-03-12"),
+        # tibble(section = "1,2", closure_begin = "2021-03-17", closure_end = "2021-03-19"),
+        # tibble(section = "1,2", closure_begin = "2021-03-24", closure_end = "2021-03-26"),
+        # tibble(section = "1,2", closure_begin = "2021-03-31", closure_end = "2021-04-02"),
+        # tibble(section = "1,2", closure_begin = "2021-04-07", closure_end = "2021-04-09")
+        # tibble(section = "1", closure_begin = "2016-04-30", closure_end = "2016-04-30") # placeholder closure date; need to supply at least one
+
+        # kalama
+        # tibble(section = "1,2,3", closure_begin = "2016-04-30", closure_end = "2016-04-30")
+        # placeholder closure date; need to supply at least onedate here because we use open / closed dates to determine times_strata estimation periods (field n_days further down in code)
+
+        # Cascade
+        tibble(section = "1", closure_begin = "2021-09-18", closure_end = "2021-09-18"), # river out due to flows
+        tibble(section = "1", closure_begin = "2021-09-19", closure_end = "2021-09-20"), # treaty fishery closure
+        tibble(section = "1", closure_begin = "2021-09-26", closure_end = "2021-09-27"), # treaty fishery closure
+        tibble(section = "1", closure_begin = "2021-10-03", closure_end = "2021-10-04"), # treaty fishery closure
+        tibble(section = "1", closure_begin = "2021-11-13", closure_end = "2021-11-14"), # river out due to flows
+        tibble(section = "1", closure_begin = "2021-11-17", closure_end = "2021-11-18") # river out due to flows
+
+        #other Skagit?
+        # tibble(section = "2,3", closure_begin = "2021-08-19", closure_end = "2021-08-31"),
+        # tibble(section = "2", closure_begin = "2021-09-01", closure_end = "2021-09-01"), # treaty fishery closure
+        # tibble(section = "2", closure_begin = "2021-09-07", closure_end = "2021-09-09"), # treaty fishery closure
+        # tibble(section = "2", closure_begin = "2021-09-14", closure_end = "2021-09-16"), # treaty fishery closure
+        # tibble(section = "1,2,3", closure_begin = "2021-09-18", closure_end = "2021-09-18"), # river out due to flows
+        # tibble(section = "2", closure_begin = "2021-10-05", closure_end = "2021-10-06"), # treaty fishery closure
+        # tibble(section = "2", closure_begin = "2021-10-12", closure_end = "2021-10-13"), # treaty fishery closure
+        # tibble(section = "2", closure_begin = "2021-10-19", closure_end = "2021-10-20"), # treaty fishery closure
+        # tibble(section = "1,2,3", closure_begin = "2021-11-13", closure_end = "2021-11-14"), # river out due to flows
+        # tibble(section = "1,2,3", closure_begin = "2021-11-17", closure_end = "2021-11-18") # river out due to flows
+
+        # tibble(section = "3,4,5", closure_begin = "2021-08-19", closure_end = "2021-08-31"),
+        # tibble(section = "3", closure_begin = "2021-09-01", closure_end = "2021-09-01"), # treaty fishery closure
+        # tibble(section = "3", closure_begin = "2021-09-07", closure_end = "2021-09-09"), # treaty fishery closure
+        # tibble(section = "3", closure_begin = "2021-09-14", closure_end = "2021-09-16"), # treaty fishery closure
+        # tibble(section = "1,2,3,4,5", closure_begin = "2021-09-18", closure_end = "2021-09-18"), # river out due to flows
+        # tibble(section = "3", closure_begin = "2021-10-05", closure_end = "2021-10-06"), # treaty fishery closure
+        # tibble(section = "3", closure_begin = "2021-10-12", closure_end = "2021-10-13"), # treaty fishery closure
+        # tibble(section = "3", closure_begin = "2021-10-19", closure_end = "2021-10-20"), # treaty fishery closure
+        # tibble(section = "1,2,3,4,5", closure_begin = "2021-11-13", closure_end = "2021-11-14"), # river out due to flows
+        # tibble(section = "1,2,3,4,5", closure_begin = "2021-11-17", closure_end = "2021-11-18") # river out due to flows
+      ) |>
+        rowwise() |>
+        mutate(closure_date = paste(seq.Date(as.Date(closure_begin), as.Date(closure_end), by = "day"), collapse = ",")) |>
+        separate_rows(closure_date, sep = ",") |>
+        select(event_date = closure_date, section) |>
+        mutate(
+          event_date = as.Date(event_date),
+          closure_code = FALSE # TB - The 1e-06 is needed to keep the model from crashing ?log-normal parameters cant be 0
+        ) |>
+        separate_rows(section, sep = ",") |>
+        pivot_wider(names_from = section, names_prefix = "open_section_", values_from = closure_code) |>
+        mutate(across(starts_with("open_section_"), ~replace_na(., TRUE)))
+      ,
+      by ="event_date"
+    )
 
   } else {
     creel$effort <- NULL
     creel$interview <- NULL
     creel$catch <- NULL
   }
-  
-}) |>
+}) |> 
   bindEvent(input$fetch)
-
   
 ```
-
-
 
 
 Data
 ============================================
 
-Row1
---------------------------------------------
-
-### params
-
-```{r}
-renderPrint(input$proj_name)
-renderPrint(input$water_body)
-
-renderPrint(input$dates[1])
-renderPrint(input$dates[2])
-
-#renderPrint(creel$event)
+```{r eval=FALSE}
+# renderPrint(input$proj_name)
+# renderPrint(input$water_body)
+# renderPrint({paste(input$dates[1], "to", input$dates[2])})
 ```
 
-Row2
+Event DDays
 --------------------------------------------
 
 ### Event
 
 ```{r}
-render_gt({
-  head(creel$event)  
-})
+render_gt({ head(creel$event) })
 ```
+
+### d_days
+
+```{r}
+#renderPrint({str(d_days)})
+render_gt({ head(creel$d_days) })
+```
+
+
+Effort
+--------------------------------------------
 
 ### Effort
 
 ```{r}
-render_gt({
-  head(creel$effort)  
-})
+render_gt({ head(creel$effort) })
 ```
 
-Row3
+Interview
 --------------------------------------------
 
 ### Interview
 
 ```{r}
-render_gt({
-  head(creel$interview)  
-})
+render_gt({ head(creel$interview) })
 ```
+
+Catch
+--------------------------------------------
 
 ### Catch
 
 ```{r}
-render_gt({
-  head(creel$catch)  
-})
+render_gt({ head(creel$catch) })
 ```
 
 
 Effort
 ============================================
 
-silly demo
+```{r prep_effort_census_index, include = FALSE}
+#Aggregate census (tie in) effort counts, associating to closest-in-time index count.
+#take the initial effort_census, with all count_sequence == 1,
+#add/overwrite the count_sequence val with that from closest temporal match from inline/anonymous paired counts object
+
+#could remove the left_join of d_days? appears to only be used here for day_index, which used only for stan?
+
+pt_est_effort_census <- reactive({
+  dplyr::left_join(
+    creel$effort |> 
+      dplyr::filter(tie_in_indicator == 1) |>
+      dplyr::select(event_date, water_body, water_body_desc, location, section, tie_in_indicator, count_type, count_quantity)
+    ,
+    #reassign count_seq from closest index
+    dplyr::left_join(
+      creel$effort |> dplyr::filter(tie_in_indicator == 1) |> dplyr::distinct(event_date, section, location, tie_in_indicator, effort_start_time, count_sequence),
+      creel$effort |> dplyr::filter(tie_in_indicator == 0) |> dplyr::distinct(event_date, section, location, tie_in_indicator, effort_start_time, count_sequence),
+      by = c("event_date", "section"),
+      suffix = c("_cen", "_ind")
+      ) |>
+      dplyr::group_by(event_date, section, location_cen) |>
+      dplyr::slice_min(abs(effort_start_time_cen - effort_start_time_ind), n = 1) |>
+      dplyr::ungroup() |>
+      dplyr::distinct(event_date, section, location = location_cen, count_sequence = count_sequence_ind)
+    ,
+    by = c("event_date", "section", "location")
+  ) |>
+    dplyr::left_join(creel$d_days, by = "event_date") |>
+    dplyr::mutate(
+      angler_type = dplyr::case_when(
+        stringr::word(count_type, 1) %in% c("Bank","bank","Shore") ~ "bank",
+        stringr::word(count_type, 1) %in% c("Boat","boat") ~ "boat" #Note "Boats" plural intentionally excluded
+      )
+    ) |>
+    dplyr::filter(!is.na(angler_type)) |>
+    dplyr::group_by(event_date, day_index, section, count_sequence, angler_type) |>
+    dplyr::summarize(
+      count_quantity = sum(count_quantity),
+      tie_in_indicator = 1,
+      .groups = "drop") |>
+    dplyr::arrange(event_date, section, count_sequence) |>
+    tidyr::drop_na(count_sequence)
+})
+
+pt_est_effort_index <- reactive({
+  dplyr::filter(creel$effort, tie_in_indicator == 0) |> 
+  dplyr::filter(
+    is.na(no_count_reason),
+    !is.na(count_type),
+    count_type %in% input$index_count_types
+    ) |>
+  dplyr::select(event_date, water_body, water_body_desc, location, section, tie_in_indicator, count_sequence, count_type, count_quantity) |>
+  dplyr::left_join(creel$d_days, by = "event_date") |>
+  dplyr::group_by(section, event_date, day_index, DayL, Week, Month, count_sequence, count_type) |>
+  dplyr::summarise(count_quantity = sum(count_quantity), .groups = "drop") |>
+  dplyr::arrange(event_date, section, count_sequence)
+})
+
+pt_est_effort_index_daily_mean <- reactive({
+  pt_est_effort_index() |>
+  group_by(event_date, section, count_type) |>
+  summarise(mean_index_count = mean(count_quantity), .groups = "drop") |>
+  mutate(
+    angler_type = case_when(
+      count_type == "Boat Anglers" ~ "boat",
+      count_type == "Bank Anglers" ~ "bank",
+      count_type == "Trailers Only" ~ "boat",
+      count_type == "Vehicle Only" ~ "total"
+    )
+  )
+})
+
+
+# pt_est_data$effort_census <- dplyr::left_join(
+#   pt_est_data$effort_census |>
+#     dplyr::select(event_date, water_body, water_body_desc, location, section, tie_in_indicator, count_type, count_quantity)
+#   ,
+#   dplyr::left_join(
+#     pt_est_data$effort_census |> dplyr::distinct(event_date, section, location, tie_in_indicator, effort_start_time, count_sequence),
+#     pt_est_data$effort_index |> dplyr::distinct(event_date, section, location, tie_in_indicator, effort_start_time, count_sequence),
+#     by = c("event_date", "section"),
+#     suffix = c("_cen", "_ind")
+#     ) |>
+#       dplyr::group_by(event_date, section, location_cen) |>
+#       dplyr::slice_min(abs(effort_start_time_cen - effort_start_time_ind), n = 1) |>
+#       dplyr::ungroup() |>
+#       #count(event_date, section, location_cen, count_sequence_cen, count_sequence_ind)
+#       dplyr::distinct(event_date, section, location = location_cen, count_sequence = count_sequence_ind)
+#   ,
+#   by = c("event_date", "section", "location")
+#   ) |>
+#   dplyr::left_join(d_days, by = "event_date") |>
+#   dplyr::mutate(
+#     angler_type = dplyr::case_when(
+#       stringr::word(count_type, 1) %in% c("Bank","bank","Shore") ~ "bank",
+#       stringr::word(count_type, 1) %in% c("Boat","boat") ~ "boat" #Note "Boats" plural intentionally excluded
+#     )
+#   ) |>
+#   dplyr::filter(!is.na(angler_type)) |>
+#   dplyr::group_by(event_date, day_index, section, count_sequence, angler_type) |>
+#   dplyr::summarize(
+#     count_quantity = sum(count_quantity),
+#     tie_in_indicator = 1,
+#     .groups = "drop") |>
+#   dplyr::arrange(event_date, section, count_sequence) |>
+#   tidyr::drop_na(count_sequence)
+
+# pt_est_data$effort_index <- pt_est_data$effort_index |>
+#   dplyr::filter(
+#     is.na(no_count_reason),
+#     !is.na(count_type),
+#     count_type %in% input$index_count_types
+#     ) |>
+#   dplyr::select(event_date, water_body, water_body_desc, location, section, tie_in_indicator, count_sequence, count_type, count_quantity) |>
+#   dplyr::left_join(d_days, by = "event_date") |>
+#   dplyr::group_by(section, event_date, day_index, DayL, Week, Month, count_sequence, count_type) |>
+#   dplyr::summarise(count_quantity = sum(count_quantity), .groups = "drop") |>
+#   dplyr::arrange(event_date, section, count_sequence)
+# 
+# 
+# # average index effort count by day, angler_type, and section, which is the mean value of the sum total of effort counts conducted during n number of count_sequence within a day
+# 
+# #### this appears redundant and unnecessary with above? group_by here just deselects day_index, DayL, Week, Month?
+# # # sum total of vehicle trailer counts per date, section, sampling event (count_sequence), and count_type (vehicles, trailers, etc.)
+# # pt_est_data$Daily_effort_per_count_index_counts <- pt_est_data$effort_index |>
+# #   group_by(section, event_date, count_sequence, count_type) |>
+# #   summarize(
+# #     sum_index_count = sum(count_quantity)
+# #   )
+# 
+# # Mean count across multiple sampling events within a day
+# pt_est_data$mean_daily_effort_index_counts <- pt_est_data$effort_index |>
+#   group_by(event_date, section, count_type) |>
+#   summarise(mean_index_count = mean(count_quantity), .groups = "drop") |>
+#   mutate(
+#     angler_type = case_when(
+#       count_type == "Boat Anglers" ~ "boat",
+#       count_type == "Bank Anglers" ~ "bank",
+#       count_type == "Trailers Only" ~ "boat",
+#       count_type == "Vehicle Only" ~ "total"
+#     )
+#   )
+
+
+
+# ## DA - START HERE - COULD PERHAPS SORT OUT angler_type STUFF, BUT BETTER TO CHECK WITH EB/KB
+#### THIS FROM SETUP CHUNK IN _DEV NOT YET DEALT WITH
+# # fix angler type in census expansion table for use with vehicle / trailer counts so it joins to TI_expan table
+# if(str_detect(index_count_types, c("Vehicle Only", "Trailers Only"))) {
+#
+# lut$census_expansion <- lut$census_expansion |>
+#   mutate(
+#     angler_type = if_else(angler_type == "bank", "total", "boat")
+#   )
+# }
+
+# pt_est_data$interview <- pt_est_data$interview |>
+#   left_join(creel$d_days, by = "event_date") |>
+#   mutate(
+#     across(c(vehicle_count, trailer_count), ~replace_na(., 0)),
+#     trip_status = replace_na(trip_status, "Unknown"),
+#     angler_type = tolower(angler_type),
+#
+#     angler_type_check = all(is.na(angler_type)), # check to see if angler_type field is used for a given dataset
+#     angler_type = ifelse(angler_type_check == TRUE, boat_used, angler_type), # if it's TRUE that all values are NA in angler_type field, then use the boat_used field instead. Could use DA's brain to ensure this is robust, used ifelse( ) so that the FALSE could be different data class
+#     angler_type =
+#       case_when( #case_when to convert all possible entries into the angler_type field to angler_types
+#       # is.na(angler_type) ~ "bank",
+#       angler_type == "boat" ~ "boat",
+#       angler_type == "bank" ~ "bank",
+#       angler_type == "Unk" ~ "bank", # Kalama placeholder
+#       is.na(angler_type) ~ "bank", # Kalama placeholder
+#       angler_type == "No" ~ "bank",
+#       angler_type == "Yes" ~ "boat"
+#       ),
+#
+#     angler_type_ind = as.integer(factor(angler_type)),
+#     # fishing_end_time = if_else(is.na(fishing_end_time), interview_time, fishing_end_time),
+#     fishing_end_time = if_else(trip_status == "Incomplete", interview_time, fishing_end_time), # fishing_end_time's were wrong in Kalama dataset, using this but should verify with newer datasets
+#     angler_hours = round(as.numeric(fishing_end_time - fishing_start_time) / 3600, 5),
+#     angler_hours_total = angler_count * angler_hours,
+#     time_strata = if_else(ModelPeriod == "Month", Month, Week)
+#   ) |>
+#   filter(angler_hours_total >= 0.5)
+#
+
+```
+
+
+### silly demo
 
 ```{r}
 #renderPrint({str(creel$effort)})
 
+# renderPlot({
+#   if(!is.null(creel$effort)) {
+#     creel$effort |>
+#       group_by(tie_in_indicator, section, event_date) |>
+#       summarise(count_quantity = sum(count_quantity), .groups = "drop") |>
+#       ggplot(aes(event_date, count_quantity, fill = section)) +
+#       geom_col() +
+#       facet_wrap(~tie_in_indicator, scales = "free")
+#   }
+# })
+
+#renderPrint({str(pt_est_effort_census())})
+
 renderPlot({
   if(!is.null(creel$effort)) {
-    creel$effort |>
-      group_by(tie_in_indicator, section, event_date) |>
-      summarise(count_quantity = sum(count_quantity), .groups = "drop") |>
-      ggplot(aes(event_date, count_quantity, fill = section)) +
-      geom_col() +
-      facet_wrap(~tie_in_indicator, scales = "free")
+    pt_est_effort_index() |>
+      ggplot(aes(event_date, count_quantity, fill = factor(count_sequence))) +
+      geom_col(position = position_dodge()) +
+      facet_wrap(~section + count_type, scales = "free")
   }
 })
 
