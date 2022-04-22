@@ -49,12 +49,14 @@ creel <- reactiveValues() #will hold resulting data objects ##event = NULL, effo
 
 ```{r build_envi, eval=FALSE}
 # # uncomment to rebuild...
+# 
 # dates_holidays_2015_2030 <- read_lines("input_files/dates_holidays_2015_2030.txt") |>
 #   as.Date(format="%Y-%m-%d")
 # 
-# river_loc_all <- list.files("input_files", pattern = "River.Location", full.names = T) |>
-#   set_names() |>
-#   map(readr::read_csv)
+# # river_loc_all <- list.files("input_files", pattern = "River.Location", full.names = T) |>
+# #   set_names() |>
+# #   map(readr::read_csv)
+# river_loc_all <- readr::read_csv("input_files/river_locations_master.csv")
 # 
 # #excludes "master"; read_csv("input_files/lut_water_body_location_master_2022_01_28.csv") |> distinct(water_body_desc)
 # sections_all <- list.files("input_files", pattern = "lut_water_body_location_", full.names = T)[-8] |>
@@ -65,7 +67,7 @@ creel <- reactiveValues() #will hold resulting data objects ##event = NULL, effo
 #   set_names() |>
 #   map(readr::read_csv)
 # 
-# names(river_loc_all) <- tools::file_path_sans_ext(basename(names(river_loc_all)))
+# #names(river_loc_all) <- tools::file_path_sans_ext(basename(names(river_loc_all)))
 # names(sections_all) <- tools::file_path_sans_ext(basename(names(sections_all))) #|> str_remove("lut_water_body_location_")
 # names(census_expansion_all) <- tools::file_path_sans_ext(basename(names(census_expansion_all))) #|> str_remove("lut_Proportional_Expansions_for_Tie_In_")
 # 
@@ -152,7 +154,9 @@ sections <- reactive({
 })
 
 river_loc <- reactive({
-  river_loc_all[[input$river_loc]]
+  #river_loc_all[[input$river_loc]]
+  dplyr::filter(river_loc_all, River %in% input$water_body)
+    
 })
 
 census_exp <- reactive({
