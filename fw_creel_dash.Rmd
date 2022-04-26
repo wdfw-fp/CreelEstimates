@@ -496,7 +496,7 @@ pe_effort_index_daily_mean <- reactive({
 
 #interview data have angler_count, vehicle_count, trailer_count, angler_type and boat_used
 #Disallow NAs in angler_type, fill missing angler_type from boat_used
-#!!Does this actually need row-wise time_strata? and why not just call model_period?
+#!!Does this actually need row-wise time_strata?
 #!!Maintain angler_hours_total filter?
 #!!lots of extra cols still at this point...
 pe_interview <- reactive({
@@ -522,14 +522,15 @@ pe_interview <- reactive({
       fishing_end_time),
     angler_hours = round(as.numeric(fishing_end_time - fishing_start_time) / 3600, 5),
     angler_hours_total = angler_count * angler_hours,
-    time_strata = input$model_period
+    time_strata = if_else(ModelPeriod == "Month", Month, Week)
   ) |>
   filter(angler_hours_total >= 0.5) #-> pe_interview
 })
 ```
 
+*NOT YET SHINY*
 
-```{r eval = FALSE}
+```{r effort_interview_final, eval = FALSE}
 
 days_join <- creel$days |>
   mutate(time_strata = if_else(ModelPeriod == "Month", Month, Week)) |> 
@@ -763,8 +764,183 @@ if(str_detect(input$index_count_types, "Bank|Boat")) {
   }
 }
 
+```
+
+```{r effort_interview_final_with_days_total_sampled, eval = FALSE}
+# excluding specified closures, total number of days by section, weekday/end, and time strata for which to generate estimates
+creel$days_total <- creel$days |>
+  pivot_longer(
+    cols = starts_with("open_section"), 
+    names_to = "section", 
+    values_to = "closure_value") |>
+  filter(closure_value == TRUE) |> 
+  mutate(
+    section = as.numeric(gsub("^.*_", "", section)),
+    time_strata = if_else(ModelPeriod == "Month", Month, Week)
+    ) |>
+  count(section, DayType, time_strata, name = "N_days")
+
+# number of days sampled within monitoring period
+creel$days_sampled <- effort_interviews_final |>
+  filter(!is.na(mean_daily_TI_expan) & creeled == "Y") |> 
+  count(section, DayType, time_strata, angler_type, name = "n_days")
+
+
+# add these objects to the table with index count data
+effort_interviews_final <- effort_interviews_final |> 
+  filter(!is.na(mean_daily_TI_expan)) |> 
+  left_join(creel$days_total,
+    by = c("section", "DayType", "time_strata")) |> 
+  left_join(creel$days_sampled,
+    by = c("section", "DayType", "time_strata", "angler_type")) |>
+  left_join(
+    creel$days_total |> 
+      group_by(section, DayType) |> 
+      summarise(N_days_total = sum(N_days), .groups = "drop"),
+    by = c("section", "DayType")) |> 
+  left_join(
+    creel$days_sampled |> 
+      group_by(section, DayType, angler_type) |> 
+      summarise(n_days_total = sum(n_days), .groups = "drop"),
+    by = c("section", "DayType", "angler_type")) 
 
 ```
+
+```{r daily CPUE from interviews, include = FALSE}
+
+# Calculating CPUE for the different angler_types
+
+#!!Move this up with other reactive pe_* object creation?
+# join catch data to interview after inferring complete cases (counts or 0s for all catch_groups encountered)
+interview_and_catch <- left_join(
+  #should already be distinct on interview_id
+  #!!currently filtered to angler_hours >= 0.5
+  #!!so some rows in creel$catch for "short" interviews may be lost in join 
+  #!!note also that interview_ids in creel$interview/pe_interview may have no catch and not be in creel$catch
+  #!!so are consequently coded NA for catch_group
+    pe_interview |> drop_na(angler_hours) 
+    ,
+    creel$catch |> 
+      group_by(interview_id, catch_group) |> 
+      summarise(fish_count = sum(fish_count, na.rm = T), .groups = "drop") |>
+      pivot_wider(
+        names_from = catch_group,
+        values_from = fish_count,
+        values_fill = 0) |> 
+      pivot_longer(
+        cols = -interview_id, 
+        names_to = "catch_group", 
+        values_to = "fish_count"
+      )
+    , 
+    by = "interview_id"
+  )
+
+# setdiff(creel$catch$interview_id, pe_interview$interview_id)  #lost in the join, due to "short" angler_hours
+# setdiff(creel$interview$interview_id, creel$catch$interview_id) #no catch, so no catch_group(s) to assign
+# interview_and_catch |> filter(is.na(catch_group))
+
+
+#mean angler hours by section, time_strata, angler_type 
+# use in case there is non-zero catch, but no angler hours to use to calculate CPUE (should be a rare situation)
+angler_hours_summary <- interview_and_catch |>
+  group_by(section, time_strata, DayType, angler_type, catch_group) |>
+  summarise(mean_strata_angler_hours = mean(angler_hours_total), .groups = "drop") |>
+  complete(
+    section, time_strata, DayType, angler_type, catch_group,
+    fill = list(mean_strata_angler_hours = 0))
+
+# CPUE for bank and boat effort 
+interview_daily_totals <- left_join(
+    interview_and_catch,
+    angler_hours_summary,
+    by = c("section", "time_strata", "DayType", "angler_type", "catch_group")
+    ) |> 
+   mutate(
+    cpue_interview = if_else(
+      angler_hours_total > 0,
+        fish_count / angler_hours_total, 
+        fish_count / mean_strata_angler_hours)
+  ) |>
+  group_by(event_date, day_index, section, time_strata, DayType, angler_type, catch_group) |>
+  summarise(
+    n_groups = n(),
+    catch_dailysum = sum(fish_count),
+    angler_hours_total_dailysum = sum(angler_hours_total),
+    cpue_rom = catch_dailysum / angler_hours_total_dailysum, # ratio of the means CPUE estimator
+    cpue_mor = mean(cpue_interview),  # mean of ratios CPUE estimator
+    .groups = "drop"
+  )
+
+
+#  add implicit missing values of CPUE to dataset using tidyr complete() function
+interview_daily_totals_complete <- interview_daily_totals |>
+  ungroup() |>
+  select(section, event_date, angler_type, catch_group,
+         total_angler_hours = angler_hours_total_dailysum,
+         catch_dailysum, cpue_rom, cpue_mor) |>
+  mutate(angler_type = replace_na(angler_type, "bank")) |> #kalama steelhead fix
+  # filter(catch_group == "Chinook_Adult_UM_Released") |> # placeholder spot to filter catch groups
+  # complete(section, event_date, angler_type, fill = list(catch_dailysum = 0)) |>
+  complete(section, event_date, angler_type, catch_group, fill = list(catch_dailysum = 0)) |>
+  filter(!(is.na(angler_type))) |>
+  # mutate(catch_group = "Chinook_Adult_UNK_Released") |>
+  # distinct() |>
+  left_join(d_days, by = c("event_date")) |> 
+  mutate(time_strata = if_else(ModelPeriod == "Month", Month, Week))
+
+
+# calculate mean CPUE values by strata to use on days with known effort but a lack of interviews 
+cpue_summary <- interview_daily_totals |>
+  group_by(section, time_strata, DayType, angler_type, catch_group) |>
+  summarise(
+    mean_strata_cpue_mor = mean(cpue_mor), # Fisheries Techniques (Jones and Pollock 2012) suggest MOR for roving survey design
+    mean_strata_cpue_rom = mean(cpue_rom)
+  ) |>
+  ungroup() |>
+  complete(section, time_strata, DayType, angler_type, catch_group,
+           fill = list(mean_strata_cpue_mor = 0, mean_strata_cpue_rom = 0))
+
+# calculate mean daily effort by strata to use on days with interviews but a lack of quantified effort
+# effort_summary <- effort_interviews_final |> 
+#   filter(!is.na(DayType)) |>
+#   group_by(section, time_strata, DayType, angler_type) |>
+#   summarise(
+#     mean_strata_effort = mean(mean_daily_TI_expan)
+#   ) |>
+#   ungroup() |>
+#   complete(section, time_strata, angler_type,
+#            fill = list(mean_strata_effort = 0))
+
+
+effort_summary <- effort_interviews_final |> 
+  filter(!is.na(mean_daily_TI_expan)) |>
+  group_by(section, time_strata, angler_type) |>
+  summarise(
+    mean_strata_effort = mean(mean_daily_TI_expan)
+  ) |>
+  ungroup() |>
+  complete(section, time_strata, angler_type,
+           fill = list(mean_strata_effort = 0))
+
+
+effort_join <- effort_interviews_final |> 
+  filter(!is.na(DayType)) |> 
+  select(section, time_strata, event_date, angler_type, mean_daily_TI_expan, n_days, N_days, n_days_total, N_days_total) |> 
+left_join(effort_summary) |> 
+  mutate(
+    mean_daily_TI_expan = if_else(mean_daily_TI_expan == 0, mean_strata_effort, mean_daily_TI_expan)
+  )
+
+
+# join mean_strata_cpue values to table with daily cpue values so we can use the mean strata cpue values on days with known effort but no corresponding interview
+# extract the columns we need from the interview and catch daily total table to calculate daily CPUE
+daily_CPUE <- interview_daily_totals_complete |> 
+  left_join(cpue_summary, by = c("section", "angler_type", "time_strata", "DayType", "catch_group"))|> 
+  select(section, time_strata, event_date, DayType, angler_type, catch_group, catch_dailysum, total_angler_hours, cpue_rom, cpue_mor, mean_strata_cpue_rom, mean_strata_cpue_mor)
+
+```
+
 
 
 ### Index counts
