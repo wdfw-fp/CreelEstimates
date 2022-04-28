@@ -79,7 +79,7 @@ creel <- reactiveValues() #will hold resulting data objects ##event = NULL, effo
 Controls {.sidebar data-width=350}
 ============================================
 
-###
+### knobs
 
 ```{r input_selectors}
 selectInput(inputId = 'proj_name', label = 'Project Name', choices = names(proj_levels)
@@ -125,7 +125,7 @@ radioButtons(inputId = 'census_expansion', label = "Census expansion method",
 
 ```
 
-###
+### fetch
 
 ```{r dwg_fetch}
 actionButton("fetch", label = "Fetch raw data")
@@ -363,63 +363,7 @@ reactive({
   
 ```
 
-
-Data
-============================================
-
-```{r eval=FALSE}
-# renderPrint(input$proj_name)
-# renderPrint(input$water_body)
-# renderPrint({paste(input$dates[1], "to", input$dates[2])})
-```
-
-Event and Days
---------------------------------------------
-
-### Event
-
-```{r}
-render_gt({ head(creel$event) })
-```
-
-### Days
-
-```{r}
-#renderPrint({str(days)})
-render_gt({ head(creel$days) })
-```
-
-
-Effort
---------------------------------------------
-
-### Effort
-
-```{r}
-render_gt({ head(creel$effort) })
-```
-
-Interview
---------------------------------------------
-
-### Interview
-
-```{r}
-render_gt({ head(creel$interview) })
-```
-
-Catch
---------------------------------------------
-
-### Catch
-
-```{r}
-render_gt({ head(creel$catch) })
-```
-
-
-Effort/Interview
-============================================
+### wrangling and calcs
 
 ```{r prep_effort_interview, include = FALSE}
 #Aggregate census (tie in) effort counts, associating to closest-in-time index count.
@@ -848,7 +792,7 @@ effort_interviews_final_strata_mean <- effort_interviews_final |>
 
 ```
 
-```{r daily CPUE from interviews, include = FALSE}
+```{r interview_catch_daily_CPUE, eval = FALSE}
 
 #!!Move this up with other reactive pe_* object creation?
 # join catch data to interview after inferring complete cases (counts or 0s for all catch_groups encountered)
@@ -999,7 +943,7 @@ daily_CPUE <- interview_daily_totals |>
 
 ```
 
-```{r estimates, include = FALSE}
+```{r estimates, eval = FALSE}
 #!!DA first 3 objects are ingredients for subsequent effort and catch summary objects
 
 #### ingredients -------------
@@ -1243,7 +1187,65 @@ total_catch <- time_strata_catch_total |>
 
 ```
 
+Data
+============================================
 
+```{r eval=FALSE}
+# renderPrint(input$proj_name)
+# renderPrint(input$water_body)
+# renderPrint({paste(input$dates[1], "to", input$dates[2])})
+```
+
+Event and Days
+--------------------------------------------
+
+### Event
+
+```{r gt_creel_event}
+render_gt({ head(creel$event) })
+```
+
+### Days
+
+```{r gt_creel_days}
+#renderPrint({str(days)})
+render_gt({ head(creel$days) })
+```
+
+
+Effort
+--------------------------------------------
+
+### Effort
+
+```{r gt_creel_effort}
+render_gt({ head(creel$effort) })
+```
+
+Interview
+--------------------------------------------
+
+### Interview
+
+```{r gt_creel_interview}
+render_gt({ head(creel$interview) })
+```
+
+Catch
+--------------------------------------------
+
+### Catch
+
+```{r gt_creel_catch}
+render_gt({ head(creel$catch) })
+```
+
+
+Effort/Interview
+============================================
+
+Effort
+--------------------------------------------
 
 ### Index counts
 
