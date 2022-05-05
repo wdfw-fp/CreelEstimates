@@ -137,18 +137,23 @@ actionButton("fetch", label = "Fetch raw data")
 # creel <- list()
 # input <- list()
 # input$proj_name <- "District 14"
-# input$water_body <- "Cascade River"
-# input$dates <- c(as.Date("2021-09-16", "%Y-%m-%d"), as.Date("2021-11-30", "%Y-%m-%d"))
+# # input$water_body <- "Cascade River"
+# # input$dates <- c(as.Date("2021-09-16", "%Y-%m-%d"), as.Date("2021-11-30", "%Y-%m-%d"))
+# input$water_body <- c("Skagit River", "Sauk River")
+# input$dates <- c(as.Date("2021-09-01", "%Y-%m-%d"), as.Date("2021-11-01", "%Y-%m-%d"))
 # input$model_period <- "Week"
 # input$index_count_types <- "Vehicle/Trailers Only" #c("Vehicle Only","Trailers Only")
 # input$census_expansion <- "Direct"
-# 
-# input$sections <- "lut_water_body_location_d14_cascade_fall_salmon"
-# #input$river_loc <- "lut_River.Locations_2019-01-07"
-# input$census_exp <- "lut_Proportional_Expansions_for_Tie_In_Sections_Cascade_Fall_Salmon_2021"
+# # 
+# # input$sections <- "lut_water_body_location_d14_cascade_fall_salmon"
+# # #input$river_loc <- "lut_River.Locations_2019-01-07"
+# # input$census_exp <- "lut_Proportional_Expansions_for_Tie_In_Sections_Cascade_Fall_Salmon_2021"
+# input$sections <- "lut_water_body_location_d14_skagit_fall_salmon_PE"
+# input$census_exp <- "lut_Proportional_Expansions_for_Tie_In_Sections_Skagit_Fall_Salmon_2021"
 # sections <- dplyr::select(sections_all[[input$sections]], water_body_desc, location = location_code, section)
 # #river_loc <- river_loc_all[[input$river_loc]]
-# river_loc <- dplyr::filter(river_loc_all, River %in% input$water_body)
+# river_loc <- dplyr::filter(river_loc_all, River %in% input$water_body) |>
+#     distinct(District, .keep_all = T)
 # census_exp <- if(str_detect(input$index_count_types, "Vehicle|Trailer")) {
 #     census_expansion_all[[input$census_exp]] |>
 #       mutate(
@@ -169,7 +174,8 @@ sections <- reactive({
 #!!ONLY USED IN DAY-LENGTH CALCULATION? WORK AROUND IS JUST SLICE(1)
 river_loc <- reactive({
   #river_loc_all[[input$river_loc]]
-  dplyr::filter(river_loc_all, River %in% input$water_body)
+  dplyr::filter(river_loc_all, River %in% input$water_body) |> 
+    distinct(River, .keep_all = T) #anywhere this would actually be an issue?
 })
 
 census_exp <- reactive({
@@ -213,8 +219,8 @@ reactive({
       readr::read_csv(show_col_types = F) |>
       dplyr::filter(!is.na(count_type)) |> 
       dplyr::select(-created_datetime, -modified_datetime) |> 
-      dplyr::left_join(sections, by = c("location")) |> 
-#      dplyr::left_join(sections(), by = c("location")) |> 
+#      dplyr::left_join(sections, by = c("location")) |> 
+      dplyr::left_join(sections(), by = c("location")) |> 
       dplyr::filter(!is.na(section))
 
     creel$interview <- paste0(
@@ -229,8 +235,8 @@ reactive({
       dplyr::select(
         -created_datetime, -modified_datetime,
         -state_residence, -zip_code) |> 
-      dplyr::left_join(sections, by = c("location")) |> 
-#      dplyr::left_join(sections(), by = c("location")) |> 
+#      dplyr::left_join(sections, by = c("location")) |> 
+      dplyr::left_join(sections(), by = c("location")) |> 
       dplyr::filter(!is.na(section))
     
     creel$catch <- paste0(
@@ -259,10 +265,10 @@ reactive({
       DayL = suncalc::getSunlightTimes(
         date = event_date,
         tz = "America/Los_Angeles",
-         lat = river_loc$Lat,
-         lon = river_loc$Long,
-#        lat = river_loc()$Lat,
-#        lon = river_loc()$Long,
+#         lat = river_loc$Lat,
+#         lon = river_loc$Long,
+        lat = river_loc()$Lat,
+        lon = river_loc()$Long,
         keep=c("dawn", "dusk")
       ) |>
         mutate(DayL = as.numeric(dusk - dawn)) |>
@@ -307,26 +313,27 @@ reactive({
         # tibble(section = "1,2,3", closure_begin = "2016-04-30", closure_end = "2016-04-30")
         # placeholder closure date; need to supply at least onedate here because we use open / closed dates to determine times_strata estimation periods (field n_days further down in code)
 
-        # Cascade
-        tibble(section = "1", closure_begin = "2021-09-18", closure_end = "2021-09-18"), # river out due to flows
-        tibble(section = "1", closure_begin = "2021-09-19", closure_end = "2021-09-20"), # treaty fishery closure
-        tibble(section = "1", closure_begin = "2021-09-26", closure_end = "2021-09-27"), # treaty fishery closure
-        tibble(section = "1", closure_begin = "2021-10-03", closure_end = "2021-10-04"), # treaty fishery closure
-        tibble(section = "1", closure_begin = "2021-11-13", closure_end = "2021-11-14"), # river out due to flows
-        tibble(section = "1", closure_begin = "2021-11-17", closure_end = "2021-11-18") # river out due to flows
+        # # Cascade
+        # tibble(section = "1", closure_begin = "2021-09-18", closure_end = "2021-09-18"), # river out due to flows
+        # tibble(section = "1", closure_begin = "2021-09-19", closure_end = "2021-09-20"), # treaty fishery closure
+        # tibble(section = "1", closure_begin = "2021-09-26", closure_end = "2021-09-27"), # treaty fishery closure
+        # tibble(section = "1", closure_begin = "2021-10-03", closure_end = "2021-10-04"), # treaty fishery closure
+        # tibble(section = "1", closure_begin = "2021-11-13", closure_end = "2021-11-14"), # river out due to flows
+        # tibble(section = "1", closure_begin = "2021-11-17", closure_end = "2021-11-18") # river out due to flows
 
-        #other Skagit?
-        # tibble(section = "2,3", closure_begin = "2021-08-19", closure_end = "2021-08-31"),
-        # tibble(section = "2", closure_begin = "2021-09-01", closure_end = "2021-09-01"), # treaty fishery closure
-        # tibble(section = "2", closure_begin = "2021-09-07", closure_end = "2021-09-09"), # treaty fishery closure
-        # tibble(section = "2", closure_begin = "2021-09-14", closure_end = "2021-09-16"), # treaty fishery closure
-        # tibble(section = "1,2,3", closure_begin = "2021-09-18", closure_end = "2021-09-18"), # river out due to flows
-        # tibble(section = "2", closure_begin = "2021-10-05", closure_end = "2021-10-06"), # treaty fishery closure
-        # tibble(section = "2", closure_begin = "2021-10-12", closure_end = "2021-10-13"), # treaty fishery closure
-        # tibble(section = "2", closure_begin = "2021-10-19", closure_end = "2021-10-20"), # treaty fishery closure
-        # tibble(section = "1,2,3", closure_begin = "2021-11-13", closure_end = "2021-11-14"), # river out due to flows
-        # tibble(section = "1,2,3", closure_begin = "2021-11-17", closure_end = "2021-11-18") # river out due to flows
-
+        #Skagit fall salmon?
+        tibble(section = "2,3", closure_begin = "2021-08-19", closure_end = "2021-08-31"),
+        tibble(section = "2", closure_begin = "2021-09-01", closure_end = "2021-09-01"), # treaty fishery closure
+        tibble(section = "2", closure_begin = "2021-09-07", closure_end = "2021-09-09"), # treaty fishery closure
+        tibble(section = "2", closure_begin = "2021-09-14", closure_end = "2021-09-16"), # treaty fishery closure
+        tibble(section = "1,2,3", closure_begin = "2021-09-18", closure_end = "2021-09-18"), # river out due to flows
+        tibble(section = "2", closure_begin = "2021-10-05", closure_end = "2021-10-06"), # treaty fishery closure
+        tibble(section = "2", closure_begin = "2021-10-12", closure_end = "2021-10-13"), # treaty fishery closure
+        tibble(section = "2", closure_begin = "2021-10-19", closure_end = "2021-10-20"), # treaty fishery closure
+        tibble(section = "1,2,3", closure_begin = "2021-11-13", closure_end = "2021-11-14"), # river out due to flows
+        tibble(section = "1,2,3", closure_begin = "2021-11-17", closure_end = "2021-11-18") # river out due to flows
+        
+        ## other Skagit fall salmon?
         # tibble(section = "3,4,5", closure_begin = "2021-08-19", closure_end = "2021-08-31"),
         # tibble(section = "3", closure_begin = "2021-09-01", closure_end = "2021-09-01"), # treaty fishery closure
         # tibble(section = "3", closure_begin = "2021-09-07", closure_end = "2021-09-09"), # treaty fishery closure
@@ -365,7 +372,7 @@ reactive({
 
 ### wrangling and calcs
 
-```{r prep_effort_interview, include = FALSE}
+```{r prep_effort_interview}
 #Aggregate census (tie in) effort counts, associating to closest-in-time index count.
 #take the initial effort_census, with all count_sequence == 1,
 #add/overwrite the count_sequence val with that from closest temporal match from inline/anonymous paired counts object
@@ -429,7 +436,7 @@ pe_effort_index <-
   dplyr::arrange(event_date, section, count_sequence)
 #})
 
-# pe_effort_index_daily_mean <- reactive({
+#pe_effort_index_daily_mean <- reactive({
 #   pe_effort_index() |> 
 pe_effort_index_daily_mean <- pe_effort_index |> 
   dplyr::group_by(event_date, section, angler_type) |>
@@ -442,7 +449,7 @@ pe_effort_index_daily_mean <- pe_effort_index |>
 # #!!Does this actually need row-wise time_strata?
 # #!!Maintain angler_hours_total filter?
 # #!!lots of extra cols still at this point...
-# pe_interview <- reactive({
+#pe_interview <- reactive({
 pe_interview <- 
   left_join(creel$interview, creel$days, by = "event_date") |>
   mutate(
@@ -471,7 +478,51 @@ pe_interview <-
   filter(angler_hours_total >= 0.5)
 #})
 
-#likely bring intervew_catch object creation up here...?
+
+# join catch data to interview after inferring complete cases (counts or 0s for all catch_groups encountered)
+#!!should already be distinct on interview_id
+#!!currently filtered to angler_hours >= 0.5
+#!!so some rows in creel$catch for "short" interviews may be lost in join 
+#!!note also that interview_ids in creel$interview/pe_interview may have no catch and not be in creel$catch
+#!!so are consequently coded NA for catch_group
+# setdiff(creel$catch$interview_id, pe_interview$interview_id)  #lost in the join, due to "short" angler_hours
+# setdiff(creel$interview$interview_id, creel$catch$interview_id) #no catch, so no catch_group(s) to assign
+# interview_and_catch |> filter(is.na(catch_group))
+#!!added final mutate as an option to code level as something...
+
+#pe_interview_and_catch <- reactive({
+pe_interview_and_catch <- 
+  left_join(
+    pe_interview |> drop_na(angler_hours) 
+#    pe_interview() |> drop_na(angler_hours) 
+    ,
+    creel$catch |> 
+      group_by(interview_id, catch_group) |> 
+      summarise(fish_count = sum(fish_count, na.rm = T), .groups = "drop") |> 
+      pivot_wider(
+        names_from = catch_group,
+        values_from = fish_count,
+        values_fill = 0) |> 
+      pivot_longer(
+        cols = -interview_id, 
+        names_to = "catch_group", 
+        values_to = "fish_count"
+      ) 
+    , 
+    by = "interview_id"
+  ) |> #filter(is.na(catch_group)) |> select(interview_id, total_group_count, starts_with("angler_"), catch_group, fish_count)
+  mutate(
+    catch_group = replace_na(catch_group, "no encounter data"),
+    fish_count = replace_na(fish_count, 0)
+  ) |> 
+  #drop a few unused cols for ease of dev
+  select(-creel_event_id, -water_body, -project_name, -interview_number,
+         -crc_area, -fishing_location, -ends_with("_time"),
+         -c(trip_guided:water_body_desc),
+         -day_index, -Day, -c(DayType_num:angler_type_ind)
+         )
+#})
+
 ```
 
 *NOT YET SHINY*
@@ -487,74 +538,78 @@ days_join <- creel$days |>
     section = list(unique(sections$section)),
     angler_type = list(c("bank", "boat")) 
   ) |> 
-  unnest(cols = c(section, angler_type))
+  unnest(cols = section) |> 
+  unnest(cols = angler_type)
 
-# #"days_join" also separate_rows option?
+# # #"days_join" also separate_rows option?
 # creel$days |>
-#   mutate(time_strata = if_else(ModelPeriod == "Month", Month, Week)) |> 
-#   select(time_strata, event_date, DayType, starts_with("open_section")) |> 
+#   mutate(time_strata = if_else(ModelPeriod == "Month", Month, Week)) |>
+#   select(time_strata, event_date, DayType, starts_with("open_section")) |>
 #   mutate(
 #     section = paste0(unique(sections$section), collapse = ","),
 #     angler_type = paste0(c("bank", "boat"), collapse = ",") #is total ever actually needed?
-#   ) |> 
-#   separate_rows(c(section, angler_type), sep = ",")
+#   ) |>
+#   separate_rows(section,  sep = ",") |> 
+#   separate_rows(angler_type, sep = ",")
 
+
+#!!The first block in the index_count_types test joins tie-in expanded census counts of anglers by type (per section)
+#!!back against daily mean index counts of anglers expanded by day length
+#!!the calc "mean_daily_effort = count_index_mean * DayL" seems to imply count_index_mean is normalized to per-hour
+#!!but it is just the mean per-day over possibly several index counts per section and angler type
+#!!so it is only a per-hour unit if the count_index values being averaged are already per-hour???
+#!!the count_index values being averaged are summed per count_sequence - is the protocol to only count for an hour?
 
 if(str_detect(input$index_count_types, "Bank|Boat")) {
-  
-  daily_effort_estimates <- left_join(
-    pe_effort_index_daily_mean, 
-    creel$days |> select(event_date, DayL),
-    by = "event_date") |> 
-    mutate(mean_daily_effort = count_index_mean * DayL) |>
-    arrange(event_date, section)
-  
-  # left join index effort counts to census counts 
-  census_counts_all <- left_join(
-    pe_effort_census, #summed by event_date, section, tie_in_indicator, count_sequence, angler_type [bank, boat]
-    pe_effort_index, #summed by event_date, section, count_sequence, count_type [Bank Ang, Boat Ang, Vehic, Trailr] and derived angler_type [bank, boat, total])
-    by = c("event_date", "section", "count_sequence","angler_type")
-  ) |>
-    mutate(
-      count_index = replace_na(count_index, 0),
-      TI_expan = count_census / count_index,
-      TI_expan = if_else(is.infinite(TI_expan) | is.nan(TI_expan), NA_real_, TI_expan)
-    ) |> 
-    group_by(section, angler_type) |> 
-    summarise(
-      TI_expan_mean = mean(TI_expan, na.rm=TRUE),
-      TI_expan_weighted = sum(count_census) / sum(count_index),
-      across(
-        c(TI_expan_mean, TI_expan_weighted),
-        ~if_else(. == 0, 1, .) |> replace_na(1)
-      ),
-      .groups = "drop"
-    ) |> 
-    left_join(
-      census_exp |> 
-        select(cen_exp_meth, angler_type, section, p_TI, TI_expan_indirect = Indirect_TI_Expan),
-      by = c("angler_type", "section")
-    ) |>
-    mutate(
-      #dealing with e.g. Cascade edge case of nothing to join for an angler_type/section
-      #should really be addressed in the Prop_Expansion table...
-      cen_exp_meth = replace_na(cen_exp_meth, input$census_expansion),
-      p_TI = replace_na(p_TI, 1),
-      TI_expan_indirect = as.numeric(TI_expan_indirect) |> replace_na(1),
-      TI_expan_final = if_else(
-        cen_exp_meth == "Direct" | is.na(cen_exp_meth),
-        TI_expan_weighted / p_TI,
-        TI_expan_indirect)
-    )
-
-#!!Could bring intermediate object creation inline into left_join
-#!!leaving for now for clarity pre-review by EB/KB
-#!!maybe drop second select() after right_join() if can drop right_join itself?
   # join census (tie in) counts to index counts 
   # calculate mean daily effort multipled by bias term (tie in ratio) from census counts
   effort_interviews_final <- left_join(
-    daily_effort_estimates,
-    census_counts_all, 
+    #daily_effort_estimates
+    left_join(
+      pe_effort_index_daily_mean, 
+      creel$days |> select(event_date, DayL),
+      by = "event_date") |> 
+      mutate(mean_daily_effort = count_index_mean * DayL) |>
+      arrange(event_date, section)
+    ,
+    #census_counts_all: left join index effort counts to census counts 
+    left_join(
+      pe_effort_census, #summed by event_date, section, tie_in_indicator, count_sequence, angler_type [bank, boat]
+      pe_effort_index, #summed by event_date, section, count_sequence, count_type [Bank Ang, Boat Ang, Vehic, Trailr] and derived angler_type [bank, boat, total])
+      by = c("event_date", "section", "count_sequence","angler_type")
+    ) |>
+      mutate(
+        count_index = replace_na(count_index, 0),
+        TI_expan = count_census / count_index,
+        TI_expan = if_else(is.infinite(TI_expan) | is.nan(TI_expan), NA_real_, TI_expan)
+      ) |> 
+      group_by(section, angler_type) |> 
+      summarise(
+        TI_expan_mean = mean(TI_expan, na.rm=TRUE),
+        TI_expan_weighted = sum(count_census) / sum(count_index),
+        across(
+          c(TI_expan_mean, TI_expan_weighted),
+          ~if_else(. == 0, 1, .) |> replace_na(1)
+        ),
+        .groups = "drop"
+      ) |> 
+      left_join(
+        census_exp |> 
+          select(cen_exp_meth, angler_type, section, p_TI, TI_expan_indirect = Indirect_TI_Expan),
+        by = c("angler_type", "section")
+      ) |>
+      mutate(
+        #dealing with e.g. Cascade edge case of nothing to join for an angler_type/section
+        #should really be addressed in the Prop_Expansion table...
+        cen_exp_meth = replace_na(cen_exp_meth, input$census_expansion),
+        p_TI = replace_na(p_TI, 1),
+        TI_expan_indirect = as.numeric(TI_expan_indirect) |> replace_na(1),
+        TI_expan_final = if_else(
+          cen_exp_meth == "Direct" | is.na(cen_exp_meth),
+          TI_expan_weighted / p_TI,
+          TI_expan_indirect)
+      )
+    , 
     by = c("section", "angler_type")
   ) |>
     mutate(
@@ -563,6 +618,7 @@ if(str_detect(input$index_count_types, "Bank|Boat")) {
     )  |>
     select(event_date, section, angler_type, mean_daily_TI_expan) |> 
     right_join(days_join, by = c("event_date", "section", "angler_type")) |>
+#!!maybe drop this second select() if possible to drop right_join itself?
     select(time_strata, event_date, DayType, section, angler_type, everything()) |> 
     mutate(
       creeled = if_else(!is.na(mean_daily_TI_expan) & open_section_1 == TRUE, "Y", "N")
@@ -674,7 +730,7 @@ if(str_detect(input$index_count_types, "Bank|Boat")) {
     #!!is "total" really needed/used? 
     #!!   not present for a non-trailer/vehicle index case
     #!!   and just creates additional level that could be dropped against days_join obj?
-    effort_interviews_totalandboat <- left_join(
+    effort_interviews_prelim <- left_join(
       daily_effort_estimates |> select(event_date, section, angler_type, mean_daily_effort),
       census_counts_all |> select(section, angler_type, TI_expan_final),
       by = c("section", "angler_type")
@@ -684,10 +740,10 @@ if(str_detect(input$index_count_types, "Bank|Boat")) {
     if(any(pe_interview$angler_type=="boat")) {
       effort_interviews_final <- bind_rows(
         #total and boat
-        effort_interviews_totalandboat |> 
+        effort_interviews_prelim |> 
           select(event_date, section, angler_type, mean_daily_TI_expan),
         #derived bank
-        effort_interviews_totalandboat |> 
+        effort_interviews_prelim |> 
           select(event_date, section, angler_type, mean_daily_TI_expan) |> 
           pivot_wider(names_from = angler_type, values_from = mean_daily_TI_expan, values_fill = 0) |>
           mutate(
@@ -701,12 +757,12 @@ if(str_detect(input$index_count_types, "Bank|Boat")) {
         arrange(event_date)
     } else { #only angler_type == "total", coerce "boat" to 0 and "bank" to total
       effort_interviews_final <- bind_rows(
-        effort_interviews_totalandboat |> 
+        effort_interviews_prelim |> 
           select(event_date, section, angler_type, mean_daily_TI_expan),
-        effort_interviews_totalandboat |> 
+        effort_interviews_prelim |> 
           select(event_date, section) |> 
           mutate(angler_type = "boat", mean_daily_TI_expan = 0),
-        effort_interviews_totalandboat |> 
+        effort_interviews_prelim |> 
           select(event_date, section, mean_daily_TI_expan) |> 
           mutate(angler_type = "bank")
       ) |> 
@@ -794,48 +850,6 @@ effort_interviews_final_strata_mean <- effort_interviews_final |>
 
 ```{r interview_catch_daily_CPUE, eval = FALSE}
 
-#!!Move this up with other reactive pe_* object creation?
-# join catch data to interview after inferring complete cases (counts or 0s for all catch_groups encountered)
-#!!should already be distinct on interview_id
-#!!currently filtered to angler_hours >= 0.5
-#!!so some rows in creel$catch for "short" interviews may be lost in join 
-#!!note also that interview_ids in creel$interview/pe_interview may have no catch and not be in creel$catch
-#!!so are consequently coded NA for catch_group
-# setdiff(creel$catch$interview_id, pe_interview$interview_id)  #lost in the join, due to "short" angler_hours
-# setdiff(creel$interview$interview_id, creel$catch$interview_id) #no catch, so no catch_group(s) to assign
-# interview_and_catch |> filter(is.na(catch_group))
-#!!added final mutate as an option to code level as something...
-
-interview_and_catch <- left_join(
-    pe_interview |> drop_na(angler_hours) 
-    ,
-    creel$catch |> 
-      group_by(interview_id, catch_group) |> 
-      summarise(fish_count = sum(fish_count, na.rm = T), .groups = "drop") |> 
-      pivot_wider(
-        names_from = catch_group,
-        values_from = fish_count,
-        values_fill = 0) |> 
-      pivot_longer(
-        cols = -interview_id, 
-        names_to = "catch_group", 
-        values_to = "fish_count"
-      ) 
-    , 
-    by = "interview_id"
-  ) |> #filter(is.na(catch_group)) |> select(interview_id, total_group_count, starts_with("angler_"), catch_group, fish_count)
-  mutate(
-    catch_group = replace_na(catch_group, "no encounter data"),
-    fish_count = replace_na(fish_count, 0)
-  ) |> 
-  #drop a few unused cols for ease of dev
-  select(-creel_event_id, -water_body, -project_name, -interview_number,
-         -crc_area, -fishing_location, -ends_with("_time"),
-         -c(trip_guided:water_body_desc),
-         -day_index, -Day, -c(DayType_num:angler_type_ind)
-         )
-
-
 # #previously built "angler_hours_summary" object
 # #was mean angler hours by complete strata:  time_strata, DayType, section, angler_type, catch_group
 # #meant for use in "case of non-zero catch but no angler hours to use to calculate CPUE (should be a rare situation)"
@@ -865,7 +879,7 @@ interview_and_catch <- left_join(
 #!!may need to add logic to avoid NaN if below if_else evals false AND any angler_hours_strata_mean==0?
 #next aggregate interviews per day per strata of [week/month-weekend/day-section-bank/boat-catch_group]
 #!!DA: the cpue_rom here is a ratio of sums - are we calling that equivalent to "ratio of the means"?
-interview_daily_totals <- interview_and_catch |> 
+interview_daily_totals <- pe_interview_and_catch |>
   group_by(time_strata, DayType, section, angler_type, catch_group) |>
   mutate(angler_hours_strata_mean = mean(angler_hours_total)) |> 
   ungroup() |>
