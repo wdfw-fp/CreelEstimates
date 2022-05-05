@@ -1,7 +1,0 @@
-Model_number,Model_Name,Model_file_name,ProcessErrors,Effort,CPUE,b,R_V,R_T,p_I,Day_WN,psamp,Comment,"Current ""best"" model?"
-1,BSS_01_Uncorr,BSS_creel_model_01_2021-01-21.stan,Uncorrelated,RE means within gear,RE means within gear,indep by gear,indep by gear,indep by gear,"indep by gear, section",N,NA,,
-2,BSS_02_Corr,BSS_creel_model_02_2021-01-22.stan,Corellated,RE means within gear,RE means within gear,indep by gear,indep by gear,indep by gear,"indep by gear, section",N,NA,,
-3,BSS_03_test_Uncorr,BSS_creel_model_03_test_2021-01-21.stan,Uncorrelated,RE means within gear,RE means within gear,indep by gear,indep by gear,indep by gear,"indep by gear, section",Y,NA,,
-4,BSS_04_corr,BSS_creel_model_04_2021-02-04.stan,Corellated,RE means within gear,RE means within gear,indep by gear,indep by gear,indep by gear,"indep by gear, section",N,"independent for catch and effort separately, each given improper priors",,Yes
-5,BSS_05_uncorr,BSS_creel_model_05_2021-02-04.stan,Uncorrellated,RE means within gear,RE means within gear,indep by gear,indep by gear,indep by gear,"indep by gear, section",N,"independent for catch and effort separately, each given improper priors",,Yes
-6,BSS_06_corr,BSS_creel_model_06_2021-02-04.stan,Corellated,RE means within gear,RE means within gear,indep by gear,indep by gear,indep by gear,"indep by gear, section",N,"independent for catch and effort separately, each given improper priors",no tie ins!,Yes
