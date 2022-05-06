@@ -41,16 +41,21 @@ proj_levels <- list(
   `District 14` = list("Cascade River", "Sauk River", "Skagit River")
 )
 
-#lookup objects created below: 
+#lookup objects created in build_envi chunk below: 
 # -dates of holidays
 # -river lon/lat (for day length)
 # -sections (for aggregating count/interview locations)
 # -tie-in expansions
+# -closure files
 load("fw_creel_dash_envi.RData")
 
-creel <- reactiveValues() #will hold resulting data objects ##event = NULL, effort = NULL, interview = NULL, catch = NULL
-pe <- reactiveValues()
-ests <- reactiveValues()
+river_lonlat <- reactiveValues() #filtered from lu$river_lonlat tibble
+sections <- reactiveValues() #pulled from lu$sections list of tibbles
+census_exp <- reactiveValues() #pulled from lu$census_expansions list of tibbles
+closures <- reactiveValues() #pulled from lu$closures list of tibbles
+creel <- reactiveValues() #data queried from DWG as list of tibbles
+pe <- reactiveValues() #intermediate objects wrangled from creel list elements
+ests <- reactiveValues() #final objects calc'd from pe & creel
 
 ```
 
@@ -58,39 +63,41 @@ ests <- reactiveValues()
 # # likely will need to build out route to load sections/closures etc on the fly?
 # # uncomment to rebuild...
 # 
-# dates_holidays_2015_2030 <- read_lines("input_files/dates_holidays_2015_2030.txt") |>
+# lu <- list()
+# 
+# lu$dates_holidays_2015_2030 <- read_lines("input_files/dates_holidays_2015_2030.txt") |>
 #   as.Date(format="%Y-%m-%d")
 # 
 # #single tibble
-# lu_river_lonlat <- readr::read_csv("input_files/river_locations_master.csv")
+# lu$river_lonlat <- readr::read_csv("input_files/river_locations_master.csv")
 # 
 # #list of tibbles
-# lu_sections <- list.files("input_files", pattern = "sections_", full.names = T) |>
+# lu$sections <- list.files("input_files", pattern = "sections_", full.names = T) |>
 #   set_names() |> map(readr::read_csv)
-# names(lu_sections) <- tools::file_path_sans_ext(basename(names(lu_sections))) |> str_remove("sections_")
+# names(lu$sections) <- tools::file_path_sans_ext(basename(names(lu$sections))) |> str_remove("sections_")
 # 
 # #list of tibbles
-# lu_census_expansions <- list.files("input_files", pattern = "ti_expansions_", full.names = T) |>
+# lu$census_expansions <- list.files("input_files", pattern = "ti_expansions_", full.names = T) |>
 #   set_names() |> map(readr::read_csv)
-# names(lu_census_expansions) <- tools::file_path_sans_ext(basename(names(lu_census_expansions))) |> str_remove("ti_expansions_")
+# names(lu$census_expansions) <- tools::file_path_sans_ext(basename(names(lu$census_expansions))) |> str_remove("ti_expansions_")
 # 
-# # #!! snippet to mod to build closure.csvs for other datasets...
-# # #!! change vals in "s" and "write_csv"
-# # #!! file is date-complete over the focal range
-# # #!! with cols per section, elements coded open==T, closed==F
+# # # #!! snippet to mod to build closure.csvs for other datasets...
+# # # #!! change vals in event_date, s and write_csv
+# # # #!! file is date-complete over the focal range
+# # # #!! with cols per section, elements coded open==T, closed==F
 # # expand_grid(
-# #   event_date = seq.Date(as.Date("2021-05-29"), as.Date("2021-07-18"), by = "day"),
-# #   s = paste0("open_section_", 1),
+# #   event_date = seq.Date(as.Date("2021-09-16"), as.Date("2021-11-30"), by = "day"),
+# #   s = paste0("open_section_", c(1)),
 # #   is_open = TRUE
 # #   ) |>
 # #   pivot_wider(names_from = s, values_from = is_open) |>
-# #   write_csv("input_files/closures_d13_skykomish_summer_chin.csv")
+# #   write_csv("input_files/closures_district_river_season_species.csv")
 # 
 # #list of tibbles
-# lu_closures_by_section <- list.files("input_files", pattern = "closures_", full.names = T) |>
+# lu$closures_by_section <- list.files("input_files", pattern = "closures_", full.names = T) |>
 #   set_names() |> map(readr::read_csv)
-# names(lu_closures_by_section) <- tools::file_path_sans_ext(basename(names(lu_closures_by_section))) |> str_remove("closures_")
-#   
+# names(lu$closures_by_section) <- tools::file_path_sans_ext(basename(names(lu$closures_by_section))) |> str_remove("closures_")
+# 
 # #save.image("fw_creel_dash_envi.RData")
 
 ```
@@ -114,13 +121,13 @@ dateRangeInput(inputId = 'dates', label = "Date range"
                , start = "2021-05-29", end = "2021-07-18" 
                )
 
-selectInput(inputId = 'closures', label = 'Closures', choices = names(lu_closures_by_section), multiple = FALSE
+selectInput(inputId = 'closures', label = 'Closures', choices = names(lu$closures_by_section), multiple = FALSE
             , selected = "d13_skykomish_summer_chin"
             )
-selectInput(inputId = 'sections', label = 'Sections', choices = names(lu_sections), multiple = FALSE
+selectInput(inputId = 'sections', label = 'Sections', choices = names(lu$sections), multiple = FALSE
             , selected = "d13_skykomish_summer_chin"
             )
-selectInput(inputId = 'census_exp', label = 'Census Expansion LU', choices = names(lu_census_expansions), multiple = FALSE
+selectInput(inputId = 'census_exp', label = 'Census Expansion LU', choices = names(lu$census_expansions), multiple = FALSE
             , selected = "d13_skykomish_summer_chin"
             )
 
@@ -173,58 +180,52 @@ actionButton("fetch", label = "Fetch raw data")
 # # input$sections <- "d14_skagit_fall_salmon_PE"
 # # input$census_exp <- "Skagit_Fall_Salmon_2021"
 # 
-# river_lonlat <- dplyr::filter(lu_river_lonlat, River %in% input$water_body) |> dplyr::distinct(District, .keep_all = T)
-# sections <- dplyr::select(lu_sections[[input$sections]], water_body_desc, location = location_code, section)
+# river_lonlat <- dplyr::filter(lu$river_lonlat, River %in% input$water_body) |> dplyr::distinct(District, .keep_all = T)
+# sections <- dplyr::select(lu$sections[[input$sections]], water_body_desc, location = location_code, section)
 # census_exp <- if(str_detect(input$index_count_types, "Vehicle|Trailer")) {
-#     lu_census_expansions[[input$census_exp]] |>
+#     lu$census_expansions[[input$census_exp]] |>
 #       mutate(
 #         angler_type = if_else(angler_type == "bank", "total", "boat"),
 #         cen_exp_meth = input$census_expansion)
 #   } else {
-#     lu_census_expansions[[input$census_exp]] |>
+#     lu$census_expansions[[input$census_exp]] |>
 #       mutate(cen_exp_meth = input$census_expansion)
 #     }
-# closures <- lu_closures_by_section[[input$closures]]
-
-
-#!!Lon/lat only used in day-length calc?
-#!!anywhere/anywhy that distinct() would be a problem?
-#!!i.e., anyone realistically using this to run ests on widely spaced rivers?
-river_lonlat <- reactive({
-  dplyr::filter(lu_river_lonlat, River %in% input$water_body) |> 
-    dplyr::distinct(River, .keep_all = T)
-})
-
-#!!note the current fetch drops/excludes effort and interview rows
-#!!if no section assigned from section LU
-sections <- reactive({
-  dplyr::select(
-    lu_sections[[input$sections]], 
-    water_body_desc, location = location_code, section)
-})
-
-## fixes angler type in census expansion table for use with vehicle / trailer counts so it joins to TI_expan table
-census_exp <- reactive({
-  if(str_detect(input$index_count_types, "Vehicle|Trailer")) {
-    lu_census_expansions[[input$census_exp]] |> 
-      mutate(
-        angler_type = if_else(angler_type == "bank", "total", "boat"),
-        cen_exp_meth = input$census_expansion
-        )
-  } else {
-    lu_census_expansions[[input$census_exp]] |> 
-      mutate(cen_exp_meth = input$census_expansion)
-    }
-})
-
-closures <- reactive({
-  lu_closures_by_section[[input$closures]]
-})
+# closures <- lu$closures_by_section[[input$closures]]
 
 
 #!!this is "event reactive", so should not trigger on fiddling with inputs
 #!!but only when "fetch" button is clicked (see last few lines of chunk)
 reactive({
+
+  #!!Lon/lat only used in day-length calc?
+  #!!anywhere/anywhy that distinct() would be a problem?
+  #!!i.e., anyone realistically using this to run ests on widely spaced rivers?
+  river_lonlat <- dplyr::filter(
+    lu$river_lonlat, River %in% input$water_body) |> 
+      dplyr::distinct(River, .keep_all = T)
+  
+  #!!note the current fetch drops/excludes effort and interview rows
+  #!!if no section assigned from section LU
+  sections <- dplyr::select(
+      lu$sections[[input$sections]], 
+      water_body_desc, location = location_code, section)
+
+  ## fixes angler type in census expansion table for use with vehicle / trailer counts so it joins to TI_expan table
+  if(str_detect(input$index_count_types, "Vehicle|Trailer")) {
+    census_exp <- lu$census_expansions[[input$census_exp]] |> 
+      mutate(
+        angler_type = if_else(angler_type == "bank", "total", "boat"),
+        cen_exp_meth = input$census_expansion
+      )
+  } else {
+    census_exp <- lu$census_expansions[[input$census_exp]] |> 
+      mutate(cen_exp_meth = input$census_expansion)
+  }
+  
+  closures <- lu$closures_by_section[[input$closures]]
+
+  
   creel$event <- paste0(
     dwg_base$event,
     "?$where=project_name in('", input$proj_name, "')",
@@ -249,8 +250,8 @@ reactive({
       readr::read_csv(show_col_types = F) |>
       dplyr::filter(!is.na(count_type)) |> 
       dplyr::select(-created_datetime, -modified_datetime) |> 
-#      dplyr::left_join(sections, by = c("location")) |> 
-      dplyr::left_join(sections(), by = c("location")) |> 
+      dplyr::left_join(sections, by = c("location")) |> 
+#      dplyr::left_join(sections(), by = c("location")) |> 
       dplyr::filter(!is.na(section))
 
     creel$interview <- paste0(
@@ -265,8 +266,8 @@ reactive({
       dplyr::select(
         -created_datetime, -modified_datetime,
         -state_residence, -zip_code) |> 
-#      dplyr::left_join(sections, by = c("location")) |> 
-      dplyr::left_join(sections(), by = c("location")) |> 
+      dplyr::left_join(sections, by = c("location")) |> 
+#      dplyr::left_join(sections(), by = c("location")) |> 
       dplyr::filter(!is.na(section))
     
     creel$catch <- paste0(
@@ -288,16 +289,16 @@ reactive({
       event_date = seq.Date(input$dates[1], input$dates[2], by = "day"),
       Day = weekdays(event_date),
       DayType = if_else(
-        Day == "Saturday" | Day == "Sunday" | Day %in% dates_holidays_2015_2030,
+        Day == "Saturday" | Day == "Sunday" | Day %in% lu$dates_holidays_2015_2030,
         "Weekend", "Weekday"),
       DayType_num = if_else(str_detect(DayType, "end"),1,0),
       DayL = suncalc::getSunlightTimes(
         date = event_date,
         tz = "America/Los_Angeles",
-#         lat = river_lonlat$Lat,
-#         lon = river_lonlat$Long,
-        lat = river_lonlat()$Lat,
-        lon = river_lonlat()$Long,
+         lat = river_lonlat$Lat,
+         lon = river_lonlat$Long,
+#        lat = river_lonlat()$Lat,
+#        lon = river_lonlat()$Long,
         keep=c("dawn", "dusk")
       ) |>
         mutate(DayL = as.numeric(dusk - dawn)) |>
@@ -309,8 +310,8 @@ reactive({
     ) |>
       tibble::rowid_to_column(var = "day_index") |>
       dplyr::left_join(
-#        closures,
-        closures(), 
+        closures,
+#        closures(), 
         by = "event_date"
       )
     
@@ -329,7 +330,7 @@ reactive({
     creel$days_section_angler_type <- creel$days |>
       select(time_strata, event_date, DayType, starts_with("open_section")) |> 
       mutate(
-        section = list(unique(sections()$section)),
+        section = list(unique(sections$section)),
         angler_type = list(c("bank", "boat")) 
       ) |> 
       unnest(cols = section) |> 
@@ -365,32 +366,11 @@ reactive({
     #   bind_rows(
     #     # # 2022 Upper Skagit Chinook
     #     # tibble(section = "1", closure_begin = "2021-05-31", closure_end = "2021-05-31")
-    # 
-    #     # # 2021 Skagit winter steelhead closure dates
-    #     # tibble(section = "1,2", closure_begin = "2021-02-03", closure_end = "2021-02-05"),
-    #     # tibble(section = "1,2", closure_begin = "2021-02-10", closure_end = "2021-02-12"),
-    #     # tibble(section = "1,2", closure_begin = "2021-02-17", closure_end = "2021-02-19"),
-    #     # tibble(section = "1,2", closure_begin = "2021-02-24", closure_end = "2021-02-26"),
-    #     # tibble(section = "1,2", closure_begin = "2021-03-03", closure_end = "2021-03-05"),
-    #     # tibble(section = "1,2", closure_begin = "2021-03-10", closure_end = "2021-03-12"),
-    #     # tibble(section = "1,2", closure_begin = "2021-03-17", closure_end = "2021-03-19"),
-    #     # tibble(section = "1,2", closure_begin = "2021-03-24", closure_end = "2021-03-26"),
-    #     # tibble(section = "1,2", closure_begin = "2021-03-31", closure_end = "2021-04-02"),
-    #     # tibble(section = "1,2", closure_begin = "2021-04-07", closure_end = "2021-04-09")
-    #     # tibble(section = "1", closure_begin = "2016-04-30", closure_end = "2016-04-30") # placeholder closure date; need to supply at least one
-    # 
+    #     # 
     #     # # Kalama
     #     # tibble(section = "1,2,3", closure_begin = "2016-04-30", closure_end = "2016-04-30")
     #     # placeholder closure date; need to supply at least onedate here because we use open / closed dates to determine times_strata estimation periods (field n_days further down in code)
-    # 
-    #     # # Cascade
-    #     # tibble(section = "1", closure_begin = "2021-09-18", closure_end = "2021-09-18"), # river out due to flows
-    #     # tibble(section = "1", closure_begin = "2021-09-19", closure_end = "2021-09-20"), # treaty fishery closure
-    #     # tibble(section = "1", closure_begin = "2021-09-26", closure_end = "2021-09-27"), # treaty fishery closure
-    #     # tibble(section = "1", closure_begin = "2021-10-03", closure_end = "2021-10-04"), # treaty fishery closure
-    #     # tibble(section = "1", closure_begin = "2021-11-13", closure_end = "2021-11-14"), # river out due to flows
-    #     # tibble(section = "1", closure_begin = "2021-11-17", closure_end = "2021-11-18") # river out due to flows
-    # 
+    #     # 
     #     # # Skagit fall salmon?
     #     # tibble(section = "2,3", closure_begin = "2021-08-19", closure_end = "2021-08-31"),
     #     # tibble(section = "2", closure_begin = "2021-09-01", closure_end = "2021-09-01"), # treaty fishery closure
@@ -624,7 +604,7 @@ reactive({
           .groups = "drop"
         ) |> 
         left_join(
-          census_exp() |> 
+          census_exp |> 
             select(cen_exp_meth, angler_type, section, p_TI, TI_expan_indirect = Indirect_TI_Expan),
           by = c("angler_type", "section")
         ) |>
@@ -730,8 +710,8 @@ reactive({
           .groups = "drop"
         ) |> 
         left_join(
-          census_exp() |> 
-#          census_exp |> 
+#          census_exp() |> 
+          census_exp |> 
             select(cen_exp_meth, angler_type, section, p_TI, TI_expan_indirect = Indirect_TI_Expan),
           by = c("angler_type", "section")
         ) |>
