@@ -654,24 +654,26 @@ reactive({
     
 }
   
-  
-  # add days objects to the table with index count data
   pe$angler_hours_daily_mean <- pe$angler_hours_daily_mean |>
     drop_na(ang_hrs_daily_mean_TI_expan) |>
-    left_join(creel$days_total, by = c("time_strata", "DayType", "section")) |>
+    #add total days per DayType in week/month strata
     left_join(
-      # number of days sampled within monitoring period
+      creel$days_total, 
+      by = c("time_strata", "DayType", "section")) |>
+    #add number of days sampled within that dayType-time_strata
+    left_join(
       pe$angler_hours_daily_mean |>
         filter(!is.na(ang_hrs_daily_mean_TI_expan) & creeled == "Y") |>
         count(time_strata, DayType, section, angler_type, name = "n_days"),
       by = c("time_strata", "DayType", "section", "angler_type")) |>
+    #add total days per DayType across time_strata
     left_join(
       creel$days_total |>
         group_by(section, DayType) |>
         summarise(N_days_total = sum(N_days), .groups = "drop"),
       by = c("DayType", "section")) |>
+    #add total days sampled by DayType across time_strata
     left_join(
-      # summarized over time_strata number of days sampled within monitoring period
       pe$angler_hours_daily_mean |>
         filter(!is.na(ang_hrs_daily_mean_TI_expan) & creeled == "Y") |>
         count(time_strata, DayType, section, angler_type, name = "n_days") |>
@@ -695,39 +697,15 @@ reactive({
     select(time_strata, event_date, DayType, section, angler_type, everything())
 
   #### reaching dailyCPUE object ------------------------
-  # #previously built "angler_hours_summary" object
-  # #was mean angler hours by complete strata:  time_strata, DayType, section, angler_type, catch_group
-  # #meant for use in "case of non-zero catch but no angler hours to use to calculate CPUE (should be a rare situation)"
-  # #e.g.: interview_and_catch |> filter(fish_count>0) |> filter(angler_hours_total<0.5)
-  # #but only left_joined back to interview_and_catch
-  # #so complete cases unnecessary (since lost in join)
-  # #NOW JUST PER_GROUP MUTATING ON to avoid intermediate creation and rejoin
-  # angler_hours_strata_mean <- interview_and_catch |>
-  #   group_by(time_strata, DayType, section, angler_type, catch_group) |>
-  #   summarise(angler_hours_strata_mean = mean(angler_hours_total), .groups = "drop") |>
-  #   complete(
-  #     time_strata, DayType, section, angler_type, catch_group,
-  #     fill = list(angler_hours_strata_mean = 0)
-  #     )
-  #
-  # angler_hours_strata_mean |> filter(angler_hours_strata_mean==0)
-  # interview_and_catch |> filter(time_strata==38, DayType=="Weekend", section==1, angler_type=="bank", catch_group=="Bull Trout_Adult_NA_Released")
-  #
-  # # interview_daily_totals <- left_join(
-  # #   interview_and_catch,
-  # #   angler_hours_summary,
-  # #   by = c("time_strata", "DayType", "section", "angler_type", "catch_group")
-  # #   ) |>
-
 
   #first add strata mean vals in case of 0 angler_hours_total on a day with non-zero fish_count
-  #!!may need to add logic to avoid NaN if below if_else evals false AND any angler_hours_strata_mean==0?
   #next aggregate interviews per day per strata of [week/month-weekend/day-section-bank/boat-catch_group]
-  #!!DA: the cpue_rom here is a ratio of sums - are we calling that equivalent to "ratio of the means"?
+  
   pe$interview_daily_totals <- pe$interview_and_catch |>
     group_by(time_strata, DayType, section, angler_type, catch_group) |>
     mutate(
       angler_hours_strata_mean = mean(angler_hours_total),
+#!!need to add logic to avoid NaN if below if_else evals false AND any angler_hours_strata_mean==0?
       cpue_interview = if_else(
         angler_hours_total > 0,
         fish_count / angler_hours_total, #angler_count * angler_hours
@@ -736,9 +714,8 @@ reactive({
     group_by(time_strata, event_date, DayType, section, angler_type, catch_group) |>
     summarise(
       n_groups = n(),
-      catch_daily = sum(fish_count),
-      angler_hours_total_daily = sum(angler_hours_total),
-      cpue_rom_daily = catch_daily / angler_hours_total_daily, # ratio of the means CPUE estimator
+#!!the cpue_rom here is a ratio of sums - are we calling that equivalent to "ratio of the means"?
+      cpue_rom_daily = sum(fish_count) / sum(angler_hours_total), # ratio of the means CPUE estimator
       cpue_mor_daily = mean(cpue_interview),  # mean of ratios CPUE estimator
       .groups = "drop"
     )
@@ -786,7 +763,7 @@ reactive({
   #   by = c("time_strata", "DayType", "section", "angler_type", "catch_group")
   #   )
 
-  #!!DA pending conversation with EB
+#!!DA pending conversation with EB this can be directly piped from above pe$interview_daily_totals and eliminate intermediary
   #rather than dailyCPUE as interview_daily_totals >>> interview_daily_totals_complete >>> left_join( interview_daily_totals >>> cpue_summary)
   #just mutate on the fields in cpue_strata_mean
   #and come back to figure out need for complete()
