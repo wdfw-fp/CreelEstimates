@@ -657,127 +657,46 @@ reactive({
         summarise(n_days_total = sum(n_days), .groups = "drop"),
       by = c("DayType", "section", "angler_type"))
 
-  pe$angler_hours_daily_mean_strata_mean <- pe$angler_hours_daily_mean |>
-    #!!Not including DayType in group_by?
-    group_by(time_strata, section, angler_type) |>
-    mutate(mean_strata_effort = mean(ang_hrs_daily_mean_TI_expan)) |>
-    ungroup() |>
-    #!!is this complete actually necessary??
-    complete(time_strata, section, angler_type, fill = list(mean_strata_effort = 0)) |>
-    mutate(
-      ang_hrs_daily_mean_TI_expan = if_else(
-        ang_hrs_daily_mean_TI_expan == 0,
-        mean_strata_effort,
-        ang_hrs_daily_mean_TI_expan
-      )) |>
-    select(time_strata, event_date, DayType, section, angler_type, everything())
+#   pe$angler_hours_daily_mean_strata_mean <- pe$angler_hours_daily_mean |>
+# #!!Not including DayType in group_by?
+#     group_by(time_strata, section, angler_type) |>
+#     mutate(mean_strata_effort = mean(ang_hrs_daily_mean_TI_expan)) |>
+#     ungroup() |>
+# #!!is this complete actually necessary??
+#     complete(time_strata, section, angler_type, fill = list(mean_strata_effort = 0)) |>
+#     mutate(
+#       ang_hrs_daily_mean_TI_expan = if_else(
+#         ang_hrs_daily_mean_TI_expan == 0,
+#         mean_strata_effort,
+#         ang_hrs_daily_mean_TI_expan
+#       )) |>
+#     select(time_strata, event_date, DayType, section, angler_type, everything())
 
   #### reaching dailyCPUE object ------------------------
 
-  #first add strata mean vals in case of 0 angler_hours_total on a day with non-zero fish_count
-  #next aggregate interviews per day per strata of [week/month-weekend/day-section-bank/boat-catch_group]
-  
-  pe$interview_daily_totals <- pe$interview_and_catch |>
-    group_by(time_strata, DayType, section, angler_type, catch_group) |>
-    mutate(
-      angler_hours_total_mean = mean(angler_hours_total),
-#!!need to add logic to avoid NaN if below if_else evals false AND any angler_hours_strata_mean==0?
-      cpue_interview = if_else(
-        angler_hours_total > 0,
-        fish_count / angler_hours_total, #angler_count * angler_hours
-        fish_count / angler_hours_total_mean)
-    ) |>
+  #aggregate interviews per day per strata of [week/month-weekend/day-section-bank/boat-catch_group]
+  pe$daily_CPUE <- pe$interview_and_catch |>
+    mutate(cpue_interview = fish_count / angler_hours_total) |>
     group_by(time_strata, event_date, DayType, section, angler_type, catch_group) |>
     summarise(
-      n_groups = n(),
-#!!the cpue_rom here is a ratio of sums - are we calling that equivalent to "ratio of the means"?
-      cpue_rom_daily = sum(fish_count) / sum(angler_hours_total), # ratio of the means CPUE estimator
+#!!      cpue_rom_daily = sum(fish_count) / sum(angler_hours_total), # ratio of the means CPUE estimator
       cpue_mor_daily = mean(cpue_interview),  # mean of ratios CPUE estimator
       .groups = "drop"
     )
 
-  # #calculate mean CPUE values by strata to use on days with known effort but a lack of interviews
-  # #further aggregates over per-day obs within a [week/month, weekend/day, bank/boat, catch_group]
-  # # cpue_mor_strata_mean is the mean over "daily_totals" obs which are over interview_id per day-otherstrata
-  # #the complete() here generates strata levels (assigned 0) not present in interview/catch data
-  # #Fisheries Techniques (Jones and Pollock 2012) suggest MOR for roving survey design
-  # cpue_strata_mean <- interview_daily_totals |>
-  #   group_by(time_strata, DayType, section, angler_type, catch_group) |>
-  #   summarise(
-  #     cpue_rom_strata_mean = mean(cpue_rom_daily),
-  #     cpue_mor_strata_mean = mean(cpue_mor_daily),
-  #     .groups = "drop"
-  #   ) |>
-  #   complete(
-  #     time_strata, DayType, section, angler_type, catch_group,
-  #     fill = list(cpue_mor_strata_mean = 0, cpue_rom_strata_mean = 0)
-  #     )
-  #
-  #
-  # #add implicit missing values of CPUE to dataset using tidyr complete() function
-  # interview_daily_totals_complete <- interview_daily_totals |>
-  #   complete(event_date, section, angler_type, catch_group,
-  #            fill = list(catch_daily = 0)) |>
-  #   select(time_strata, event_date, DayType, section, angler_type, catch_group, everything())
-  # #but this creates NAs for the other cpue cols besides catch_daily[sum]...
-  # #including time_strata in select() creates rows of NA time_strata since not included in complete()
-  # #was previously selecting off un-completed cols and then later rejoining creel$days and rebuilding time_strata
-  # interview_daily_totals_complete |> summary()
-  #
-  # #!!DA not sure exactly what is intended/desired here...
-  # #!!preferable to do something like a distinct?
-  # #!!or just use the rejoin of creel$days to get time_strata & DayType?
-  # interview_and_catch |>
-  #   distinct(event_date, section, angler_type, catch_group) |>
-  #   complete(event_date, section, angler_type, catch_group)
-  #
-  # #!!and/but/so this currently carries forward the NAs left in interview_daily_totals_complete
-  # # join mean_strata_cpue values to table with daily cpue values so we can use the mean strata cpue values on days with known effort but no corresponding interview
-  # daily_CPUE <- left_join(
-  #   interview_daily_totals_complete,
-  #   cpue_strata_mean,
-  #   by = c("time_strata", "DayType", "section", "angler_type", "catch_group")
-  #   )
-
-#!!DA pending conversation with EB this can be directly piped from above pe$interview_daily_totals and eliminate intermediary
-  #rather than dailyCPUE as interview_daily_totals >>> interview_daily_totals_complete >>> left_join( interview_daily_totals >>> cpue_summary)
-  #just mutate on the fields in cpue_strata_mean
-  #and come back to figure out need for complete()
-  pe$daily_CPUE <- pe$interview_daily_totals |>
-    group_by(time_strata, DayType, section, angler_type, catch_group) |>
-    mutate(
-      cpue_rom_strata_mean = mean(cpue_rom_daily),
-      cpue_mor_strata_mean = mean(cpue_mor_daily)
-    ) |>
-    ungroup()
-
-
   #### ests ingredients -------------
   #!! these first 3 objects are ingredients for subsequent effort and catch summary objects
-
+  
   pe$daily_effort_cpue_catch <- left_join(
     pe$daily_CPUE,
-    pe$angler_hours_daily_mean_strata_mean,
+    pe$angler_hours_daily_mean,   #pe$angler_hours_daily_mean_strata_mean,
     by = c("time_strata", "event_date", "DayType", "section", "angler_type")
   ) |>
     mutate(
-      #!!DA bad test? when would cpue_mor_daily eval NA? I've gotten rid of days/levels from a complete or join somewhere?
-      catch_estimate = if_else(
-        !is.na(cpue_mor_daily),
-        ang_hrs_daily_mean_TI_expan * cpue_mor_daily,
-        ang_hrs_daily_mean_TI_expan * cpue_mor_strata_mean
-      ),
-      # catch_estimate = if_else(catch_dailysum > 0 & ang_hrs_daily_mean_TI_expan == 0, cpue_mor * mean_strata_effort, catch_estimate) # circle bacl to this, issue is days with non-zero catch by no effort
-      # catch_estimate_rom = if_else(!is.na(cpue_rom), ang_hrs_daily_mean_TI_expan * cpue_rom, ang_hrs_daily_mean_TI_expan * mean_strata_cpue_rom), # option to use ratio of the means CPUE estimator
-      # catch_estimate = catch_estimate_mor
-      across(where(is.numeric), round, 2)
+      catch_estimate = round(ang_hrs_daily_mean_TI_expan * cpue_mor_daily, 2)
     ) |>
-    #!!DA YIKES!?!?
-    #!!seems either unnecessary or needs better specification of fields?
-    distinct() |>
-    # filter(!is.na(ang_hrs_daily_mean_TI_expan)) |>
     arrange(catch_group, section, event_date, angler_type)
-
+  
 
   # create table with degrees of freedom by section and angler type to apply to time strata estimates
   pe$degrees_freedom <- pe$daily_effort_cpue_catch |>
