@@ -148,6 +148,9 @@ checkboxGroupInput(inputId = 'days_wkend', label = "Days in 'weekends'",
                    choiceValues = c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"),
                    selected = c("Saturday", "Sunday"))
 
+numericInput(inputId = 'int_ang_hrs_tot_min', label = "Minimum interview total angler hours", 
+             value = 0.5, min = 0, max = 2)
+
 # #can add option to manually upload ...
 # fileInput(inputId = 'sections', label = 'Sections LU', accept = ".csv")
 
@@ -176,6 +179,7 @@ actionButton("fetch", label = "Fetch raw data")
 # input$index_count_types <- "Vehicle/Trailers Only" #c("Vehicle Only","Trailers Only")
 # input$census_expansion <- "Direct"
 # input$days_wkend <- c("Saturday", "Sunday")
+# input$int_ang_hrs_tot_min <- 0.5
 # #
 # input$sections <- "d13_skykomish_summer_chin"
 # input$census_exp <- "d13_skykomish_summer_chin"
@@ -391,9 +395,6 @@ reactive({
   #### pe$interview --------------
   # #interview data have angler_count, vehicle_count, trailer_count, angler_type and boat_used
   # #disallow NAs in angler_type, fill missing angler_type from boat_used
-#!!maintain static angler_hours_total filter?
-#!!could/should switch to: dplyr::filter(angler_hours_total >= input$angler_hours_tot_min)  
-#!!make sure fishing_end_time logic is working as intended for eg Kalama
   pe$interview <- dplyr::left_join(
     creel$interview, 
     creel$days |> select(event_date, time_strata, DayType), 
@@ -421,7 +422,7 @@ reactive({
       angler_hours = round(as.numeric(fishing_end_time - fishing_start_time) / 3600, 5),
       angler_hours_total = angler_count * angler_hours
     ) |>
-    dplyr::filter(angler_hours_total >= 0.5) |> 
+    dplyr::filter(angler_hours_total >= input$int_ang_hrs_tot_min) |> 
     #drop a few unused cols for ease of dev
     dplyr::select(-creel_event_id, -water_body, -project_name, -interview_number,
            -crc_area, -fishing_location, -ends_with("_time"),
@@ -433,9 +434,7 @@ reactive({
   # join catch data to interview after inferring complete cases (counts or 0s for all catch_groups encountered)
   # note that interview_ids in creel$interview/pe_interview may have no catch and not be in creel$catch
   # so are consequently coded NA for catch_group; final mutate makes explicit
-  #!!should already be distinct on interview_id
-  #!!currently filtered to angler_hours >= 0.5 (which also renders gratuitous the first drop_na(angler_hours)?)
-  #!!so some rows in creel$catch for "short" interviews may be lost in join 
+  # similarly, rows in creel$catch for "short" interviews may be lost in join 
   pe$interview_and_catch <- left_join(
     pe$interview |> drop_na(angler_hours) |> 
       select(event_date, time_strata, DayType, section, interview_id, angler_type, ends_with("_count"), angler_hours, angler_hours_total) 
