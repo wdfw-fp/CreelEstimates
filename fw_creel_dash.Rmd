@@ -143,6 +143,11 @@ radioButtons(inputId = 'census_expansion', label = "Census expansion method",
              ,selected = c("Direct")
              )
 
+checkboxGroupInput(inputId = 'days_wkend', label = "Days in 'weekends'",
+                   choiceNames =  c("Mon", "Tues", "Wed", "Thur", "Fri", "Sat", "Sun"),
+                   choiceValues = c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"),
+                   selected = c("Saturday", "Sunday"))
+
 # #can add option to manually upload ...
 # fileInput(inputId = 'sections', label = 'Sections LU', accept = ".csv")
 
@@ -170,6 +175,7 @@ actionButton("fetch", label = "Fetch raw data")
 # input$model_period <- "Week"
 # input$index_count_types <- "Vehicle/Trailers Only" #c("Vehicle Only","Trailers Only")
 # input$census_expansion <- "Direct"
+# input$days_wkend <- c("Saturday", "Sunday")
 # #
 # input$sections <- "d13_skykomish_summer_chin"
 # input$census_exp <- "d13_skykomish_summer_chin"
@@ -264,7 +270,7 @@ reactive({
       event_date = seq.Date(input$dates[1], input$dates[2], by = "day"),
       Day = weekdays(event_date),
       DayType = if_else(
-        Day == "Saturday" | Day == "Sunday" | Day %in% lu$dates_holidays_2015_2030,
+        Day %in% input$days_wkend | Day %in% lu$dates_holidays_2015_2030,
         "Weekend", "Weekday"),
       DayType_num = if_else(str_detect(DayType, "end"),1,0),
       DayL = suncalc::getSunlightTimes(
@@ -304,17 +310,6 @@ reactive({
       unnest(cols = section) |> 
       unnest(cols = angler_type)
     
-    # # #"days_section_angler_type" also separate_rows option...
-    # creel$days |>
-    #   mutate(time_strata = if_else(ModelPeriod == "Month", Month, Week)) |>
-    #   select(time_strata, event_date, DayType, starts_with("open_section")) |>
-    #   mutate(
-    #     section = paste0(unique(sections$section), collapse = ","),
-    #     angler_type = paste0(c("bank", "boat"), collapse = ",") #is total ever actually needed?
-    #   ) |>
-    #   separate_rows(section,  sep = ",") |> 
-    #   separate_rows(angler_type, sep = ",")
-
   } else {
     creel$effort <- NULL
     creel$interview <- NULL
