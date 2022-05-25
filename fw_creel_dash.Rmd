@@ -186,8 +186,11 @@ actionButton("fetch", label = "Fetch raw data")
 # input$closures <- "d13_skykomish_summer_chin"
 # # input$sections <- "d14_cascade_fall_salmon"
 # # input$census_exp <- "Cascade_Fall_Salmon_2021"
+# # input$sections <- "r5_kalama_steelhead"
+# #input$census_exp <- "r5_kalama_example"
 # # input$sections <- "d14_skagit_fall_salmon_PE"
 # # input$census_exp <- "Skagit_Fall_Salmon_2021"
+
 
 
 #!!this is "event reactive", so should not trigger on fiddling with inputs
@@ -303,16 +306,6 @@ reactive({
       filter(is_open == TRUE) |> 
       mutate(section = as.numeric(gsub("^.*_", "", section))) |>
       count(time_strata, DayType, section, name = "N_days")
-    
-    #!!later right_joins to this below drop any "total" rows...
-    creel$days_section_angler_type <- creel$days |>
-      select(time_strata, event_date, DayType, starts_with("open_section")) |> 
-      mutate(
-        section = list(unique(lu_input$sections$section)),
-        angler_type = list(c("bank", "boat")) 
-      ) |> 
-      unnest(cols = section) |> 
-      unnest(cols = angler_type)
     
   } else {
     creel$effort <- NULL
@@ -509,11 +502,14 @@ reactive({
       pe$census_TI_expan,
       by = c("section", "angler_type")
       ) |>
-      mutate(ang_hrs_daily_mean_TI_expan = angler_hours_daily_mean * replace_na(TI_expan_final, 1))  |>
-      right_join(creel$days_section_angler_type, by = c("event_date", "section", "angler_type")) |>
-      select(time_strata, event_date, DayType, section, angler_type, everything()) |>
-      mutate(creeled = if_else(!is.na(ang_hrs_daily_mean_TI_expan) & open_section_1 == TRUE, "Y", "N")) |>
-      arrange(event_date)
+      mutate(ang_hrs_daily_mean_TI_expan = angler_hours_daily_mean * replace_na(TI_expan_final, 1)) 
+
+#!!see below. appears unneeded until estimate construction stage, better kept off until then
+#!!pending final confirmation from EB/KB
+    # |>
+    #   right_join(creel$days_section_angler_type, by = c("event_date", "section", "angler_type")) |>
+    #   select(time_strata, event_date, DayType, section, angler_type, everything()) |>
+    #   arrange(event_date)
     
   } else if(str_detect(input$index_count_types, "Vehicle|Trailer")) {
     #in this case, boat and bank counts must be indirectly calc'd
@@ -581,7 +577,7 @@ reactive({
         select(event_date, section, count_sequence, angler_type, count_index)
       ,
       by = c("event_date", "section", "count_sequence", "angler_type")
-    )
+    )  
     #now overwrite, coercing angler_type back to bank/boat as above for pe$angler_hours_daily_mean
     #again dropping NAs and negatives as invalid for inferring estimates
     pe$census_TI_expan <- pe$census_TI_expan |> 
@@ -621,303 +617,382 @@ reactive({
       pe$census_TI_expan |> select(section, angler_type, TI_expan_final),
       by = c("section", "angler_type")
     ) |>
-      mutate(ang_hrs_daily_mean_TI_expan = angler_hours_daily_mean * TI_expan_final) |> 
-#!!unclear that this is still needed given following drop_na & left_join...?
-      right_join(creel$days_section_angler_type, by = c("section", "event_date", "angler_type")) |>
-      mutate(creeled = if_else(!is.na(ang_hrs_daily_mean_TI_expan), "Y", "N")) |>
-      select(time_strata, event_date, DayType, section, angler_type, everything()) |>
-      arrange(event_date)
+      mutate(ang_hrs_daily_mean_TI_expan = angler_hours_daily_mean * TI_expan_final)
+    
+#     |> 
+# #!!unclear that this is still needed given following drop_na & left_join...?
+#       right_join(creel$days_section_angler_type, by = c("event_date", "section", "angler_type")) |>
+#       select(time_strata, event_date, DayType, section, angler_type, everything()) |>
+#       arrange(event_date)
     
 }
   
-  pe$angler_hours_daily_mean <- pe$angler_hours_daily_mean |>
-    drop_na(ang_hrs_daily_mean_TI_expan) |>
-    #add total days per DayType in week/month strata
-    left_join(
-      creel$days_total, 
-      by = c("time_strata", "DayType", "section")) |>
-    #add number of days sampled within that dayType-time_strata
-    left_join(
-      pe$angler_hours_daily_mean |>
-        filter(!is.na(ang_hrs_daily_mean_TI_expan) & creeled == "Y") |>
-        count(time_strata, DayType, section, angler_type, name = "n_days"),
-      by = c("time_strata", "DayType", "section", "angler_type")) |>
-    #add total days per DayType across time_strata
-    left_join(
-      creel$days_total |>
-        group_by(section, DayType) |>
-        summarise(N_days_total = sum(N_days), .groups = "drop"),
-      by = c("DayType", "section")) |>
-    #add total days sampled by DayType across time_strata
-    left_join(
-      pe$angler_hours_daily_mean |>
-        filter(!is.na(ang_hrs_daily_mean_TI_expan) & creeled == "Y") |>
-        count(time_strata, DayType, section, angler_type, name = "n_days") |>
-        group_by(section, DayType, angler_type) |>
-        summarise(n_days_total = sum(n_days), .groups = "drop"),
-      by = c("DayType", "section", "angler_type"))
+# #!! DA seems like all of these can be avoided? 
+# #!! Only used later in estimates, but are better kept separate until then...?
+#   pe$angler_hours_daily_mean <- pe$angler_hours_daily_mean |>
+#     drop_na(ang_hrs_daily_mean_TI_expan) |>
+#     #add total days per DayType in week/month strata
+#     left_join(
+#       creel$days_total, 
+#       by = c("time_strata", "DayType", "section")) |>
+#     #add number of days sampled within that dayType-time_strata
+#     left_join(
+#       pe$angler_hours_daily_mean |>
+#         drop_na(ang_hrs_daily_mean_TI_expan) |>
+#         count(time_strata, DayType, section, angler_type, name = "n_days_samp"),
+#       by = c("time_strata", "DayType", "section", "angler_type")) |>
+#     #add total days per DayType across time_strata
+#     left_join(
+#       creel$days_total |>
+#         group_by(section, DayType) |>
+#         summarise(N_days_total = sum(N_days), .groups = "drop"),
+#       by = c("DayType", "section")) |>
+#     #add total days sampled by DayType across time_strata
+#     left_join(
+#       pe$angler_hours_daily_mean |>
+#         drop_na(ang_hrs_daily_mean_TI_expan) |>
+#         count(time_strata, DayType, section, angler_type, name = "n_days") |>
+#         group_by(section, DayType, angler_type) |>
+#         summarise(n_days_total = sum(n_days), .groups = "drop"),
+#       by = c("DayType", "section", "angler_type"))
 
-#   pe$angler_hours_daily_mean_strata_mean <- pe$angler_hours_daily_mean |>
-# #!!Not including DayType in group_by?
-#     group_by(time_strata, section, angler_type) |>
-#     mutate(mean_strata_effort = mean(ang_hrs_daily_mean_TI_expan)) |>
-#     ungroup() |>
-# #!!is this complete actually necessary??
-#     complete(time_strata, section, angler_type, fill = list(mean_strata_effort = 0)) |>
-#     mutate(
-#       ang_hrs_daily_mean_TI_expan = if_else(
-#         ang_hrs_daily_mean_TI_expan == 0,
-#         mean_strata_effort,
-#         ang_hrs_daily_mean_TI_expan
-#       )) |>
-#     select(time_strata, event_date, DayType, section, angler_type, everything())
-
-  #### reaching dailyCPUE object ------------------------
+  #### pe$dailyCPUE ------------------------
 
   #aggregate interviews per day per strata of [week/month-weekend/day-section-bank/boat-catch_group]
+  #   here including only "mean of ratios" (mean over interviews)
+  #   dropping "ratio of the means" (actually sums): sum(fish_count) / sum(angler_hours_total)
+  #then multiply by TI-expanded effort estimate
+  #dropping any date-section-angler_type-catch_groups for which interview-based CPUE is available
+  #but census-corrected effort estimates are not (various reasons why a day-section-angler_type hours could be NA)
   pe$daily_CPUE <- pe$interview_and_catch |>
     mutate(cpue_interview = fish_count / angler_hours_total) |>
     group_by(time_strata, event_date, DayType, section, angler_type, catch_group) |>
-    summarise(
-#!!      cpue_rom_daily = sum(fish_count) / sum(angler_hours_total), # ratio of the means CPUE estimator
-      cpue_mor_daily = mean(cpue_interview),  # mean of ratios CPUE estimator
-      .groups = "drop"
-    )
-
-  #### ests ingredients -------------
-  #!! these first 3 objects are ingredients for subsequent effort and catch summary objects
-  
-  pe$daily_effort_cpue_catch <- left_join(
-    pe$daily_CPUE,
-    pe$angler_hours_daily_mean,   #pe$angler_hours_daily_mean_strata_mean,
-    by = c("time_strata", "event_date", "DayType", "section", "angler_type")
-  ) |>
-    mutate(
-      catch_estimate = round(ang_hrs_daily_mean_TI_expan * cpue_mor_daily, 2)
+    summarise(cpue_mor_daily = mean(cpue_interview), .groups = "drop") |> 
+    left_join(
+      pe$angler_hours_daily_mean, 
+      by = c("event_date", "section", "angler_type")
     ) |>
-    arrange(catch_group, section, event_date, angler_type)
-  
-
-  # create table with degrees of freedom by section and angler type to apply to time strata estimates
-  pe$degrees_freedom <- pe$daily_effort_cpue_catch |>
-    distinct(section, angler_type, time_strata, n_days) |>
+    drop_na(ang_hrs_daily_mean_TI_expan) |> 
+    mutate(catch_estimate = round(cpue_mor_daily * ang_hrs_daily_mean_TI_expan, 3)) |>
+    arrange(event_date, section, angler_type, catch_group)
+      
+  # #degrees of freedom by section and angler type to apply to time strata estimates
+  # pe$df <- pe$angler_hours_daily_mean |> 
+  #   distinct(section, angler_type, time_strata, n_days) |>
+  #   group_by(section, angler_type) |>
+  #   summarize(df = (min(n_days - 1) + sum(n_days))/2, .groups = "drop")
+#!! the above version more closely follows EB orig
+#!! but "n_days" in the distinct() is reflecting DayType as a "hidden strata"
+#!! should the count of days sampled account for DayType within a week/month-section-angler_type?
+#!! the final df differs due to the different min(n_days_samp-1)
+  pe$df <- left_join(
+    pe$angler_hours_daily_mean,
+    creel$days |> select(event_date, time_strata, DayType),
+    by = "event_date"
+    ) |> 
+    count(time_strata, DayType, section, angler_type, name = "n_days_samp") |> 
+    #count(time_strata, section, angler_type, name = "n_days_samp") |> 
     group_by(section, angler_type) |>
-    summarize(
-      min_n_days = min(n_days),
-      sum_n_days = sum(n_days),
-      degrees_freedom = min_n_days + sum_n_days / 2,
-      .groups = "drop"
-    )
+    mutate(df = (min(n_days_samp - 1) + sum(n_days_samp))/2) |> 
+    ungroup()
+#!! to recover section-angler_type level only...
+  pe$df |> distinct(section, angler_type, df)
 
-  #used in final set of objects, could move into pe or make inline?
-  ests$degrees_freedom_total <- pe$angler_hours_daily_mean |>
-    distinct(section, angler_type, n_days = n_days_total) |>
-    group_by(section, angler_type) |>
-    summarize(
-      min_n_days = min(n_days),
-      sum_n_days = sum(n_days),
-      degrees_freedom = min_n_days + sum_n_days / 2,
-      .groups = "drop"
-    )
+#!!pending above...note still incorrect actual "df = " calc...will update if needed  
+  # #used in final set of objects, could move into pe or make inline?
+  # ests$degrees_freedom_total <- pe$angler_hours_daily_mean |>
+  #   distinct(section, angler_type, n_days = n_days_total) |>
+  #   group_by(section, angler_type) |>
+  #   summarize(
+  #     min_n_days = min(n_days),
+  #     sum_n_days = sum(n_days),
+  #     degrees_freedom = min_n_days + sum_n_days / 2,
+  #     .groups = "drop"
+  #   )
 
-  # dates object to join back to summary objects to plotting
-  #!!takes first day per week per month
-  #!!not sure if/how it matters but
-  #!!this distinct() associates in month-spanning weeks to the earlier month
-  #!!e.g., in 2021 week 39 in both Sep and Oct, gets only to Sep
-  #!!also not sure how the col rename will play with a reactive input list...
-  pe$days_join_2 <- creel$days |>
-    dplyr::group_by(Month, Week) |>
-    dplyr::slice(1) |>
-    dplyr::ungroup() |>
-    dplyr::distinct(Week, .keep_all = TRUE) |>
-    dplyr::select(-Week, -Month)
 
-  #### effort summaries  --------------
-
-  #!!how was distinct() meant to play with still-grouped summarize output?
-  # calculate effort by day type and angler type strata
-  ests$time_strata_effort_by_daytype <- pe$daily_effort_cpue_catch |>
-    group_by(section, angler_type, time_strata, DayType, n_days, N_days) |>
-    summarize(
-      n = n(),
-      sum_daily_effort_sampled_days = sum(ang_hrs_daily_mean_TI_expan),
-      angler_hours_daily_mean = mean(ang_hrs_daily_mean_TI_expan),
-      variance_daily_effort = var(ang_hrs_daily_mean_TI_expan),
-      total_effort = angler_hours_daily_mean * N_days,
-      variance_total_daily_effort = if_else(
-        n_days < N_days,
-        (N_days^2) * (variance_daily_effort / n_days) * (1-(n_days/N_days)),
-        (N_days^2) * (variance_daily_effort / n_days)
-      ),
-#!!THIS MAY BE WRONG but need to explicitly specify .groups if otherwise
-      .groups = "keep"
-    ) |>
-    distinct()
-
-  #!!Not sure about left_join on still-grouped summarize output? i.e., with just time_strata dropped?
-  #!!the col named "SE" is standard deviation not standard error
-  #!!not sure which is desired? if sd, could also use sd()?
-  #!!moved filter() up; confirm relative to left_join of degfreedom?
-  # Sum effort estimates across day types, retain grouping on angler type
-  ests$time_strata_effort_total <- ests$time_strata_effort_by_daytype |>
-    filter(angler_type %in% c("bank","boat")) |>
-    group_by(section, angler_type, time_strata) |>
-    summarise(
-      total_effort = sum(total_effort),
-      variance = sum(variance_total_daily_effort),
-#!!THIS MAY BE WRONG but need to explicitly specify .groups if otherwise
-      .groups = "keep"
-    ) |>
-    left_join(pe$degrees_freedom, by = c("section", "angler_type")) |>
-    mutate(
-      variance = replace_na(variance,0),
-      SE = sqrt(variance),
-      CV = SE / total_effort,
-      lwr95CI = total_effort - qt(1-(0.05/2),degrees_freedom)*(variance^0.5),
-      upr95CI = total_effort + qt(1-(0.05/2),degrees_freedom)*(variance^0.5),
-      across(where(is.numeric), round, 2)
-    ) |>
-    distinct(time_strata, angler_type, .keep_all = TRUE)|>
-    left_join(pe$days_join_2, by = "time_strata")
-
-  #!!this gets overwritten below...?
-  #!!may be able to drop ungroup if dealt with earlier?
-  ests$total_effort <- ungroup(ests$time_strata_effort_total) |>
-    summarize(total_effort = sum(total_effort, na.rm = T))
-
-  #### catch summaries  --------------
-
-  #!!as above, concern/questions about (double) distinct()
-  #!!and this exits the pipe still grouped...
-  # calculate catch by day type and angler type strata
-  ests$time_strata_catch_by_daytype <- pe$daily_effort_cpue_catch |>
-    filter(!is.na(catch_estimate)) |>
-    group_by(section, angler_type, catch_group, time_strata, DayType, n_days, N_days) |>
-    summarize(
-      total_catch_unexpanded = sum(catch_estimate),
-      mean_daily_catch = total_catch_unexpanded / n_days,
-      total_catch_expanded_2 = total_catch_unexpanded * N_days,
-      total_catch_expanded = mean_daily_catch * N_days,
-      variance_catch_estimate = var(catch_estimate),
-      n_days = mean(n_days),
-      N_days = mean(N_days),
-#!!THIS MAY BE WRONG but need to explicitly specify .groups if otherwise
-#!!What is going on with the double distinct()??
-      .groups = "keep"
-      ) |>
-    distinct() |>
-    mutate(
-      variance_catch_estimate = replace_na(variance_catch_estimate, 0),
-      variance_total_catch_expanded = if_else(
-        n_days < N_days,
-        (N_days^2) * (variance_catch_estimate / n_days) * (1-(n_days/N_days)),
-        (N_days^2) * (variance_catch_estimate / n_days))
-    ) |>
-    distinct()
-
-  # cannot calculate variance for estimates when n = 1 for daytype strata within a week
-  # Sum catch estimates across day types, retain grouping on angler type
-  ests$time_strata_catch_total <- ests$time_strata_catch_by_daytype |>
-    filter(angler_type %in% c("bank", "boat")) |>
-    group_by(section, time_strata, catch_group, angler_type) |>
-    summarise(
-      total_catch = sum(total_catch_expanded),
-      variance = sum(variance_total_catch_expanded),
-#!!THIS MAY BE WRONG but need to explicitly specify .groups if otherwise
-      .groups = "keep"
-    ) |>
-    left_join(pe$degrees_freedom, by = c("section", "angler_type")) |>
-    mutate(
-      variance = replace_na(variance, 0),
-      SE = sqrt(variance),
-      CV = SE / total_catch,
-      lwr95CI = total_catch - qt(1-(0.05/2),degrees_freedom)*(variance^0.5),
-      upr95CI = total_catch + qt(1-(0.05/2),degrees_freedom)*(variance^0.5),
-      across(where(is.numeric), round, 2)
-    ) |>
-    distinct() |>
-    arrange(section, catch_group, time_strata) |>
-    left_join(pe$days_join_2, by = "time_strata")
-
-  #!!as above for ests$total_effort, currently getting overwritten below
-  ests$total_catch <- ests$time_strata_catch_total |>
-    group_by(section, catch_group) |>
-    summarize(total_catch = sum(total_catch), .groups = "drop")
-
-  #### totals -------
-
-  #!!from unnamed chunk L1540
-  #!!DA looks like this may only be for weekly? at least the first mutate seems wrong for monthly strata?
-  # EB circle back to this for calculating CPUE / HPUE and associated uncertainty over time period of interest
-  ests$cpue_time_strata <- dplyr::left_join(
-    ests$time_strata_catch_total  |>
-      dplyr::select(
-        section, time_strata, angler_type, catch_group,
-        total_catch, variance, SE, CV, lwr95CI, upr95CI
-      ) |>
-      mutate(daily_catch_estimate = total_catch / 7)
+  #### DA testing section -----------------
+  
+  #note the var() and sd() functions return NA when passed a length-1 vector (single obs)
+#!! what exactly is the point of calc sample distributional moments when only n=1-2 per DayType per week?
+  ests$effort <- left_join(
+    #dates expanded to n-sections * n-angler_types * n-days, previously held as "creel$days_section_angler_type" but only used once
+    creel$days |>
+      select(time_strata, event_date, DayType, starts_with("open_section")) |> 
+      mutate(
+        section = list(unique(lu_input$sections$section)),
+        angler_type = list(c("bank", "boat")) 
+      ) |> 
+      unnest(cols = section) |> 
+      unnest(cols = angler_type)
     ,
-    ests$time_strata_effort_total |>
-      dplyr::select(
-        section, time_strata, angler_type,
-        total_effort, variance, SE, CV, lwr95CI, upr95CI),
-    by = c("section","angler_type","time_strata"),
-    suffix = c("_catch", "_effort")
-    ) |>
+    #estimates of angler_hours possible to calculate for sampled dates-sections-angler_type 
+    left_join(
+      pe$angler_hours_daily_mean,
+      creel$days |> select(event_date, time_strata, DayType),
+      by = "event_date"
+    ) 
+    ,
+    by = c("time_strata", "event_date", "DayType", "section", "angler_type")
+    ) |> 
+#!!adding PER-DAY the week-daytype-section-angler_type strata moments
+#!!but could do this with different, coarser strata
+#!!for example, filling "ang_hrs" from mean over more weeks or both angler_types or etc...
+    group_by(time_strata, DayType, section, angler_type) |>
     mutate(
-      across(where(is.numeric), round, 2),
-      cpue_time_strata = replace_na(total_catch / total_effort, 0),
-      cpue_lwr95_time_strata = replace_na(lwr95CI_catch / lwr95CI_effort, 0),
-      cpue_upr95_time_strata = replace_na(upr95CI_catch / upr95CI_effort, 0)
-    ) |>
-#!! really??
-    distinct() |>
-    left_join(pe$days_join_2, by = "time_strata")
+      across(
+        .cols = c(ang_hrs_daily_mean_TI_expan),
+        .fns = list(
+          mean = ~mean(.x, na.rm = T),
+          var = ~var(.x, na.rm = T),
+          sd = ~sd(.x, na.rm = T)), #med = median,
+        .names = "ang_hrs_{.fn}"
+      )) |> 
+    ungroup() |> 
+    mutate(
+      ang_hrs = if_else(is.na(ang_hrs_daily_mean_TI_expan), ang_hrs_mean, ang_hrs_daily_mean_TI_expan)
+    )
 
-  #!!DA on L1689 assigned to estimates list then (possibly) overwrites the previously created non-list version
-  # Adding together time strata specific effort estimates and associated variance and calculating SE, CV, and 95% CI's
-  ests$total_effort <- ests$time_strata_effort_total |>
-    dplyr::select(-c(min_n_days, sum_n_days, degrees_freedom)) |>
-    dplyr::left_join(ests$degrees_freedom_total, by = c("section", "angler_type")) |>
-    dplyr::group_by(section, angler_type) |>
-    dplyr::summarise(
-      total_effort = sum(total_effort),
-      variance = sum(variance),
-      SE = sqrt(variance),
-      CV = SE / total_effort,
-      lwr95CI = total_effort - qt(1-(0.05/2),degrees_freedom)*(variance^0.5),
-      upr95CI = total_effort + qt(1-(0.05/2),degrees_freedom)*(variance^0.5),
-#!!This "drop" may be incorrect depending on the intent of the following distinct()
-#!!but if so we should be explicit about the group intent with "keep" or "drop_last"
-      .groups = "drop"
-    ) |>
-    dplyr::distinct() |>
-    dplyr::mutate(across(where(is.numeric), round, 2)) |>
-    dplyr::arrange(section)
+# various aggregations follow easily ...
+  ests$effort |> summarise(across(ang_hrs, sum), .groups = "drop")
+  ests$effort |> group_by(DayType) |> summarise(across(ang_hrs, sum), .groups = "drop")
+  ests$effort |> group_by(angler_type) |> summarise(across(ang_hrs, sum), .groups = "drop")
+  ests$effort |> group_by(DayType, angler_type) |> summarise(across(ang_hrs, sum), .groups = "drop")
+  ests$effort |> group_by(time_strata) |> summarise(across(ang_hrs, sum), .groups = "drop")
+  ests$effort |> group_by(time_strata, DayType) |> summarise(across(ang_hrs, sum), .groups = "drop")
+  ests$effort |> group_by(time_strata, angler_type) |> summarise(across(ang_hrs, sum), .groups = "drop")
+  ests$effort |> group_by(time_strata, DayType, section, angler_type) |> summarise(across(ang_hrs, sum), .groups = "drop")
+#but presumably desired to include dispersion however...
+#and could revise above group_by to "fill" unsampled ang_hrs with week-daytype-section-angler_type means 
+#illustrating a concept/option...possibly closer to the original conception
+#here, total_effort is identical to ang_hrs in the final group_by/summarize above
+  ests$effort |> 
+    group_by(time_strata, DayType, section, angler_type) |>
+    summarize(
+      across(
+        .cols = c(ang_hrs_daily_mean_TI_expan),
+        .fns = list(
+          mean = ~mean(.x, na.rm = T),
+          var = ~var(.x, na.rm = T),
+          sd = ~sd(.x, na.rm = T)), #med = median,
+        .names = "ang_hrs_{.fn}"
+      ), .groups = "drop") |> 
+    right_join(creel$days_total, by = c("time_strata", "DayType", "section")) |> 
+    left_join(pe$df, by = c("time_strata", "DayType", "section", "angler_type")) |> 
+    mutate(
+      total_effort = N_days * ang_hrs_mean,
+      #!!need clarification on "variance_total_daily_effort"
+      variance_total_daily_effort = if_else(
+        n_days_samp < N_days,
+        (N_days^2) * (ang_hrs_var / n_days_samp) * (1-(n_days_samp/N_days)),
+        (N_days^2) * (ang_hrs_var / n_days_samp)
+      )
+    )
+  
+  
+#!!not ready yet to add these back...
+#       lwr95CI = total_effort - qt(1-(0.05/2),degrees_freedom)*(variance^0.5),
+#       upr95CI = total_effort + qt(1-(0.05/2),degrees_freedom)*(variance^0.5),
+    
 
-  # Adding together time_strata catch estimates and associated variance and calculating SE, CV, and 95% CI's
-  ests$total_catch <- ests$time_strata_catch_total |>
-    dplyr::select(-c(min_n_days, sum_n_days, degrees_freedom)) |>
-    dplyr::left_join(ests$degrees_freedom_total, by = c("section", "angler_type")) |>
-    dplyr::filter(angler_type %in% c("bank", "boat")) |>
-    dplyr::mutate(variance = replace_na(variance, 0)) |>
-    dplyr::group_by(catch_group, section, angler_type) |>
-    dplyr::summarise(
-      total_catch = sum(total_catch),
-      variance = sum(variance),
-      SE = sqrt(variance),
-      CV = SE / total_catch,
-      lwr95CI = total_catch - qt(1-(0.05/2),degrees_freedom)*(variance^0.5),
-      upr95CI = total_catch + qt(1-(0.05/2),degrees_freedom)*(variance^0.5),
-#!!As immediately above, this "drop" may be incorrect depending on the intent of the following distinct()
-#!!but if so we should be explicit about the group intent with "keep" or "drop_last"
-      .groups = "drop"
-    ) |>
-    dplyr::distinct() |>
-    dplyr::mutate(across(where(is.numeric), round, 2)) |>
-    dplyr::arrange(section, catch_group)
+  
 
+  pe$daily_CPUE |>
+    group_by(time_strata, DayType, section, angler_type, catch_group) |>
+    summarize(
+      across(
+        c(catch_estimate),
+        .fns = list(med = median, mean = mean, var = var, sd = sd)
+      ),
+      .groups = "drop")
+  
+  
+#   #### effort summaries  --------------
+# 
+# #!! DA - I THINK THIS IS NOW BROKEN BY UPSTREAM CHANGES TO INCOMING OBJECTS 
+# #!! IN ADDITION, UNCLEAR WHAT IS REALLY NEEDED/WANTED
+# 
+#   #!!how was distinct() meant to play with still-grouped summarize output?
+#   # calculate effort by day type and angler type strata
+#   ests$time_strata_effort_by_daytype <- pe$daily_CPUE |>
+#     group_by(section, angler_type, time_strata, DayType, n_days, N_days) |>
+#     summarize(
+#       n = n(),
+#       sum_daily_effort_sampled_days = sum(ang_hrs_daily_mean_TI_expan),
+#       angler_hours_daily_mean = mean(ang_hrs_daily_mean_TI_expan),
+#       variance_daily_effort = var(ang_hrs_daily_mean_TI_expan),
+#       total_effort = angler_hours_daily_mean * N_days,
+#       variance_total_daily_effort = if_else(
+#         n_days < N_days,
+#         (N_days^2) * (variance_daily_effort / n_days) * (1-(n_days/N_days)),
+#         (N_days^2) * (variance_daily_effort / n_days)
+#       ),
+# #!!THIS MAY BE WRONG but need to explicitly specify .groups if otherwise
+#       .groups = "keep"
+#     ) |>
+#     distinct()
+# 
+#   #!!Not sure about left_join on still-grouped summarize output? i.e., with just time_strata dropped?
+#   #!!the col named "SE" is standard deviation not standard error
+#   #!!not sure which is desired? if sd, could also use sd()?
+#   #!!moved filter() up; confirm relative to left_join of degfreedom?
+#   # Sum effort estimates across day types, retain grouping on angler type
+#   ests$time_strata_effort_total <- ests$time_strata_effort_by_daytype |>
+#     filter(angler_type %in% c("bank","boat")) |>
+#     group_by(section, angler_type, time_strata) |>
+#     summarise(
+#       total_effort = sum(total_effort),
+#       variance = sum(variance_total_daily_effort),
+# #!!THIS MAY BE WRONG but need to explicitly specify .groups if otherwise
+#       .groups = "keep"
+#     ) |>
+#     left_join(pe$degrees_freedom, by = c("section", "angler_type")) |>
+#     mutate(
+#       variance = replace_na(variance,0),
+#       SE = sqrt(variance),
+#       CV = SE / total_effort,
+#       lwr95CI = total_effort - qt(1-(0.05/2),degrees_freedom)*(variance^0.5),
+#       upr95CI = total_effort + qt(1-(0.05/2),degrees_freedom)*(variance^0.5),
+#       across(where(is.numeric), round, 2)
+#     ) |>
+#     distinct(time_strata, angler_type, .keep_all = TRUE)
+# 
+#   #!!this gets overwritten below...?
+#   #!!may be able to drop ungroup if dealt with earlier?
+#   ests$total_effort <- ungroup(ests$time_strata_effort_total) |>
+#     summarize(total_effort = sum(total_effort, na.rm = T))
+# 
+#   #### catch summaries  --------------
+# 
+#   #!!as above, concern/questions about (double) distinct()
+#   #!!and this exits the pipe still grouped...
+#   # calculate catch by day type and angler type strata
+#   ests$time_strata_catch_by_daytype <- pe$daily_CPUE |>
+#     filter(!is.na(catch_estimate)) |>
+#     group_by(section, angler_type, catch_group, time_strata, DayType, n_days, N_days) |>
+#     summarize(
+#       total_catch_unexpanded = sum(catch_estimate),
+#       mean_daily_catch = total_catch_unexpanded / n_days,
+#       total_catch_expanded_2 = total_catch_unexpanded * N_days,
+#       total_catch_expanded = mean_daily_catch * N_days,
+#       variance_catch_estimate = var(catch_estimate),
+#       n_days = mean(n_days),
+#       N_days = mean(N_days),
+# #!!THIS MAY BE WRONG but need to explicitly specify .groups if otherwise
+# #!!What is going on with the double distinct()??
+#       .groups = "keep"
+#       ) |>
+#     distinct() |>
+#     mutate(
+#       variance_catch_estimate = replace_na(variance_catch_estimate, 0),
+#       variance_total_catch_expanded = if_else(
+#         n_days < N_days,
+#         (N_days^2) * (variance_catch_estimate / n_days) * (1-(n_days/N_days)),
+#         (N_days^2) * (variance_catch_estimate / n_days))
+#     ) |>
+#     distinct()
+# 
+#   # cannot calculate variance for estimates when n = 1 for daytype strata within a week
+#   # Sum catch estimates across day types, retain grouping on angler type
+#   ests$time_strata_catch_total <- ests$time_strata_catch_by_daytype |>
+#     filter(angler_type %in% c("bank", "boat")) |>
+#     group_by(section, time_strata, catch_group, angler_type) |>
+#     summarise(
+#       total_catch = sum(total_catch_expanded),
+#       variance = sum(variance_total_catch_expanded),
+# #!!THIS MAY BE WRONG but need to explicitly specify .groups if otherwise
+#       .groups = "keep"
+#     ) |>
+#     left_join(pe$degrees_freedom, by = c("section", "angler_type")) |>
+#     mutate(
+#       variance = replace_na(variance, 0),
+#       SE = sqrt(variance),
+#       CV = SE / total_catch,
+#       lwr95CI = total_catch - qt(1-(0.05/2),degrees_freedom)*(variance^0.5),
+#       upr95CI = total_catch + qt(1-(0.05/2),degrees_freedom)*(variance^0.5),
+#       across(where(is.numeric), round, 2)
+#     ) |>
+#     distinct() |>
+#     arrange(section, catch_group, time_strata)
+# 
+#   #!!as above for ests$total_effort, currently getting overwritten below
+#   ests$total_catch <- ests$time_strata_catch_total |>
+#     group_by(section, catch_group) |>
+#     summarize(total_catch = sum(total_catch), .groups = "drop")
+# 
+#   #### totals -------
+# 
+#   #!!from unnamed chunk L1540
+#   #!!DA looks like this may only be for weekly? at least the first mutate seems wrong for monthly strata?
+#   # EB circle back to this for calculating CPUE / HPUE and associated uncertainty over time period of interest
+#   ests$cpue_time_strata <- dplyr::left_join(
+#     ests$time_strata_catch_total  |>
+#       dplyr::select(
+#         section, time_strata, angler_type, catch_group,
+#         total_catch, variance, SE, CV, lwr95CI, upr95CI
+#       ) |>
+#       mutate(daily_catch_estimate = total_catch / 7)
+#     ,
+#     ests$time_strata_effort_total |>
+#       dplyr::select(
+#         section, time_strata, angler_type,
+#         total_effort, variance, SE, CV, lwr95CI, upr95CI),
+#     by = c("section","angler_type","time_strata"),
+#     suffix = c("_catch", "_effort")
+#     ) |>
+#     mutate(
+#       across(where(is.numeric), round, 2),
+#       cpue_time_strata = replace_na(total_catch / total_effort, 0),
+#       cpue_lwr95_time_strata = replace_na(lwr95CI_catch / lwr95CI_effort, 0),
+#       cpue_upr95_time_strata = replace_na(upr95CI_catch / upr95CI_effort, 0)
+#     ) |>
+# #!! really??
+#     distinct()
+# 
+#   #!!DA on L1689 assigned to estimates list then (possibly) overwrites the previously created non-list version
+#   # Adding together time strata specific effort estimates and associated variance and calculating SE, CV, and 95% CI's
+#   ests$total_effort <- ests$time_strata_effort_total |>
+#     dplyr::select(-c(min_n_days, sum_n_days, degrees_freedom)) |>
+#     dplyr::left_join(ests$degrees_freedom_total, by = c("section", "angler_type")) |>
+#     dplyr::group_by(section, angler_type) |>
+#     dplyr::summarise(
+#       total_effort = sum(total_effort),
+#       variance = sum(variance),
+#       SE = sqrt(variance),
+#       CV = SE / total_effort,
+#       lwr95CI = total_effort - qt(1-(0.05/2),degrees_freedom)*(variance^0.5),
+#       upr95CI = total_effort + qt(1-(0.05/2),degrees_freedom)*(variance^0.5),
+# #!!This "drop" may be incorrect depending on the intent of the following distinct()
+# #!!but if so we should be explicit about the group intent with "keep" or "drop_last"
+#       .groups = "drop"
+#     ) |>
+#     dplyr::distinct() |>
+#     dplyr::mutate(across(where(is.numeric), round, 2)) |>
+#     dplyr::arrange(section)
+# 
+#   # Adding together time_strata catch estimates and associated variance and calculating SE, CV, and 95% CI's
+#   ests$total_catch <- ests$time_strata_catch_total |>
+#     dplyr::select(-c(min_n_days, sum_n_days, degrees_freedom)) |>
+#     dplyr::left_join(ests$degrees_freedom_total, by = c("section", "angler_type")) |>
+#     dplyr::filter(angler_type %in% c("bank", "boat")) |>
+#     dplyr::mutate(variance = replace_na(variance, 0)) |>
+#     dplyr::group_by(catch_group, section, angler_type) |>
+#     dplyr::summarise(
+#       total_catch = sum(total_catch),
+#       variance = sum(variance),
+#       SE = sqrt(variance),
+#       CV = SE / total_catch,
+#       lwr95CI = total_catch - qt(1-(0.05/2),degrees_freedom)*(variance^0.5),
+#       upr95CI = total_catch + qt(1-(0.05/2),degrees_freedom)*(variance^0.5),
+# #!!As immediately above, this "drop" may be incorrect depending on the intent of the following distinct()
+# #!!but if so we should be explicit about the group intent with "keep" or "drop_last"
+#       .groups = "drop"
+#     ) |>
+#     dplyr::distinct() |>
+#     dplyr::mutate(across(where(is.numeric), round, 2)) |>
+#     dplyr::arrange(section, catch_group)
+# 
+  
 }) |> 
   bindEvent(input$estimate)
 ```
@@ -1021,22 +1096,6 @@ renderPlot({
 
 ```
 
-Index daily mean
---------------------------------------------
-
-### Index daily mean
-
-```{r}
-# renderPlot({
-#   if(!is.null(pe$effort_index_daily_mean)) { #creel$effort
-#     pe$effort_index_daily_mean |>
-#       ggplot(aes(event_date, count_index_mean, fill = angler_type)) +
-#       geom_col(position = position_dodge()) +
-#       facet_wrap(~section + angler_type, scales = "free", labeller = label_wrap_gen(multi_line = F))
-#   }
-# })
-
-```
 
 Interview
 ============================================
@@ -1087,29 +1146,66 @@ renderPlot({
 Estimates
 ============================================
 
-### total effort
+### Effort estimates 
+
 ```{r}
+renderPlot({
+  if(!is.null(ests$effort)){
+    (
+      ggplot(pe$angler_hours_daily_mean,
+             aes(event_date, ang_hrs_daily_mean_TI_expan, fill = angler_type)) +
+        geom_col(position = "stack") +
+        scale_x_date("", date_breaks = "1 week", guide = guide_axis(n.dodge = 2)) +
+        scale_y_continuous("Hours") +
+        labs(
+          title = "Daily estimated angler hours, sampled days",
+          subtitle = "Census-adjusted and interview-informed index counts")
+    ) + (
+      ggplot(ests$effort,
+             aes(event_date, ang_hrs, fill = angler_type)) +
+        geom_col(position = "stack") +
+        scale_x_date("", date_breaks = "1 week", guide = guide_axis(n.dodge = 2)) +
+        scale_y_continuous("Hours") +
+        labs(
+          title = "Daily estimated angler hours, strata-means to complete days",
+          subtitle = "Census-adjusted and interview-informed index counts")
+    ) + (
+      ggplot(ests$effort |> group_by(angler_type) |> mutate(ang_hrs_cml = cumsum(ang_hrs)) |> ungroup(),
+             aes(event_date, ang_hrs_cml, color = angler_type)) +
+        geom_line() +
+        scale_x_date("", date_breaks = "1 week", guide = guide_axis(n.dodge = 2)) +
+        scale_y_continuous("Hours") +
+        labs(
+          title = "Cumulative angler hours, strata-means to complete days",
+          subtitle = "Census-adjusted and interview-informed index counts")
+    ) + plot_layout(ncol = 1)
+    
+  }
+})
+
+
 # renderValueBox({
 #   if(!is.null(ests$total_effort)){
 #     valueBox(ests$total_effort |> filter(angler_type == "bank") |> pluck("total_effort") |> round())
 #   }
 # })
 
-render_gt({
-  if(!is.null(ests$total_effort)){
-    ests$total_effort
-  }
-})
+# render_gt({
+#   if(!is.null(ests$total_effort)){
+#     ests$total_effort
+#   }
+# })
 
 ```
 
 ### total catch
+
 ```{r}
-render_gt({
-  if(!is.null(ests$total_catch)){
-    ests$total_catch
-  }
-})
+# render_gt({
+#   if(!is.null(ests$total_catch)){
+#     ests$total_catch
+#   }
+# })
 
 ```
 
