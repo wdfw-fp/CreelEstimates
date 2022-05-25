@@ -504,13 +504,6 @@ reactive({
       ) |>
       mutate(ang_hrs_daily_mean_TI_expan = angler_hours_daily_mean * replace_na(TI_expan_final, 1)) 
 
-#!!see below. appears unneeded until estimate construction stage, better kept off until then
-#!!pending final confirmation from EB/KB
-    # |>
-    #   right_join(creel$days_section_angler_type, by = c("event_date", "section", "angler_type")) |>
-    #   select(time_strata, event_date, DayType, section, angler_type, everything()) |>
-    #   arrange(event_date)
-    
   } else if(str_detect(input$index_count_types, "Vehicle|Trailer")) {
     #in this case, boat and bank counts must be indirectly calc'd
     #first the interviews are used to estimate anglers per vehicle, stratified by boat vs total (from boat|bank angler_type rows in interview)
@@ -619,43 +612,8 @@ reactive({
     ) |>
       mutate(ang_hrs_daily_mean_TI_expan = angler_hours_daily_mean * TI_expan_final)
     
-#     |> 
-# #!!unclear that this is still needed given following drop_na & left_join...?
-#       right_join(creel$days_section_angler_type, by = c("event_date", "section", "angler_type")) |>
-#       select(time_strata, event_date, DayType, section, angler_type, everything()) |>
-#       arrange(event_date)
-    
 }
   
-# #!! DA seems like all of these can be avoided? 
-# #!! Only used later in estimates, but are better kept separate until then...?
-#   pe$angler_hours_daily_mean <- pe$angler_hours_daily_mean |>
-#     drop_na(ang_hrs_daily_mean_TI_expan) |>
-#     #add total days per DayType in week/month strata
-#     left_join(
-#       creel$days_total, 
-#       by = c("time_strata", "DayType", "section")) |>
-#     #add number of days sampled within that dayType-time_strata
-#     left_join(
-#       pe$angler_hours_daily_mean |>
-#         drop_na(ang_hrs_daily_mean_TI_expan) |>
-#         count(time_strata, DayType, section, angler_type, name = "n_days_samp"),
-#       by = c("time_strata", "DayType", "section", "angler_type")) |>
-#     #add total days per DayType across time_strata
-#     left_join(
-#       creel$days_total |>
-#         group_by(section, DayType) |>
-#         summarise(N_days_total = sum(N_days), .groups = "drop"),
-#       by = c("DayType", "section")) |>
-#     #add total days sampled by DayType across time_strata
-#     left_join(
-#       pe$angler_hours_daily_mean |>
-#         drop_na(ang_hrs_daily_mean_TI_expan) |>
-#         count(time_strata, DayType, section, angler_type, name = "n_days") |>
-#         group_by(section, DayType, angler_type) |>
-#         summarise(n_days_total = sum(n_days), .groups = "drop"),
-#       by = c("DayType", "section", "angler_type"))
-
   #### pe$dailyCPUE ------------------------
 
   #aggregate interviews per day per strata of [week/month-weekend/day-section-bank/boat-catch_group]
@@ -695,8 +653,8 @@ reactive({
     group_by(section, angler_type) |>
     mutate(df = (min(n_days_samp - 1) + sum(n_days_samp))/2) |> 
     ungroup()
-#!! to recover section-angler_type level only...
-  pe$df |> distinct(section, angler_type, df)
+# #!! to recover section-angler_type level only...
+#   pe$df |> distinct(section, angler_type, df)
 
 #!!pending above...note still incorrect actual "df = " calc...will update if needed  
   # #used in final set of objects, could move into pe or make inline?
@@ -713,8 +671,6 @@ reactive({
 
   #### DA testing section -----------------
   
-  #note the var() and sd() functions return NA when passed a length-1 vector (single obs)
-#!! what exactly is the point of calc sample distributional moments when only n=1-2 per DayType per week?
   ests$effort <- left_join(
     #dates expanded to n-sections * n-angler_types * n-days, previously held as "creel$days_section_angler_type" but only used once
     creel$days |>
@@ -727,75 +683,127 @@ reactive({
       unnest(cols = angler_type)
     ,
     #estimates of angler_hours possible to calculate for sampled dates-sections-angler_type 
-    left_join(
-      pe$angler_hours_daily_mean,
-      creel$days |> select(event_date, time_strata, DayType),
-      by = "event_date"
-    ) 
+    pe$angler_hours_daily_mean |> select(event_date, section, angler_type, ang_hrs_daily_mean_TI_expan)
     ,
-    by = c("time_strata", "event_date", "DayType", "section", "angler_type")
-    ) |> 
-#!!adding PER-DAY the week-daytype-section-angler_type strata moments
-#!!but could do this with different, coarser strata
-#!!for example, filling "ang_hrs" from mean over more weeks or both angler_types or etc...
-    group_by(time_strata, DayType, section, angler_type) |>
+    by = c("event_date", "section", "angler_type")
+  ) 
+  
+  #adding PER-DAY the week/month-daytype-section-angler_type strata mean
+  #this is the finest stratification above individual days 
+  #but note that sample size is too small to offer meaningful var with a DayType per week stratification
+  # -the var() and sd() functions return NA when passed a length-1 vector (single obs)
+  # -variance has limited meaning even when n=3, e.g. if sampling Fri & Sat & Sun
+  ests$effort_ts_s_at_dt_mean_filled <- ests$effort |> 
+    group_by(time_strata, section, angler_type, DayType) |>
     mutate(
-      across(
-        .cols = c(ang_hrs_daily_mean_TI_expan),
-        .fns = list(
-          mean = ~mean(.x, na.rm = T),
-          var = ~var(.x, na.rm = T),
-          sd = ~sd(.x, na.rm = T)), #med = median,
-        .names = "ang_hrs_{.fn}"
-      )) |> 
-    ungroup() |> 
-    mutate(
+      ang_hrs_mean = mean(ang_hrs_daily_mean_TI_expan, na.rm = T),
       ang_hrs = if_else(is.na(ang_hrs_daily_mean_TI_expan), ang_hrs_mean, ang_hrs_daily_mean_TI_expan)
-    )
+      ) |> 
+    ungroup()
 
-# various aggregations follow easily ...
-  ests$effort |> summarise(across(ang_hrs, sum), .groups = "drop")
-  ests$effort |> group_by(DayType) |> summarise(across(ang_hrs, sum), .groups = "drop")
-  ests$effort |> group_by(angler_type) |> summarise(across(ang_hrs, sum), .groups = "drop")
-  ests$effort |> group_by(DayType, angler_type) |> summarise(across(ang_hrs, sum), .groups = "drop")
-  ests$effort |> group_by(time_strata) |> summarise(across(ang_hrs, sum), .groups = "drop")
-  ests$effort |> group_by(time_strata, DayType) |> summarise(across(ang_hrs, sum), .groups = "drop")
-  ests$effort |> group_by(time_strata, angler_type) |> summarise(across(ang_hrs, sum), .groups = "drop")
-  ests$effort |> group_by(time_strata, DayType, section, angler_type) |> summarise(across(ang_hrs, sum), .groups = "drop")
-#but presumably desired to include dispersion however...
-#and could revise above group_by to "fill" unsampled ang_hrs with week-daytype-section-angler_type means 
-#illustrating a concept/option...possibly closer to the original conception
-#here, total_effort is identical to ang_hrs in the final group_by/summarize above
-  ests$effort |> 
-    group_by(time_strata, DayType, section, angler_type) |>
+# #!! this enables various aggregations of the point estimate
+# #!! some of which may be inappropriate
+# #!! and which neglect the dispersion/uncertainty (assuming not including a var() call above and then summarizing by mean/sum on ang_hrs_var)
+#   ests$effort_ts_s_at_dt_mean_filled |> summarise(across(ang_hrs, sum), .groups = "drop")
+#   ests$effort_ts_s_at_dt_mean_filled |> group_by(DayType) |> summarise(across(ang_hrs, sum), .groups = "drop")
+#   ests$effort_ts_s_at_dt_mean_filled |> group_by(angler_type) |> summarise(across(ang_hrs, sum), .groups = "drop")
+#   ests$effort_ts_s_at_dt_mean_filled |> group_by(DayType, angler_type) |> summarise(across(ang_hrs, sum), .groups = "drop")
+#   ests$effort_ts_s_at_dt_mean_filled |> group_by(time_strata) |> summarise(across(ang_hrs, sum), .groups = "drop")
+#   ests$effort_ts_s_at_dt_mean_filled |> group_by(time_strata, DayType) |> summarise(across(ang_hrs, sum), .groups = "drop")
+#   ests$effort_ts_s_at_dt_mean_filled |> group_by(time_strata, angler_type) |> summarise(across(ang_hrs, sum), .groups = "drop")
+#   ests$effort_ts_s_at_dt_mean_filled |> group_by(time_strata, DayType, section, angler_type) |> summarise(across(ang_hrs, sum), .groups = "drop")
+
+  ests$effort_ts_s_at <- ests$effort |> 
+    group_by(time_strata, section, angler_type) |>
     summarize(
+      n_obs = sum(!is.na(ang_hrs_daily_mean_TI_expan)), #n_days = n(),
       across(
         .cols = c(ang_hrs_daily_mean_TI_expan),
         .fns = list(
           mean = ~mean(.x, na.rm = T),
-          var = ~var(.x, na.rm = T),
-          sd = ~sd(.x, na.rm = T)), #med = median,
+          var = ~var(.x, na.rm = T)
+          ), #sd = ~sd(.x, na.rm = T), med = ~median(.x, na.rm=T),
         .names = "ang_hrs_{.fn}"
       ), .groups = "drop") |> 
-    right_join(creel$days_total, by = c("time_strata", "DayType", "section")) |> 
-    left_join(pe$df, by = c("time_strata", "DayType", "section", "angler_type")) |> 
+    right_join(
+      creel$days_total |> 
+        group_by(time_strata, section) |> 
+        summarise(N_days = sum(N_days), .groups = "drop"),
+      by = c("time_strata", "section")) |> 
+#!!not sure this is correct - could/should recalc df for within-week/month?
+    left_join(pe$df |> distinct(section, angler_type, df), by = c("section", "angler_type")) |> 
+#!!this carries forward the orig variance eqns but not sure if
+#!!1) eqns are correctly implemented or 
+#!!2) eqns are meaningful relative to the ang_hrs_var already present from base var() 
+#!! i.e., the 3rd term "adjustment coef" in the first case 
+#!! acts to reduce the first 2 terms' computed "variance", and is asymptotic to 0 for complete sampling
+#!! such that case logic prevents 0 total_effort_var at n_obs==N_days 
     mutate(
       total_effort = N_days * ang_hrs_mean,
-      #!!need clarification on "variance_total_daily_effort"
-      variance_total_daily_effort = if_else(
-        n_days_samp < N_days,
-        (N_days^2) * (ang_hrs_var / n_days_samp) * (1-(n_days_samp/N_days)),
-        (N_days^2) * (ang_hrs_var / n_days_samp)
-      )
-    )
-  
-  
-#!!not ready yet to add these back...
-#       lwr95CI = total_effort - qt(1-(0.05/2),degrees_freedom)*(variance^0.5),
-#       upr95CI = total_effort + qt(1-(0.05/2),degrees_freedom)*(variance^0.5),
-    
+      total_effort_var = if_else(
+        n_obs < N_days,
+        (N_days^2) * (ang_hrs_var / n_obs) * (1-(n_obs/N_days)),
+        (N_days^2) * (ang_hrs_var / n_obs)
+      ),
+      lwr95CI = total_effort - qt(1-(0.05/2),df)*(total_effort_var^0.5),
+      upr95CI = total_effort + qt(1-(0.05/2),df)*(total_effort_var^0.5)
+    ) 
 
-  
+#these DO NOT match...
+#the former takes means within DayTypes per week strata
+#whereas the latter takes means across DayTypes per week strata... 
+ests$effort_ts_s_at_dt_mean_filled |> summarise(across(ang_hrs, sum), .groups = "drop")
+ests$effort_ts_s_at |> summarise(across(total_effort, sum), .groups = "drop")
+
+left_join(
+  ests$effort_ts_s_at |> print(n=nrow(ests$effort_ts_s_at))
+  ,  
+  ests$effort_ts_s_at_dt_mean_filled |> group_by(time_strata, section, angler_type) |> summarise(across(ang_hrs, sum), .groups = "drop")
+  ,
+  by = c("time_strata","section","angler_type")
+) |> 
+  mutate(d = total_effort - ang_hrs) |> 
+  select(time_strata, angler_type, total_effort, ang_hrs) |> 
+  pivot_longer(c(total_effort, ang_hrs), names_to = "var", values_to = "val") |> 
+  ggplot(aes(factor(time_strata), val, fill = var)) + geom_col(position = "dodge") + facet_wrap(~angler_type)
+
+#!!illustrating a further case...
+  ests$effort_s_at <- ests$effort |> 
+    group_by(section, angler_type) |>
+    summarize(
+      n_obs = sum(!is.na(ang_hrs_daily_mean_TI_expan)), #n_days = n(),
+      across(
+        .cols = c(ang_hrs_daily_mean_TI_expan),
+        .fns = list(
+          mean = ~mean(.x, na.rm = T),
+          var = ~var(.x, na.rm = T)
+          ), #sd = ~sd(.x, na.rm = T), med = ~median(.x, na.rm=T),
+        .names = "ang_hrs_{.fn}"
+      ), .groups = "drop") |> 
+    right_join(
+      creel$days_total |> 
+        group_by(section) |> 
+        summarise(N_days = sum(N_days), .groups = "drop"),
+      by = c("section")) |> 
+    left_join(pe$df |> distinct(section, angler_type, df), by = c("section", "angler_type")) |> 
+    mutate(
+      total_effort = N_days * ang_hrs_mean,
+      total_effort_var = if_else(
+        n_obs < N_days,
+        (N_days^2) * (ang_hrs_var / n_obs) * (1-(n_obs/N_days)),
+        (N_days^2) * (ang_hrs_var / n_obs)
+      ),
+      lwr95CI = total_effort - qt(1-(0.05/2),df)*(total_effort_var^0.5),
+      upr95CI = total_effort + qt(1-(0.05/2),df)*(total_effort_var^0.5)
+    ) 
+#yet another distinct (higher) total estimate...
+ests$effort_s_at |> summarise(across(total_effort, sum), .groups = "drop")
+#peak obs inflate means that are then applied to all days...?
+ests$effort_ts_s_at_dt_mean_filled |> group_by(section, angler_type) |>  summarise(across(ang_hrs, sum), .groups = "drop")
+ests$effort_ts_s_at |> group_by(section, angler_type) |> summarise(across(total_effort, sum), .groups = "drop")
+ests$effort_s_at
+
+
 
   pe$daily_CPUE |>
     group_by(time_strata, DayType, section, angler_type, catch_group) |>
