@@ -41,14 +41,6 @@ dwg_base <- list(
 # -closure files
 load("fw_creel_dash_envi.RData")
 
-# #water_body options by proj_name options
-# #ideally this would be defined directly from a query against strings in the db
-# proj_levels <- list(
-#   `R5 Steelhead` = list("Kalama River"),
-#   `District 13` = list("Skykomish River", "Tokul Creek"),
-#   `District 14` = list("Cascade River", "Sauk River", "Skagit River")
-# )
-
 #currently reliant on consistent naming practice across lu-type
 #could revise to coerce, but okay to allow failure with mismatched names
 #names(lu$census_expansions); names(lu$closures_by_section)
@@ -120,29 +112,6 @@ Sidebar {.sidebar data-width=350}
 selectInput(inputId = 'analysis_name', label = 'Analysis Name', choices = input_levels$analysis_name, selected = input_levels$analysis_name[1])
 
 
-# selectInput(inputId = 'proj_name', label = 'Project Name', choices = names(proj_levels)
-#             , selected = "District 13"
-#             )
-# 
-# selectizeInput(inputId = 'water_body', label = 'Water Body', choices = proj_levels, multiple = TRUE
-#                , selected = "Skykomish River"
-#                )
-
-# dateRangeInput(inputId = 'dates', label = "Date range"
-#                , start = "2021-05-29", end = "2021-07-18" 
-#                )
-# 
-# selectInput(inputId = 'closures', label = 'Closures', choices = names(lu$closures_by_section), multiple = FALSE
-#             , selected = "d13_skykomish_summer_chin"
-#             )
-# selectInput(inputId = 'sections', label = 'Sections', choices = names(lu$sections), multiple = FALSE
-#             , selected = "d13_skykomish_summer_chin"
-#             )
-# selectInput(inputId = 'census_exp', label = 'Census Expansion LU', choices = names(lu$census_expansions), multiple = FALSE
-#             , selected = "d13_skykomish_summer_chin"
-#             )
-
-
 radioButtons(inputId = 'model_period', label = "Model period", choices = c("Week", "Month")
              , selected = "Week"
              )
@@ -184,14 +153,10 @@ actionButton("fetch", label = "Fetch raw data")
 # 
 # input$analysis_name <- input_levels$analysis_name[1]
 # 
-# # input$proj_name <- "District 13"
-# # # input$proj_name <- "District 14"
-# 
 # # input$water_body <- c("Skykomish River")
 # # input$dates <- c(as.Date("2021-05-29", "%Y-%m-%d"), as.Date("2021-07-18", "%Y-%m-%d"))
 # # input$water_body <- c("Skagit River")
 # # input$dates <- c(as.Date("2022-05-01", "%Y-%m-%d"), as.Date("2022-05-31", "%Y-%m-%d"))
-# 
 # # # input$water_body <- "Cascade River"
 # # # input$dates <- c(as.Date("2021-09-16", "%Y-%m-%d"), as.Date("2021-11-30", "%Y-%m-%d"))
 # # # input$water_body <- c("Skagit River", "Sauk River")
@@ -204,16 +169,6 @@ actionButton("fetch", label = "Fetch raw data")
 # input$days_wkend <- c("Friday","Saturday", "Sunday")
 # # input$days_wkend <- c("Saturday", "Sunday")
 # input$int_ang_hrs_tot_min <- 0.5
-
-# input$sections <- "d13_skykomish_summer_chin"
-# input$census_exp <- "d13_skykomish_summer_chin"
-# input$closures <- "d13_skykomish_summer_chin"
-# # input$sections <- "d14_cascade_fall_salmon"
-# # input$census_exp <- "Cascade_Fall_Salmon_2021"
-# # input$sections <- "r5_kalama_steelhead"
-# #input$census_exp <- "r5_kalama_example"
-# # input$sections <- "d14_skagit_fall_salmon_PE"
-# # input$census_exp <- "Skagit_Fall_Salmon_2021"
 
 
 #this is "event reactive", so should not trigger on fiddling with inputs
@@ -237,21 +192,19 @@ reactive({
     lu$sections[[input$analysis_name]], #lu$sections[[input$sections]],
     water_body_desc, location = location_code, section)
   
-  lu_input$census_exp <- mutate(
+  lu_input$census_exp <- dplyr::mutate(
     lu$census_expansions[[input$analysis_name]],
     cen_exp_meth = input$census_expansion)
-  #lu$census_expansions[[input$census_exp]] |> mutate(cen_exp_meth = input$census_expansion)
-  
-  lu_input$closures <- drop_na(lu$closures_by_section[[input$analysis_name]], event_date)
-    #lu$closures_by_section[[input$closures]] |> drop_na(event_date)
+
+  lu_input$closures <- tidyr::drop_na(lu$closures_by_section[[input$analysis_name]], event_date)
 
   
   creel$event <- paste0(
     dwg_base$event,
-    "?$where=project_name in('", input_analysis$proj_name, "')", #input$proj_name, "')",
-    " AND water_body in('", paste0(input_analysis$water_body, collapse = "','"), "')", #paste0(input$water_body, collapse = "','"), "')",
-    " AND event_date between '", first(lu_input$closures$event_date), #input$dates[1],
-    "T00:00:00' and '", last(lu_input$closures$event_date), #input$dates[2],
+    "?$where=project_name in('", input_analysis$proj_name, "')",
+    " AND water_body in('", paste0(input_analysis$water_body, collapse = "','"), "')", 
+    " AND event_date between '", first(lu_input$closures$event_date),
+    "T00:00:00' and '", last(lu_input$closures$event_date),
     "T00:00:00'&$limit=100000"
     ) |>
     utils::URLencode() |>
@@ -304,7 +257,7 @@ reactive({
     
     #this whole chunk depends on button push, so "lazy" against fiddling
     creel$days <- tibble::tibble(
-      event_date = lu_input$closures$event_date, #seq.Date(input$dates[1], input$dates[2], by = "day"),
+      event_date = lu_input$closures$event_date,
       Day = weekdays(event_date),
       DayType = if_else(
         Day %in% input$days_wkend | Day %in% lu$dates_holidays_2015_2030,
@@ -364,23 +317,23 @@ reactive({
     #begin with focal census data
     creel$effort |> 
       dplyr::filter(tie_in_indicator == 1) |>
-      dplyr::select(event_date, location, section, tie_in_indicator, count_type, count_quantity)
+      dplyr::select(section, location, event_date, tie_in_indicator, count_type, count_quantity)
     ,
     #reassign count_seq from closest index
     dplyr::left_join(
       creel$effort |> dplyr::filter(tie_in_indicator == 1) |> 
-        dplyr::distinct(event_date, section, location, tie_in_indicator, effort_start_time, count_sequence),
+        dplyr::distinct(section, location, event_date, tie_in_indicator, effort_start_time, count_sequence),
       creel$effort |> dplyr::filter(tie_in_indicator == 0) |> 
-        dplyr::distinct(event_date, section, tie_in_indicator, effort_start_time, count_sequence),
-      by = c("event_date", "section"),
+        dplyr::distinct(section, event_date, tie_in_indicator, effort_start_time, count_sequence),
+      by = c( "section", "event_date"),
       suffix = c("_cen", "_ind")
       ) |>
-      dplyr::group_by(event_date, section, location) |>
+      dplyr::group_by(section, event_date, location) |>
       dplyr::slice_min(abs(effort_start_time_cen - effort_start_time_ind), n = 1) |>
       dplyr::ungroup() |>
-      dplyr::distinct(event_date, section, location, count_sequence = count_sequence_ind)
+      dplyr::distinct(section, location, event_date, count_sequence = count_sequence_ind)
     ,
-    by = c("event_date", "section", "location")
+    by = c("section", "location", "event_date")
     ) |>
     dplyr::mutate(
       angler_type = dplyr::case_when(
@@ -389,11 +342,8 @@ reactive({
       )
     ) |>
     tidyr::drop_na(angler_type) |> 
-#!! gratuitous group_by & summarize??
-    dplyr::group_by(event_date, section, tie_in_indicator, count_sequence, angler_type) |>
-    dplyr::summarize(count_census = sum(count_quantity), .groups = "drop") |>
-    tidyr::drop_na(count_sequence) |> 
-    dplyr::arrange(event_date, section, count_sequence)
+    dplyr::select(section, event_date, tie_in_indicator, count_sequence, angler_type, count_census = count_quantity) |> 
+    dplyr::arrange(section, event_date, count_sequence)
   
   #### pe$effort_index --------------
   # filters and aggregates over locations within count_seq & section
@@ -404,7 +354,7 @@ reactive({
     is.na(no_count_reason),
     !is.na(count_type)
     ) |>
-    dplyr::group_by(event_date, section, count_sequence, count_type) |>
+    dplyr::group_by(section, event_date, count_sequence, count_type) |>
     dplyr::summarise(count_index = sum(count_quantity), .groups = "drop") |>
     dplyr::mutate(
       angler_type = dplyr::case_when(
@@ -414,7 +364,7 @@ reactive({
         count_type == "Vehicle Only" ~ "total"
       )
     ) |> 
-    dplyr::arrange(event_date, section, count_sequence)
+    dplyr::arrange(section, event_date, count_sequence)
   
   #### pe$interview --------------
   # #interview data have angler_count, vehicle_count, trailer_count, angler_type and boat_used
@@ -452,7 +402,7 @@ reactive({
            -crc_area, -fishing_location, -ends_with("_time"),
            -previously_interviewed, -comment_txt, -water_body_desc
     ) |> 
-    dplyr::arrange(event_date, time_strata, section, angler_type, location)
+    dplyr::arrange(section, time_strata, event_date, angler_type, location)
   
   #### pe$interview_and_catch --------------
   # join catch data to interview after inferring complete cases (counts or 0s for all catch_groups encountered)
@@ -461,7 +411,7 @@ reactive({
   # similarly, rows in creel$catch for "short" interviews may be lost in join 
   pe$interview_and_catch <- left_join(
     pe$interview |> 
-      select(event_date, time_strata, DayType, section, interview_id, angler_type, ends_with("_count"), angler_hours, angler_hours_total) 
+      select(section, time_strata, DayType, event_date, interview_id, angler_type, ends_with("_count"), angler_hours, angler_hours_total) 
     ,
     creel$catch |> 
       group_by(interview_id, catch_group) |> 
@@ -490,12 +440,12 @@ reactive({
     #initial angler_hours_daily_mean: join day length against mean counts over count_seqs per section-day-angler_type
     pe$angler_hours_daily_mean <- left_join(
       pe$effort_index |> 
-        dplyr::group_by(event_date, section, angler_type) |>
+        dplyr::group_by(section, event_date, angler_type) |>
         dplyr::summarise(count_index_mean = mean(count_index), .groups = "drop"),
       creel$days |> select(event_date, DayL),
       by = "event_date") |>
       mutate(angler_hours_daily_mean = count_index_mean * DayL) |>
-      arrange(event_date, section)
+      arrange(section, event_date)
     
     #census_TI_expan: left join effort index counts to census counts and expand by TI
     #count_census begins summed by event_date, section, tie_in_indicator, count_sequence, with angler_type in [bank, boat]
@@ -503,7 +453,7 @@ reactive({
     pe$census_TI_expan <- left_join(
       pe$effort_census,
       pe$effort_index,
-      by = c("event_date", "section", "count_sequence","angler_type")
+      by = c("section", "event_date", "count_sequence", "angler_type")
       ) |>
       filter(
         !is.na(count_census), !is.na(count_index),
@@ -517,7 +467,7 @@ reactive({
       left_join(
         lu_input$census_exp |>
           select(cen_exp_meth, angler_type, section, p_TI, TI_expan_indirect = Indirect_TI_Expan),
-        by = c("angler_type", "section")) |>
+        by = c("section", "angler_type")) |>
       mutate(
         cen_exp_meth = replace_na(cen_exp_meth, input$census_expansion),
         p_TI = replace_na(p_TI, 1),
@@ -540,27 +490,27 @@ reactive({
     #first the interviews are used to estimate anglers per vehicle, stratified by boat vs total (from boat|bank angler_type rows in interview)
     pe$interview_ang_per_vehic <- bind_rows(
       pe$interview |>
-        group_by(event_date, section) |>
+        group_by(section, event_date) |>
         summarize(angler_type = "total", anglers_per_vhcl_trlr = sum(angler_count) / sum(vehicle_count), .groups = "drop")
       ,
       pe$interview |>
         filter(angler_type == "boat") |>
-        group_by(event_date, section) |>
+        group_by(section, event_date) |>
         summarize(angler_type = "boat", anglers_per_vhcl_trlr = sum(angler_count) / sum(trailer_count), .groups = "drop")
     ) |> 
-      arrange(event_date, section)
+      arrange(section, event_date)
     
     #note this left_join drops rows of index counts where a given date-section-angler_type is missing from interview data
     pe$angler_hours_daily_mean <- left_join(
       pe$interview_ang_per_vehic, #coerced above to total/boat
       pe$effort_index |> #already in total/boat
-        dplyr::group_by(event_date, section, angler_type) |>
+        dplyr::group_by(section, event_date, angler_type) |>
         dplyr::summarise(count_index_mean = mean(count_index), .groups = "drop")
       ,
-      by = c("event_date", "section", "angler_type")) |>
+      by = c( "section", "event_date", "angler_type")) |>
       left_join(creel$days |> select(event_date, DayL), by = "event_date") |>
       mutate(angler_hours_daily_mean = anglers_per_vhcl_trlr * count_index_mean * DayL) |>
-      arrange(event_date, section)
+      arrange(section, event_date)
     
     #now coerce back to angler_type bank/boat (unexpanded)
     pe$angler_hours_daily_mean <- pe$angler_hours_daily_mean |> 
@@ -580,12 +530,12 @@ reactive({
       #but as for interview above, first split and collapse to reassign angler_type as total & boat
       bind_rows(
         pe$effort_census |>
-          group_by(event_date, section, count_sequence) |>
+          group_by(section, event_date, count_sequence) |>
           summarize(angler_type = "total", count_census = sum(count_census),  .groups = "drop")
         ,
         pe$effort_census |>
           filter(angler_type == "boat") |>
-          group_by(event_date, section, count_sequence) |>
+          group_by(section, event_date, count_sequence) |>
           summarize(angler_type = "boat", count_census = sum(count_census), .groups = "drop")
       ),
       #index via interviews with angler_type already total & boat
@@ -595,12 +545,12 @@ reactive({
       left_join(
         pe$interview_ang_per_vehic,
         pe$effort_index,
-        by = c("event_date", "section", "angler_type")
+        by = c("section", "event_date", "angler_type")
       ) |>
         mutate(count_index = anglers_per_vhcl_trlr * count_index) |>
-        select(event_date, section, count_sequence, angler_type, count_index)
+        select(section, event_date, count_sequence, angler_type, count_index)
       ,
-      by = c("event_date", "section", "count_sequence", "angler_type")
+      by = c("section", "event_date", "count_sequence", "angler_type")
     )  
     #now overwrite, coercing angler_type back to bank/boat as above for pe$angler_hours_daily_mean
     #again dropping NAs and negatives as invalid for inferring estimates
@@ -623,7 +573,7 @@ reactive({
       left_join(
         lu_input$census_exp |>
           select(cen_exp_meth, angler_type, section, p_TI, TI_expan_indirect = Indirect_TI_Expan),
-        by = c("angler_type", "section")) |>
+        by = c("section", "angler_type")) |>
       mutate(
         cen_exp_meth = replace_na(cen_exp_meth, input$census_expansion),
         p_TI = replace_na(p_TI, 1),
@@ -645,25 +595,25 @@ reactive({
     
 }
   
-  #### pe$dailyCPUE ------------------------
+  #### pe$daily_cpue_catch_est ------------------------
 
   #aggregate interviews per day per strata of [week/month-weekend/day-section-bank/boat-catch_group]
   #   here including only "mean of ratios" (mean over interviews)
   #   dropping "ratio of the means" (actually sums): sum(fish_count) / sum(angler_hours_total)
   #then multiply by TI-expanded effort estimate
-  #dropping any date-section-angler_type-catch_groups for which interview-based CPUE is available
+  #dropping any date-section-angler_type-catch_groups for which only interview-based CPUE is available
   #but census-corrected effort estimates are not (various reasons why a day-section-angler_type hours could be NA)
-  pe$daily_CPUE <- pe$interview_and_catch |>
+  pe$daily_cpue_catch_est <- pe$interview_and_catch |>
     mutate(cpue_interview = fish_count / angler_hours_total) |>
-    group_by(time_strata, event_date, DayType, section, angler_type, catch_group) |>
+    group_by(section, time_strata, DayType, event_date, angler_type, catch_group) |>
     summarise(cpue_mor_daily = mean(cpue_interview), .groups = "drop") |> 
     left_join(
       pe$angler_hours_daily_mean, 
-      by = c("event_date", "section", "angler_type")
+      by = c("section", "event_date", "angler_type")
     ) |>
-    drop_na(ang_hrs_daily_mean_TI_expan) |> 
+    tidyr::drop_na(ang_hrs_daily_mean_TI_expan) |> 
     mutate(catch_estimate = round(cpue_mor_daily * ang_hrs_daily_mean_TI_expan, 3)) |>
-    arrange(event_date, section, angler_type, catch_group)
+    arrange(section, event_date, angler_type, catch_group)
       
   # #degrees of freedom by section and angler type to apply to time strata estimates
   # pe$df <- pe$angler_hours_daily_mean |> 
@@ -679,7 +629,7 @@ reactive({
     creel$days |> select(event_date, time_strata, DayType),
     by = "event_date"
     ) |> 
-    count(time_strata, DayType, section, angler_type, name = "n_days_samp") |> 
+    count(section, time_strata, DayType, angler_type, name = "n_days_samp") |> 
     #count(time_strata, section, angler_type, name = "n_days_samp") |> 
     group_by(section, angler_type) |>
     mutate(df = (min(n_days_samp - 1) + sum(n_days_samp))/2) |> 
@@ -883,7 +833,7 @@ ests$effort_s_at
 ests$effort_s_at_dt |> summarise(across(total_effort, sum), .groups = "drop")
   
 
-  pe$daily_CPUE |>
+  pe$daily_cpue_catch_est |>
     group_by(time_strata, DayType, section, angler_type, catch_group) |>
     summarize(
       across(
