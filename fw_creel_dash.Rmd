@@ -49,11 +49,9 @@ input_analysis_levels <- as_tibble(
   .name_repair = ~c("analysis_name", "proj_name", "water_body", "season", "species", "year", "misc")
   )
 
-
 lu_input <- reactiveValues() #focal river_lonlat, sections, census_exp and closures
 creel <- reactiveValues() #data queried from DWG as list of tibbles
 pe <- reactiveValues() #intermediate objects wrangled from creel list elements
-#ests <- reactiveValues() #final objects calc'd from pe & creel
 
 ```
 
@@ -146,12 +144,13 @@ numericInput(inputId = 'int_ang_hrs_tot_min', label = "Minimum interview total a
 actionButton("fetch", label = "Fetch raw data")
 
 
-# # # ##to uncomment for console dev
+# # ##to uncomment for console dev
 # lu_input <- list()
-# creel <- list()
 # input <- list()
+# creel <- list()
+# pe <- list()
 # 
-# input$analysis_name <- input_analysis_levels$analysis_name[1]
+# input$analysis_name <- input_analysis_levels$analysis_name[2]
 # 
 # # input$water_body <- c("Skykomish River")
 # # input$dates <- c(as.Date("2021-05-29", "%Y-%m-%d"), as.Date("2021-07-18", "%Y-%m-%d"))
@@ -286,7 +285,7 @@ reactive({
         cols = starts_with("open_section"), 
         names_to = "section", 
         values_to = "is_open") |>
-      filter(is_open == TRUE) |> 
+      filter(is_open) |> 
       mutate(section = as.numeric(gsub("^.*_", "", section))) |>
       count(time_strata, DayType, section, name = "N_days")
     
@@ -304,9 +303,6 @@ reactive({
 
 ```{r calc_pe_ests}
 actionButton("estimate", label = "Calculate estimates")
-
-#pe <- list()
-#ests <- list()
 
 reactive({
   #### pe$effort_census --------------
@@ -510,19 +506,24 @@ reactive({
       by = c( "section", "event_date", "angler_type")) |>
       left_join(creel$days |> select(event_date, DayL), by = "event_date") |>
       mutate(angler_hours_daily_mean = anglers_per_vhcl_trlr * count_index_mean * DayL) |>
+      select(-DayL, -anglers_per_vhcl_trlr, -count_index_mean) |> 
       arrange(section, event_date)
     
     #now coerce back to angler_type bank/boat (unexpanded)
-    pe$angler_hours_daily_mean <- pe$angler_hours_daily_mean |> 
-      select(-DayL, -anglers_per_vhcl_trlr, -count_index_mean) |> 
-      pivot_wider(
-        names_from = angler_type, 
-        values_from = c(angler_hours_daily_mean), 
+    if(any(pe$angler_hours_daily_mean$angler_type=="boat")){
+      pe$angler_hours_daily_mean <- pe$angler_hours_daily_mean |> 
+        pivot_wider(
+          names_from = angler_type, 
+          values_from = c(angler_hours_daily_mean), 
         ) |>
-      mutate(bank = total - boat, total = NULL) |> 
-      pivot_longer(cols = c(boat, bank), names_to = "angler_type", values_to = "angler_hours_daily_mean") |> 
-      #NAs and negatives here reflect inadequate or problematic data barring meaningful inference...
-      filter(!is.na(angler_hours_daily_mean), angler_hours_daily_mean >= 0)
+        mutate(bank = total - boat, total = NULL) |> 
+        pivot_longer(cols = c(boat, bank), names_to = "angler_type", values_to = "angler_hours_daily_mean") |> 
+        #NAs and negatives here reflect inadequate or problematic data barring meaningful inference...
+        filter(!is.na(angler_hours_daily_mean), angler_hours_daily_mean >= 0)
+    } else {
+      pe$angler_hours_daily_mean <- pe$angler_hours_daily_mean |> 
+        mutate(angler_type = "bank")
+    }
 
     #begin census expansion values object by joining census and index in terms of total & boat
     pe$census_TI_expan <- left_join(
@@ -551,19 +552,28 @@ reactive({
         select(section, event_date, count_sequence, angler_type, count_index)
       ,
       by = c("section", "event_date", "count_sequence", "angler_type")
-    )  
+    ) |> 
+      tidyr::drop_na(count_index)
+
     #now overwrite, coercing angler_type back to bank/boat as above for pe$angler_hours_daily_mean
     #again dropping NAs and negatives as invalid for inferring estimates
+    if(any(pe$census_TI_expan$angler_type=="boat")){
+      pe$census_TI_expan <- pe$census_TI_expan |> 
+        pivot_longer(cols = c(count_census, count_index), names_to = "count_type", values_to = "count") |> 
+        pivot_wider(names_from = angler_type, values_from = count) |>
+        mutate(bank = total - boat, total = NULL) |> #filter(is.na(boat) | is.na(bank) | bank < 0)
+        pivot_longer(cols = c(boat, bank), names_to = "angler_type", values_to = "count") |>
+        pivot_wider(names_from = count_type, values_from = count) |> 
+        filter(
+          !is.na(count_census), !is.na(count_index),
+          count_census >= 0, count_index >= 0
+        )      
+    } else {
+      pe$census_TI_expan <- pe$census_TI_expan |>
+        mutate(angler_type = "bank")
+    }
+
     pe$census_TI_expan <- pe$census_TI_expan |> 
-      pivot_longer(cols = c(count_census, count_index), names_to = "count_type", values_to = "count") |> 
-      pivot_wider(names_from = angler_type, values_from = count) |>
-      mutate(bank = total - boat, total = NULL) |> #filter(is.na(boat) | is.na(bank) | bank < 0)
-      pivot_longer(cols = c(boat, bank), names_to = "angler_type", values_to = "count") |>
-      pivot_wider(names_from = count_type, values_from = count) |> 
-      filter(
-        !is.na(count_census), !is.na(count_index),
-        count_census >= 0, count_index >= 0
-      ) |> 
       group_by(section, angler_type) |> 
       summarise(
         TI_expan_weighted = sum(count_census) / sum(count_index),
@@ -662,10 +672,16 @@ reactive({
   pe$est_effort_s_ts_dt_at <- left_join(
     #dates expanded to n-sections * n-angler_types * n-days, previously held as "creel$days_section_angler_type" but only used once
     creel$days |>
-      select(time_strata, event_date, DayType, starts_with("open_section")) |> 
+      select(time_strata, DayType, event_date, starts_with("open_section")) |> 
+      pivot_longer(
+        cols = starts_with("open_section"), 
+        names_to = "section", 
+        values_to = "is_open") |>
+      filter(is_open) |> 
       mutate(
-        section = list(unique(lu_input$sections$section)),
-        angler_type = list(c("bank", "boat")) 
+        section = as.numeric(gsub("^.*_", "", section)), 
+        is_open = NULL,
+        angler_type = list(unique(pe$angler_hours_daily_mean$angler_type)) 
       ) |> 
       unnest(cols = section) |> 
       unnest(cols = angler_type)
@@ -710,10 +726,16 @@ reactive({
   pe$est_catch_s_ts_dt_at <- left_join(
     #dates expanded to n-sections * n-angler_types * n-days, previously held as "creel$days_section_angler_type" but only used once
     creel$days |>
-      select(time_strata, event_date, DayType, starts_with("open_section")) |> 
+      select(time_strata, DayType, event_date, starts_with("open_section")) |> 
+      pivot_longer(
+        cols = starts_with("open_section"), 
+        names_to = "section", 
+        values_to = "is_open") |>
+      filter(is_open) |> 
       mutate(
-        section = list(unique(lu_input$sections$section)),
-        angler_type = list(c("bank", "boat")) 
+        section = as.numeric(gsub("^.*_", "", section)), 
+        is_open = NULL,
+        angler_type = list(unique(pe$angler_hours_daily_mean$angler_type)) 
       ) |> 
       unnest(cols = section) |> 
       unnest(cols = angler_type)
@@ -921,9 +943,9 @@ render_gt({
     #by angler_type, summed over weekday/weekend and week/month
     pe$est_effort_s_ts_dt_at |>
       group_by(section, angler_type) |>
-      summarise(across(c(effort, effort_var), ~round(sum(.))), .groups = "drop") |> 
+      summarise(across(c(effort, effort_var), ~round(sum(., na.rm = T))), .groups = "drop") |> 
       gt() |> 
-      gt::summary_rows(columns = effort, fns = list(sum = ~round(sum(.),0)))
+      gt::summary_rows(columns = effort, fns = list(sum = ~round(sum(., na.rm = T),0)))
     
 # pe$est_effort_s_ts_dt_at |> 
 #   group_by(section) |> 
