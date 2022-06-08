@@ -133,7 +133,7 @@ radioButtons(inputId = 'census_expansion', label = "Census expansion method",
 checkboxGroupInput(inputId = 'days_wkend', label = "Days in 'weekends'",
                    choiceNames =  c("Mon", "Tues", "Wed", "Thur", "Fri", "Sat", "Sun"),
                    choiceValues = c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"),
-                   selected = c("Saturday", "Sunday"))
+                   selected = c("Friday", "Saturday", "Sunday"))
 
 numericInput(inputId = 'int_ang_hrs_tot_min', label = "Minimum interview total angler hours", 
              value = 0.5, min = 0, max = 2)
@@ -156,7 +156,7 @@ actionButton("fetch", label = "Fetch raw data")
 # creel <- list()
 # pe <- list()
 # 
-# input$analysis_name <- input_analysis_levels$analysis_name[4]
+# input$analysis_name <- input_analysis_levels$analysis_name[2]
 # 
 # input$model_period <- "Week"
 # # input$model_period <- "Month"
@@ -915,14 +915,14 @@ Interview
 
 ```{r pe$interview_boxplot}
 renderPlot({
-  if(!is.null(pe$interview)) { #creel$interview
+  if(!is.null(pe$interview)) { 
     pe$interview |>
       mutate(event_date = format(event_date, "%m-%d")) |> 
       ggplot(aes(event_date, angler_hours_total, fill = angler_type)) +
       geom_boxplot(position = position_dodge(), outlier.shape = NA) +
       geom_jitter(width = 0.5) +
       scale_x_discrete(guide = guide_axis(angle = 90)) +
-      facet_wrap(~section + angler_type, scales = "free", ncol = 2, labeller = label_wrap_gen(multi_line = F), ncol = 1) 
+      facet_wrap(~section + angler_type, scales = "free", ncol = 2, labeller = label_wrap_gen(multi_line = F)) 
   }
 })
 
@@ -935,17 +935,18 @@ Catch
 
 ```{r pe$interview_and_catch_dot}
 renderPlot({
-  if(!is.null(pe$interview_and_catch)) { #creel$interview
+  if(!is.null(pe$interview_and_catch)) {
     pe$interview_and_catch |>
       group_by(section, time_strata, DayType, event_date, angler_type, catch_group) |> 
       summarise(fish_count = sum(fish_count), .groups = "drop") |> 
+      filter(fish_count > 0) |> #scale_size_area still showing dots... 
       # separate(catch_group, into = c("species", "life_stage", "mark", "fate"), sep = "_", remove = T, fill = "right") |> 
       # pivot_wider(names_from = c(life_stage, mark, fate), values_from = fish_count)
       ggplot(aes(event_date, catch_group, size = fish_count, color = fish_count)) +
       geom_point() +
       scale_size_area() + scale_color_binned() +
       scale_x_date("") + scale_y_discrete("") +
-      facet_wrap(~section + angler_type, scales = "fixed", ncol = 2, labeller = label_wrap_gen(multi_line = F), ncol = 1)
+      facet_wrap(~section + angler_type, scales = "fixed", ncol = 2, labeller = label_wrap_gen(multi_line = F))
   }
 })
 
