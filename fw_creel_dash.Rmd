@@ -902,7 +902,7 @@ renderPlot({
       geom_point() + geom_text(aes(label = count_index), nudge_y = 1, check_overlap = T) +
       scale_x_date("", date_breaks = "3 days", date_labels =  "%m-%d") + scale_y_continuous("") +
       scale_color_brewer(palette = "Set2", aesthetics = c("color", "fill")) +
-      facet_wrap(~section + count_type + angler_type, scales = "free", labeller = label_wrap_gen(multi_line = F))
+      facet_wrap(~section + count_type + angler_type, scales = "free", ncol = 2, labeller = label_wrap_gen(multi_line = F))
   }
 })
 
@@ -922,7 +922,7 @@ renderPlot({
       geom_boxplot(position = position_dodge(), outlier.shape = NA) +
       geom_jitter(width = 0.5) +
       scale_x_discrete(guide = guide_axis(angle = 90)) +
-      facet_wrap(~section + angler_type, scales = "free", labeller = label_wrap_gen(multi_line = F), ncol = 1) 
+      facet_wrap(~section + angler_type, scales = "free", ncol = 2, labeller = label_wrap_gen(multi_line = F), ncol = 1) 
   }
 })
 
@@ -945,7 +945,7 @@ renderPlot({
       geom_point() +
       scale_size_area() + scale_color_binned() +
       scale_x_date("") + scale_y_discrete("") +
-      facet_wrap(~section + angler_type, scales = "fixed", labeller = label_wrap_gen(multi_line = F), ncol = 1)
+      facet_wrap(~section + angler_type, scales = "fixed", ncol = 2, labeller = label_wrap_gen(multi_line = F), ncol = 1)
   }
 })
 
