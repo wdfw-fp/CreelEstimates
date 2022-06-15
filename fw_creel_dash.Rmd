@@ -156,7 +156,7 @@ actionButton("fetch", label = "Fetch raw data")
 # creel <- list()
 # pe <- list()
 # 
-# input$analysis_name <- input_analysis_levels$analysis_name[2]
+# input$analysis_name <- input_analysis_levels$analysis_name[5]
 # 
 # input$model_period <- "Week"
 # # input$model_period <- "Month"
@@ -230,10 +230,12 @@ reactive({
       ) |> 
       utils::URLencode() |>
       readr::read_csv(show_col_types = F) |>
-      dplyr::rename(location = interview_location) |> 
       dplyr::select(
         -created_datetime, -modified_datetime,
         -state_residence, -zip_code) |> 
+      dplyr::mutate(
+        location = if_else(is.na(interview_location), fishing_location, interview_location)  #      dplyr::rename(location = interview_location)
+      ) |> 
       dplyr::left_join(lu_input$sections, by = c("location")) |> 
       dplyr::filter(!is.na(section))
     
