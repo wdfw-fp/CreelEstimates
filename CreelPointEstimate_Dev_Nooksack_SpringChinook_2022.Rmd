@@ -1,14 +1,14 @@
 ---
 title: Creel Point Estimate Analysis
 params:
-  proj_name: "District 13"
-  water_body: "Skykomish River"
-  date_start: "2021-05-29"   
-  date_end: "2021-07-18"
+  proj_name: "District 14"
+  water_body: "Nooksack River - North Fork"
+  date_start: "2022-05-28"   
+  date_end: "2022-06-15"
   index_count_types: "Vehicle Only,Trailers Only"
   census_expansion: "direct"
   model_period: "Week"
-  sections: "sections_d13_skykomish_summer_chin.csv"
+  sections: "District 14_Nooksack River - North Fork_spring_chin_2022_sections.csv"
 output:
   html_document:
     fig_caption: yes
@@ -51,7 +51,7 @@ lut <- map(
   list(
     river_loc = "input_files/river_locations_master.csv", # using file with Skagit location
     sections = file.path("input_files", params$sections),
-    census_expansion = "input_files/ti_expansions_d13_skykomish_summer_chin.csv" 
+    census_expansion = "input_files/District 14_Nooksack River - North Fork_spring_chin_2022_tiexp.csv" 
   ),
   ~readr::read_csv(file.path(.x))
 )
@@ -316,7 +316,7 @@ d_days <- rows_upsert(d_days,
       # tibble(section = "3", closure_begin = "2021-10-19", closure_end = "2021-10-20") # treaty fishery closure
       # tibble(section = "1,2,3,4,5", closure_begin = "2021-11-13", closure_end = "2021-11-14"), # river out due to flows
       # tibble(section = "1,2,3,4,5", closure_begin = "2021-11-17", closure_end = "2021-11-18") # river out due to flows
-      tibble(section = "1", closure_begin = "2021-05-28", closure_end = "2021-05-28")
+      tibble(section = "1", closure_begin = "2022-05-27", closure_end = "2022-05-27")
       
     ) |>
       rowwise() |>
@@ -1053,7 +1053,7 @@ point_estimate_data_prelim$effort_interviews_totalandboat <- point_estimate_data
   left_join(point_estimate_data_prelim$census_counts_all, by = c("section", "angler_type")) |> 
   # select(-c(time_strata)) |> 
   mutate(
-    mean_daily_TI_expan = mean_daily_effort * TI_expan_final
+    mean_daily_TI_expan = mean_daily_effort * 1 ## workaround for initial Nooksack estimate, given first tie in survey was 0/0
   ) 
 
 # subtract boat effort from the total effort to estimate bank effort. 
@@ -1321,8 +1321,9 @@ estimates$daily_effort_cpue_catch <- point_estimate_data_prelim$daily_CPUE  |>
   #   catch_estimate = replace_na(catch_estimate, 0)
   # ) |> 
     # filter(str_detect(catch_group, 'Coho|Chinook')) |> # filter to specific species
-    filter(str_detect(catch_group, 'Chinook')) |> # filter to specific species
-  # filter(catch_group == "Steelhead_Adult_UM_Released") |> # filter to specific catch_group
+    # filter(str_detect(catch_group, 'Chinook')) |> # filter to specific species
+    # filter(str_detect(catch_group %in% c('Chinook', 'Steelhead')) |> # filter to specific species
+  filter(catch_group %in% c("Chinook_Adult_UM_Released", "Chinook_Adult_AD_Kept","Steelhead_Adult_UM_Released")) |> # filter to specific catch_group
   distinct() |>
   # filter(!is.na(mean_daily_TI_expan)) |> 
   arrange(catch_group, section, event_date, angler_type) |> 
@@ -1534,7 +1535,7 @@ write_csv(estimates$time_strata_catch_total, paste(model_output, paste(paste(par
 
 estimates$time_strata_catch_total |>
   # filter(catch_group %in% c("Chinook_Adult_UM_Released", "Chinook_Adult_AD_Released")) |>
-    filter(catch_group %in% c("Steelhead_Adult_UM_Released")) |>
+    filter(catch_group %in% c("Chinook_Adult_UM_Released", "Chinook_Adult_AD_Kept","Steelhead_Adult_UM_Released")) |>
   # rename(Week = time_strata) |>
   # left_join(d_days, by = "Week") |>
   # left_join(lut$sections |>
@@ -1643,7 +1644,7 @@ write_csv(estimates$cpue_time_strata, paste(model_output, paste(paste(params$pro
 
 estimates$cpue_time_strata |> 
   # filter(catch_group %in% c("Chinook_Adult_UM_Released")) |> 
-  filter(catch_group %in% c( "Chinook_Adult_AD_Kept")) |>
+  filter(catch_group %in% c("Chinook_Adult_UM_Released", "Chinook_Adult_AD_Kept","Steelhead_Adult_UM_Released")) |>
   ggplot(aes(x = event_date, y = total_catch, fill = angler_type)) +
   geom_ribbon(aes(ymin = catch_lwr95CI, ymax = catch_upr95CI, group = angler_type)) +
   geom_line() +
