@@ -8,7 +8,7 @@ params:
   index_count_types: "Vehicle/Trailers Only"
   census_expansion: "Direct"
   int_ang_hrs_tot_min: 0.5
-  dir_output: "C:/Users/auerbdaa/Downloads"
+  dir_output: "T:/DFW-Team FP D14 FW Creel - General/"
 output:
   html_document:
     fig_caption: yes
@@ -68,14 +68,10 @@ pe <- list() #intermediate objects wrangled from creel list elements
 
 ```
 
-# Analysis metadata
+# `r paste(params$analysis_name)`
 
 ```{r}
-gt(input_analysis)
-```
-
-```{r}
-params #can find a way to prettify
+gt(tibble(param = names(params), value = as.character(params)))
 ```
 
 # Fetch data
@@ -306,24 +302,25 @@ pe$interview <- dplyr::left_join(
 
 #### pe$interview_and_catch --------------
 # join catch data to interview after inferring complete cases (counts or 0s for all catch_groups encountered)
-# note that interview_ids in creel$interview/pe_interview may have no catch and not be in creel$catch
-# so are consequently coded NA for catch_group; final mutate makes explicit
-# similarly, rows in creel$catch for "short" interviews may be lost in join 
+# note rows in creel$catch for "short" interviews are lost if filtered above 
+# interview_ids in creel$interview/pe_interview with no reported encounters are not in creel$catch
+# so the pivots ensure that no-encounter interviews get assigned 0 fish_count for each possible catch_group
+# and are therefore included in the later CPUE
 pe$interview_and_catch <- left_join(
   pe$interview |> 
-    select(section, time_strata, DayType, event_date, interview_id, angler_type, ends_with("_count"), angler_hours, angler_hours_total) 
+    select(section, time_strata, DayType, event_date,
+           interview_id, angler_type, ends_with("_count"), angler_hours, angler_hours_total)
   ,
   creel$catch |> 
     group_by(interview_id, catch_group) |> 
     summarise(fish_count = sum(fish_count, na.rm = T), .groups = "drop") |> 
-    complete(interview_id, catch_group, fill = list(fish_count = 0))
+    pivot_wider(names_from = catch_group, values_from = fish_count)
   ,
   by = "interview_id"
-) |>
-  mutate(
-    catch_group = replace_na(catch_group, "no encounter data"),
-    fish_count = replace_na(fish_count, 0)
-  )
+) |> 
+  pivot_longer(cols = -c(section:angler_hours_total), names_to = "catch_group", values_to = "fish_count") |> 
+  mutate(fish_count = replace_na(fish_count, 0))
+
 
 #### pe$angler_hours_daily_mean --------------
 # depending on the types of index counts, reach the calc: ang_hrs_daily_mean_TI_expan = angler_hours_daily_mean * TI_expan_final
@@ -760,13 +757,12 @@ pe$interview_and_catch |>
   group_by(section, time_strata, DayType, event_date, angler_type, catch_group) |> 
   summarise(fish_count = sum(fish_count), .groups = "drop") |> 
   filter(fish_count > 0) |> #scale_size_area still showing dots... 
-  # separate(catch_group, into = c("species", "life_stage", "mark", "fate"), sep = "_", remove = T, fill = "right") |> 
-  # pivot_wider(names_from = c(life_stage, mark, fate), values_from = fish_count)
-  ggplot(aes(event_date, catch_group, size = fish_count, color = fish_count)) +
-  geom_point() +
-  scale_size_area() + scale_color_binned() +
-  scale_x_date("") + scale_y_discrete("") +
-  facet_wrap(~section + angler_type, scales = "fixed", ncol = 2, labeller = label_wrap_gen(multi_line = F))
+  gt(groupname_col = "catch_group", rowname_col = "event_date")
+  # ggplot(aes(event_date, catch_group, size = fish_count, color = fish_count)) +
+  # geom_point() +
+  # scale_size_area() + scale_color_binned() +
+  # scale_x_date("") + scale_y_discrete("") +
+  # facet_wrap(~section + angler_type, scales = "fixed", ncol = 2, labeller = label_wrap_gen(multi_line = F))
 
 ```
 
@@ -833,6 +829,7 @@ bind_rows(
     summarise(angler_type = "total", DayType = "total", across(c(n_obs, est, var), ~round(sum(.), 0)), .groups = "drop")
 ) |> 
   gt(groupname_col = c("section","catch_group"), rowname_col = "angler_type") |> 
+  gt::cols_hide("n_obs") |> 
   gt::fmt_integer(columns = where(is.numeric)) |> 
   gt::tab_options(container.overflow.x = TRUE, container.overflow.y = TRUE)
 ```
@@ -848,6 +845,7 @@ bind_rows(
     summarise(angler_type = "total", DayType = "total", across(c(n_obs, est, var), ~round(sum(.), 0)), .groups = "drop")
 ) |> 
   gt(groupname_col = c("section","catch_group"), rowname_col = "angler_type") |> 
+  gt::cols_hide("n_obs") |> 
   gt::fmt_integer(columns = where(is.numeric)) |> 
   gt::tab_options(container.overflow.x = TRUE, container.overflow.y = TRUE)
 ```
@@ -862,7 +860,8 @@ bind_rows(
   d |> group_by(section, catch_group) |> 
     summarise(angler_type = "total", DayType = "total", across(c(n_obs, est, var), ~round(sum(.), 0)), .groups = "drop")
 ) |> 
-  gt(groupname_col = c("section","catch_group"), rowname_col = "angler_type") |> 
+  gt(groupname_col = c("section","catch_group"), rowname_col = "angler_type") |>  
+  gt::cols_hide("n_obs") |> 
   gt::fmt_integer(columns = where(is.numeric)) |> 
   gt::tab_options(container.overflow.x = TRUE, container.overflow.y = TRUE)
 ```
@@ -878,6 +877,7 @@ bind_rows(
     summarise(angler_type = "total", DayType = "total", across(c(n_obs, est, var), ~round(sum(.), 0)), .groups = "drop")
 ) |> 
   gt(groupname_col = c("section","catch_group"), rowname_col = "angler_type") |> 
+  gt::cols_hide("n_obs") |> 
   gt::fmt_integer(columns = where(is.numeric)) |> 
   gt::tab_options(container.overflow.x = TRUE, container.overflow.y = TRUE)
 ```
@@ -893,6 +893,7 @@ bind_rows(
     summarise(angler_type = "total", DayType = "total", across(c(n_obs, est, var), ~round(sum(.), 0)), .groups = "drop")
 ) |> 
   gt(groupname_col = c("section","catch_group"), rowname_col = "angler_type") |> 
+  gt::cols_hide("n_obs") |> 
   gt::fmt_integer(columns = where(is.numeric)) |> 
   gt::tab_options(container.overflow.x = TRUE, container.overflow.y = TRUE)
 ```
@@ -908,6 +909,7 @@ bind_rows(
     summarise(angler_type = "total", DayType = "total", across(c(n_obs, est, var), ~round(sum(.), 0)), .groups = "drop")
 ) |> 
   gt(groupname_col = c("section","catch_group"), rowname_col = "angler_type") |> 
+  gt::cols_hide("n_obs") |> 
   gt::fmt_integer(columns = where(is.numeric)) |> 
   gt::tab_options(container.overflow.x = TRUE, container.overflow.y = TRUE)
 ```

@@ -402,24 +402,24 @@ reactive({
   
   #### pe$interview_and_catch --------------
   # join catch data to interview after inferring complete cases (counts or 0s for all catch_groups encountered)
-  # note that interview_ids in creel$interview/pe_interview may have no catch and not be in creel$catch
-  # so are consequently coded NA for catch_group; final mutate makes explicit
-  # similarly, rows in creel$catch for "short" interviews may be lost in join 
+  # note rows in creel$catch for "short" interviews are lost if filtered above 
+  # interview_ids in creel$interview/pe_interview with no reported encounters are not in creel$catch
+  # so the pivots ensure that no-encounter interviews get assigned 0 fish_count for each possible catch_group
+  # and are therefore included in the later CPUE
   pe$interview_and_catch <- left_join(
     pe$interview |> 
-      select(section, time_strata, DayType, event_date, interview_id, angler_type, ends_with("_count"), angler_hours, angler_hours_total) 
+      select(section, time_strata, DayType, event_date,
+             interview_id, angler_type, ends_with("_count"), angler_hours, angler_hours_total)
     ,
     creel$catch |> 
       group_by(interview_id, catch_group) |> 
       summarise(fish_count = sum(fish_count, na.rm = T), .groups = "drop") |> 
-      complete(interview_id, catch_group, fill = list(fish_count = 0))
+      pivot_wider(names_from = catch_group, values_from = fish_count)
     ,
     by = "interview_id"
-    ) |>
-    mutate(
-      catch_group = replace_na(catch_group, "no encounter data"),
-      fish_count = replace_na(fish_count, 0)
-    )
+  ) |> 
+    pivot_longer(cols = -c(section:angler_hours_total), names_to = "catch_group", values_to = "fish_count") |> 
+    mutate(fish_count = replace_na(fish_count, 0))
   
   #### pe$angler_hours_daily_mean --------------
   # depending on the types of index counts, reach the calc: ang_hrs_daily_mean_TI_expan = angler_hours_daily_mean * TI_expan_final
