@@ -219,8 +219,7 @@ reactive({
       readr::read_csv(show_col_types = F) |>
       dplyr::filter(!is.na(count_type)) |> 
       dplyr::select(-created_datetime, -modified_datetime) |> 
-      dplyr::left_join(lu_input$sections, by = c("location")) |> 
-      dplyr::filter(!is.na(section))
+      dplyr::inner_join(lu_input$sections, by = c("location"))
 
     creel$interview <- paste0(
       dwg_base$interview,
@@ -236,13 +235,15 @@ reactive({
       dplyr::mutate(
         location = if_else(is.na(interview_location), fishing_location, interview_location)  #      dplyr::rename(location = interview_location)
       ) |> 
-      dplyr::left_join(lu_input$sections, by = c("location")) |> 
-      dplyr::filter(!is.na(section))
+      dplyr::inner_join(lu_input$sections, by = c("location"))
     
+    #this needs to be filtered by the date-section applicable interviews or otherwise contains catch across entire project!
     creel$catch <- paste0(
       dwg_base$catch,
       "?$where=creel_event_id in('",
-      paste(creel$event$creel_event_id, collapse = "','"),
+      paste(creel$event$creel_event_id, collapse = "','"),"')",
+      " AND interview_id in('", 
+      paste(creel$interview$interview_id, collapse = "','"),
       "')&$limit=100000"
       ) |> 
       utils::URLencode() |>
@@ -251,10 +252,7 @@ reactive({
       dplyr::mutate(
         life_stage = replace_na(life_stage, "Adult"), # placeholder pending data corrections in fish apps 
         catch_group = paste(species, life_stage, fin_mark, fate, sep = "_") # fish catch groups to estimate catch of 
-      ) |> 
-  inner_join(
-    creel$interview |> select(interview_id) # filters catch to only that which corresponds to interviews retained by left_join / filter to create creel$interview
-  )
+      )
     
     #this whole chunk depends on button push, so "lazy" against fiddling
     creel$days <- tibble::tibble(

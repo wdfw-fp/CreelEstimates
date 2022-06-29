@@ -89,51 +89,56 @@ creel$event <- paste0(
   readr::read_csv(show_col_types = F) |>
   dplyr::select(creel_event_id, water_body, event_date, tie_in_indicator)
 
+##directly passing the desired section-locations works (with a double single quote)
+#   " AND location in('", 
+#   paste(str_replace_all(lu_input$sections$location, "'","''"), collapse = "','"),
+##but the section field is still needed and so the join is also still needed... 
 creel$effort <- paste0(
   dwg_base$effort,
   "?$where=creel_event_id in('",
   paste(creel$event$creel_event_id, collapse = "','"),
   "')&$limit=100000"
-) |> 
+  ) |>
   utils::URLencode() |>
   readr::read_csv(show_col_types = F) |>
-  dplyr::filter(!is.na(count_type)) |> 
-  dplyr::select(-created_datetime, -modified_datetime) |> 
-  dplyr::left_join(lu_input$sections, by = c("location")) |> 
-  dplyr::filter(!is.na(section))
-
+  dplyr::filter(!is.na(count_type)) |>
+  dplyr::select(-created_datetime, -modified_datetime) |>
+  dplyr::inner_join(lu_input$sections, by = c("location"))
+  
+#view has no field "location" corresponding to lu_input$sections
+#must be created from interview_location or fishing_location
+#so cannot pass directly to DWG API
 creel$interview <- paste0(
   dwg_base$interview,
   "?$where=creel_event_id in('",
   paste(creel$event$creel_event_id, collapse = "','"),
   "')&$limit=100000"
-) |> 
+  ) |>
   utils::URLencode() |>
   readr::read_csv(show_col_types = F) |>
   dplyr::select(
     -created_datetime, -modified_datetime,
-    -state_residence, -zip_code) |> 
+    -state_residence, -zip_code) |>
   dplyr::mutate(
-    location = if_else(is.na(interview_location), fishing_location, interview_location)  #      dplyr::rename(location = interview_location)
-  ) |> 
-  dplyr::left_join(lu_input$sections, by = c("location")) |> 
-  dplyr::filter(!is.na(section))
+    location = if_else(is.na(interview_location), fishing_location, interview_location)
+  ) |>
+  dplyr::inner_join(lu_input$sections, by = c("location"))
 
-creel$catch <- paste0( # this needs to be filtered by the interviews with the analysis's dates / sections immediately, otherwise contains catch across entire project!
+#this needs to be filtered by the date-section applicable interviews or otherwise contains catch across entire project!
+creel$catch <- paste0(
   dwg_base$catch,
   "?$where=creel_event_id in('",
-  paste(creel$event$creel_event_id, collapse = "','"),
+  paste(creel$event$creel_event_id, collapse = "','"),"')",
+  " AND interview_id in('", 
+  paste(creel$interview$interview_id, collapse = "','"),
   "')&$limit=100000"
-) |> 
+  ) |> 
   utils::URLencode() |>
   readr::read_csv(show_col_types = F) |>
   dplyr::select(interview_id, catch_id, species, run, life_stage, fin_mark, fate, fish_count) |> 
   dplyr::mutate(
     life_stage = replace_na(life_stage, "Adult"), # placeholder pending data corrections in fish apps 
     catch_group = paste(species, life_stage, fin_mark, fate, sep = "_") # fish catch groups to estimate catch of 
-  ) |> 
-  inner_join(
-    creel$interview |> select(interview_id) # filters catch to only that which corresponds to interviews retained by left_join / filter to create creel$interview
   )
 
 creel$days <- tibble::tibble(
