@@ -233,7 +233,7 @@ reactive({
         -created_datetime, -modified_datetime,
         -state_residence, -zip_code) |> 
       dplyr::mutate(
-        location = if_else(is.na(interview_location), fishing_location, interview_location)  #      dplyr::rename(location = interview_location)
+        location = if_else(is.na(interview_location), as.character(fishing_location), as.character(interview_location))
       ) |> 
       dplyr::inner_join(lu_input$sections, by = c("location"))
     
@@ -458,7 +458,8 @@ reactive({
         ) |> 
       group_by(section, angler_type) |>
       summarise(
-        TI_expan_weighted = sum(count_census) / sum(count_index),
+        across(c(count_census, count_index), sum),
+        TI_expan_weighted = count_census / count_index,
         TI_expan_weighted = if_else(TI_expan_weighted == 0, 1, TI_expan_weighted) |> replace_na(1),
         .groups = "drop") |>
       left_join(
@@ -485,6 +486,13 @@ reactive({
   } else if(str_detect(input$index_count_types, "Vehicle|Trailer")) {
     #in this case, boat and bank counts must be indirectly calc'd
     #first the interviews are used to estimate anglers per vehicle, stratified by boat vs total (from boat|bank angler_type rows in interview)
+    #note that further below the section-dayType-angler_type mean is used to infer missing values 
+    #both where a given section-date has interviews but lacks an angler_type
+    #and where a section-date index count is missing interview data for either/both angler_types
+    #the full date range of observations is included in the sample distribution under the assumptions that
+    #more observations will tend to stablize the mean and that major temporal trends in carpooling are unlikely over the fishery duration
+    #note that this can still fail if no interviews are available within section-dayType-angler_type...
+    
     pe$interview_ang_per_vehic <- bind_rows(
       pe$interview |>
         group_by(section, DayType, event_date) |>
@@ -497,20 +505,8 @@ reactive({
     ) |> 
       arrange(section, event_date)
     
-    # #note this left_join drops rows of index counts where a given date-section-angler_type is missing from interview data
-    # pe$angler_hours_daily_mean <- left_join(
-    #   pe$interview_ang_per_vehic, #coerced above to total/boat
-    #   pe$effort_index |> #already in total/boat
-    #     dplyr::group_by(section, event_date, angler_type) |>
-    #     dplyr::summarise(count_index_mean = mean(count_index), .groups = "drop")
-    #   ,
-    #   by = c( "section", "event_date", "angler_type")) |>
-    #   left_join(creel$days |> select(event_date, DayL), by = "event_date") |>
-    #   mutate(angler_hours_daily_mean = anglers_per_vhcl_trlr * count_index_mean * DayL) |>
-    #   select(-DayL, -anglers_per_vhcl_trlr, -count_index_mean) |> 
-    #   arrange(section, event_date)
-    
-    #replace with a version using means if no interviews available to assign angler numbers per vehicle/trailer on a given day?
+    #initially dropped rows of index counts where a given date-section-angler_type is missing from interview data
+    #replace with a version using means if no interviews available to assign angler numbers per vehicle/trailer on a given day
     pe$angler_hours_daily_mean <- full_join(
       pe$interview_ang_per_vehic, #coerced above to total/boat
       pe$effort_index |> #already in total/boat
@@ -549,7 +545,7 @@ reactive({
         mutate(angler_type = "bank")
     }
 
-    if(is.null(pe$census_TI_expan)) {
+    if(all(creel$effort$tie_in_indicator < 1)) {
       pe$census_TI_expan <- expand_grid(
         section = unique(pe$angler_hours_daily_mean$section), 
         angler_type = unique(pe$angler_hours_daily_mean$angler_type),
@@ -569,15 +565,24 @@ reactive({
             group_by(section, event_date, count_sequence) |>
             summarize(angler_type = "boat", count_census = sum(count_census), .groups = "drop")
         ),
-        #index via interviews with angler_type already total & boat
-        #this is very similar to initial pe$angler_hours_daily_mean, but not summarized to daily mean
-        #note this will typically be an expanding left_join 
-        #since interview_ang_per_vheic is per day-section but effort_index is per count_seq (per day-section)
-        left_join(
+        #index counts via interviews for angler-per-vehic; angler_type already total & boat
+        #this is very similar to above pe$angler_hours_daily_mean
+        #but all count_seqs rather than summarized to daily mean
+        #as above, applies mean ang-per-vehic within section-daytype-angtype
+        #where interview missing an ang-type or no interviews on that date
+        #prevents loss of use of census info b/c of a single day missing interviews...
+        full_join(
           pe$interview_ang_per_vehic,
           pe$effort_index,
-          by = c("section", "event_date", "angler_type")
+          by = c( "section", "DayType", "event_date", "angler_type")
         ) |>
+          group_by(section, DayType, angler_type) |> 
+          mutate(
+            anglers_per_vhcl_trlr = if_else(
+              is.na(anglers_per_vhcl_trlr),
+              mean(anglers_per_vhcl_trlr, na.rm=T),
+              anglers_per_vhcl_trlr)) |> 
+          ungroup() |> 
           mutate(count_index = anglers_per_vhcl_trlr * count_index) |>
           select(section, event_date, count_sequence, angler_type, count_index)
         ,
@@ -606,7 +611,8 @@ reactive({
       pe$census_TI_expan <- pe$census_TI_expan |> 
         group_by(section, angler_type) |> 
         summarise(
-          TI_expan_weighted = sum(count_census) / sum(count_index),
+          across(c(count_census, count_index), sum),
+          TI_expan_weighted = count_census / count_index,
           TI_expan_weighted = if_else(TI_expan_weighted == 0, 1, TI_expan_weighted) |> replace_na(1),
           .groups = "drop") |> 
         #and now bring in the external expansion values if any
