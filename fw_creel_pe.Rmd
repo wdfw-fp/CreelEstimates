@@ -2,12 +2,12 @@
 title: "FW Creel Point Estimate"
 date: "`r Sys.Date()`"
 params:
-  analysis_name: "District 14_Nooksack River - North Fork_spring_chin_2022"
-  days_wkend: !r c('Friday', 'Saturday', 'Sunday')
+  analysis_name: "District 14_Skagit River_summer_sockeye_2022"
+  days_wkend: !r c('Saturday', 'Sunday')
   model_period: "Week"
   index_count_types: "Vehicle/Trailers Only"
   census_expansion: "Direct"
-  int_ang_hrs_tot_min: 0.5
+  int_ang_hrs_tot_min: 0.25
   dir_output: "T:/DFW-Team FP D14 FW Creel - General/"
 output:
   html_document:
@@ -119,7 +119,7 @@ creel$interview <- paste0(
   dplyr::left_join(lu_input$sections, by = c("location")) |> 
   dplyr::filter(!is.na(section))
 
-creel$catch <- paste0(
+creel$catch <- paste0( # this needs to be filtered by the interviews with the analysis's dates / sections immediately, otherwise contains catch across entire project!
   dwg_base$catch,
   "?$where=creel_event_id in('",
   paste(creel$event$creel_event_id, collapse = "','"),
@@ -131,6 +131,9 @@ creel$catch <- paste0(
   dplyr::mutate(
     life_stage = replace_na(life_stage, "Adult"), # placeholder pending data corrections in fish apps 
     catch_group = paste(species, life_stage, fin_mark, fate, sep = "_") # fish catch groups to estimate catch of 
+  ) |> 
+  inner_join(
+    creel$interview |> select(interview_id) # filters catch to only that which corresponds to interviews retained by left_join / filter to create creel$interview
   )
 
 creel$days <- tibble::tibble(
