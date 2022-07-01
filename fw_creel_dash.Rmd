@@ -720,8 +720,8 @@ reactive({
         is_open = NULL,
         angler_type = list(unique(pe$angler_hours_daily_mean$angler_type)) 
       ) |> 
-      unnest(cols = section) |> 
-      unnest(cols = angler_type)
+    # unnest(cols = section) |> 
+    unnest(angler_type)
     ,
     #estimates of angler_hours possible to calculate for sampled dates-sections-angler_type 
     pe$angler_hours_daily_mean |> select(section, DayType, event_date, angler_type, ang_hrs_daily_mean_TI_expan)
@@ -774,8 +774,8 @@ reactive({
         is_open = NULL,
         angler_type = list(unique(pe$angler_hours_daily_mean$angler_type)) 
       ) |> 
-      unnest(cols = section) |> 
-      unnest(cols = angler_type)
+     # unnest(cols = section) |> 
+    unnest(angler_type)
     ,
     pe$daily_cpue_catch_est |> select(section, time_strata, DayType, event_date, angler_type, catch_group, catch_estimate)
     ,

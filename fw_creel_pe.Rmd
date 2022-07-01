@@ -631,19 +631,19 @@ pe$df <- left_join(
 pe$est_effort_s_ts_dt_at <- left_join(
   #dates expanded to n-sections * n-angler_types * n-days, previously held as "creel$days_section_angler_type" but only used once
   creel$days |>
-    select(time_strata, DayType, event_date, starts_with("open_section")) |> 
+    select(time_strata, DayType, event_date, starts_with("open_section")) |>
     pivot_longer(
       cols = starts_with("open_section"), 
       names_to = "section", 
       values_to = "is_open") |>
-    filter(is_open) |> 
+    filter(is_open) |> # what is this doing?
     mutate(
       section = as.numeric(gsub("^.*_", "", section)), 
       is_open = NULL,
       angler_type = list(unique(pe$angler_hours_daily_mean$angler_type)) 
     ) |> 
-    unnest(cols = section) |> 
-    unnest(cols = angler_type)
+    # unnest(cols = section) |> 
+    unnest(angler_type)
   ,
   #estimates of angler_hours possible to calculate for sampled dates-sections-angler_type 
   pe$angler_hours_daily_mean |> select(section, DayType, event_date, angler_type, ang_hrs_daily_mean_TI_expan)
@@ -696,8 +696,8 @@ pe$est_catch_s_ts_dt_at <- left_join(
       is_open = NULL,
       angler_type = list(unique(pe$angler_hours_daily_mean$angler_type)) 
     ) |> 
-    unnest(cols = section) |> 
-    unnest(cols = angler_type)
+    # unnest(cols = section) |> 
+    unnest(angler_type)
   ,
   pe$daily_cpue_catch_est |> select(section, time_strata, DayType, event_date, angler_type, catch_group, catch_estimate)
   ,
@@ -724,6 +724,7 @@ pe$est_catch_s_ts_dt_at <- left_join(
       (N_days^2) * (catch_est_var / n_obs) * (1-(n_obs/N_days)),
       (N_days^2) * (catch_est_var / n_obs)
     ),
+    se = sqrt(var),
     l95 = est - qt(1-(0.05/2),df)*(var^0.5),
     u95 = est + qt(1-(0.05/2),df)*(var^0.5)
   ) |> 
@@ -853,6 +854,80 @@ gt_catch <- function(cg_string){
 ```
 
 
+### Sockeye
+
+```{r sockeye}
+d <- pe$est_catch_s_ts_dt_at |> filter(str_detect(catch_group, "Sockeye_Adult"))
+bind_rows(
+  d |> group_by(section, DayType, angler_type, catch_group) |> 
+    summarise(across(c(n_obs, est, var, se), ~round(sum(.), 0)), .groups = "drop"),
+  d |> group_by(section, catch_group) |> 
+    summarise(angler_type = "total", DayType = "total", across(c(n_obs, est, var, se), ~round(sum(.), 0)), .groups = "drop")
+) |> 
+  gt(groupname_col = c("section","catch_group"), rowname_col = "angler_type") |>  
+  gt::cols_hide("n_obs") |> 
+  gt::fmt_integer(columns = where(is.numeric)) |> 
+  gt::tab_options(container.overflow.x = TRUE, container.overflow.y = TRUE)
+```
+
+
+### Sockeye estimates by section
+
+```{r sockeye by section}
+d2 <- pe$est_catch_s_ts_dt_at |> filter(catch_group %in% c("Sockeye_Adult_AD_Kept", "Sockeye_Adult_UM_Kept"))
+bind_rows(
+  d2 |> group_by(section) |>
+  summarise(
+    catch = sum(est)
+    # ,
+    # var = sum(var),
+    # se = sqrt(var)
+  ) |> 
+mutate(across(where(is.numeric), round, 3)) |>
+left_join(
+  lu_input$sections |> filter(location %in% c("From Hwy. 536 at Mt. Vernon (Memorial Hwy. Bridge) to mouth of Gilligan Creek", "From mouth of Gilligan Creek to the Dalles Bridge at Concrete"))
+|> select(section,location)
+) |> 
+  select(section, location, catch) 
+) |>
+  gt(groupname_col = c("section")) |>
+  gt::tab_options(container.overflow.x = TRUE, container.overflow.y = TRUE)
+
+
+```
+
+### Sockeye weekly
+
+```{r sockeye weekly}
+d <- pe$est_catch_s_ts_dt_at |> filter(catch_group %in% c("Sockeye_Adult_AD_Kept", "Sockeye_Adult_UM_Kept"))
+bind_rows(
+  d |> group_by(time_strata, catch_group) |> 
+    summarise(across(c(n_obs, est, var, se), ~round(sum(.), 0)), .groups = "drop")
+) |> 
+  gt(groupname_col = c("section","catch_group"), rowname_col = "angler_type") |> 
+  gt::cols_hide("n_obs") |> 
+  gt::fmt_integer(columns = where(is.numeric)) |> 
+  gt::tab_options(container.overflow.x = TRUE, container.overflow.y = TRUE)
+```
+
+
+### Sockeye totals
+
+```{r sockeye totals}
+d <- pe$est_catch_s_ts_dt_at |> filter(str_detect(catch_group, "Sockeye"))
+bind_rows(
+  d |> group_by(section, DayType, angler_type, catch_group) |> 
+    summarise(across(c(n_obs, est, var, se), ~round(sum(.), 0)), .groups = "drop"),
+  d |> group_by(section, catch_group) |> 
+    summarise(angler_type = "total", DayType = "total", across(c(n_obs, est, var, se), ~round(sum(.), 0)), .groups = "drop")
+) |> 
+  gt(groupname_col = c("section","catch_group"), rowname_col = "angler_type") |> 
+  gt::cols_hide("n_obs") |> 
+  gt::fmt_integer(columns = where(is.numeric)) |> 
+  gt::tab_options(container.overflow.x = TRUE, container.overflow.y = TRUE)
+```
+
+
 ### Chinook marked
 
 ```{r chin_adult_ad}
@@ -916,23 +991,6 @@ bind_rows(
   gt::fmt_integer(columns = where(is.numeric)) |> 
   gt::tab_options(container.overflow.x = TRUE, container.overflow.y = TRUE)
 ```
-
-### Sockeye
-
-```{r sockeye}
-d <- pe$est_catch_s_ts_dt_at |> filter(str_detect(catch_group, "Sockeye_Adult"))
-bind_rows(
-  d |> group_by(section, DayType, angler_type, catch_group) |> 
-    summarise(across(c(n_obs, est, var), ~round(sum(.), 0)), .groups = "drop"),
-  d |> group_by(section, catch_group) |> 
-    summarise(angler_type = "total", DayType = "total", across(c(n_obs, est, var), ~round(sum(.), 0)), .groups = "drop")
-) |> 
-  gt(groupname_col = c("section","catch_group"), rowname_col = "angler_type") |>  
-  gt::cols_hide("n_obs") |> 
-  gt::fmt_integer(columns = where(is.numeric)) |> 
-  gt::tab_options(container.overflow.x = TRUE, container.overflow.y = TRUE)
-```
-
 
 ### Jacks
 
