@@ -778,7 +778,7 @@ pe$census_TI_expan |>
 
 ## Total angler hours per interview
 
-```{r pe$interview_boxplot}
+```{r pe$interview_dot_smooth}
 pe$interview |>
   ggplot(aes(event_date, angler_hours_total, color = angler_type, fill = angler_type)) +
   geom_jitter(width = 0.1, alpha = 0.7) +
@@ -794,7 +794,7 @@ pe$interview |>
 
 ## Catch
 
-```{r pe$interview_and_catch_dot}
+```{r pe$interview_and_catch}
 pe$interview_and_catch |>
   group_by(section, time_strata, DayType, event_date, angler_type, catch_group) |> 
   summarise(fish_count = sum(fish_count), .groups = "drop") |> 
@@ -995,8 +995,8 @@ gt_catch("Sockeye_Adult")
 
 ### Jacks
 
-```{r chin_jack}
-gt_catch("Chinook_Jack|Coho_Jack|Steelhead_Smolt_Steelhead_Unknown")
+```{r jacks}
+gt_catch("Jack|Smolt|Steelhead_Unknown")
 ```
 
 ### Other species
