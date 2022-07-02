@@ -2,13 +2,13 @@
 title: "FW Creel Point Estimate"
 date: "`r Sys.Date()`"
 params:
-  analysis_name: "District 14_Skagit River_summer_sockeye_2022"
-  days_wkend: !r c('Saturday', 'Sunday')
+  analysis_name: "District 13_Skykomish River_summer_chin_2022"
+  days_wkend: !r c('Friday','Saturday', 'Sunday')
   model_period: "Week"
   index_count_types: "Vehicle/Trailers Only"
   census_expansion: "Direct"
   int_ang_hrs_tot_min: 0.25
-  dir_output: "T:/DFW-Team FP D14 FW Creel - General/"
+  dir_output: "C:/Users/auerbdaa/Downloads"
 output:
   html_document:
     fig_caption: yes
@@ -207,7 +207,7 @@ creel$interview |> count(water_body, section, location) |> gt(caption = "Number 
 ## Catch
 
 ```{r gt_creel_catch}
-creel$catch |> count(catch_group) |> gt(caption = "Total reported encounters in interviews to date")
+creel$catch |> group_by(catch_group) |> summarise(fish_count = sum(fish_count), .groups = "drop") |> gt(caption = "Total reported encounters in interviews to date")
 ```
 
 # Summarized observations
@@ -837,6 +837,7 @@ pe$angler_hours_daily_mean |>
   geom_col(position = position_stack()) +
   scale_x_date("", date_breaks = "3 day", guide = guide_axis(n.dodge = 2)) +
   scale_y_continuous("Hours") +
+  facet_wrap(~section + DayType, scales = "fixed", labeller = label_wrap_gen(multi_line = F), ncol = 2) +
   labs(
     title = "Daily angler hours, sampled days",
     subtitle = "Day length * (Census-adjusted and interview-informed index counts)")

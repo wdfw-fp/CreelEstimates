@@ -874,7 +874,8 @@ Catch
 render_gt({
   if(!is.null(creel$catch)) {
     creel$catch |> 
-      count(catch_group) |> 
+      group_by(catch_group) |> 
+      summarise(fish_count = sum(fish_count), .groups = "drop") |> 
       gt()
   }
 })
@@ -1018,6 +1019,7 @@ renderPlot({
       geom_col(position = position_stack()) +
       scale_x_date("", date_breaks = "3 day", guide = guide_axis(n.dodge = 2)) +
       scale_y_continuous("Hours") +
+      facet_wrap(~section + DayType, scales = "fixed", labeller = label_wrap_gen(multi_line = F), ncol = 2) +
       labs(
         title = "Daily angler hours, sampled days",
         subtitle = "Day length * (Census-adjusted and interview-informed index counts)")
