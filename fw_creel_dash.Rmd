@@ -116,7 +116,7 @@ Sidebar {.sidebar data-width=350}
 selectInput(inputId = 'analysis_name', label = 'Analysis Name', choices = input_analysis_levels$analysis_name, selected = input_analysis_levels$analysis_name[1])
 
 
-radioButtons(inputId = 'model_period', label = "Model period", choices = c("Week", "Month")
+radioButtons(inputId = 'model_period', label = "Model period", choices = c("Week", "Month"), inline = T,
              , selected = "Week"
              )
 
@@ -125,7 +125,7 @@ radioButtons(inputId = 'index_count_types', label = "Index count types",
              ,selected = c("Vehicle/Trailers Only")
              )
 
-radioButtons(inputId = 'census_expansion', label = "Census expansion method", 
+radioButtons(inputId = 'census_expansion', label = "Census expansion method", inline = T,
              choices = c("Direct", "Indirect")
              ,selected = c("Direct")
              )
@@ -1071,8 +1071,11 @@ renderPlot({
 ```
 
 
-Catch
+Chinook
 ============================================
+
+row {data-height=1000}
+--------------------------------------------
 
 ```{r gt_catch, echo=FALSE}
 gt_catch <- function(cg_string, negate = F){
@@ -1120,10 +1123,7 @@ gt_catch <- function(cg_string, negate = F){
 
 ```
 
-Salmon adult {data-height=1000}
---------------------------------------------
-
-### Chinook marked
+### Marked
 
 ```{r chin_adult_ad}
 render_gt({
@@ -1133,7 +1133,7 @@ render_gt({
 })
 ```
 
-### Chinook unmarked
+### Unmarked
 
 ```{r chin_adult_um}
 render_gt({
@@ -1143,19 +1143,61 @@ render_gt({
 })
 ```
 
-### Coho
+### Jack
 
-```{r coho}
+```{r chin_jacks}
 render_gt({
   if(!is.null(pe$est_catch_s_ts_dt_at)){
-    gt_catch("Coho_Adult")
+    gt_catch("Chinook_Jack|Chinook_Smolt|Chinook_Unknown")
   }    
 })
 ```
 
-### Steelhead
+Coho
+============================================
 
-```{r sthd}
+row {data-height=1000}
+--------------------------------------------
+
+### Marked
+
+```{r coho_adult_ad}
+render_gt({
+  if(!is.null(pe$est_catch_s_ts_dt_at)){
+    gt_catch("Coho_Adult_AD")
+  }    
+})
+```
+
+### Unmarked
+
+```{r coho_adult_um}
+render_gt({
+  if(!is.null(pe$est_catch_s_ts_dt_at)){
+    gt_catch("Coho_Adult_UM")
+  }    
+})
+```
+
+### Jack
+
+```{r coho_jacks}
+render_gt({
+  if(!is.null(pe$est_catch_s_ts_dt_at)){
+    gt_catch("Coho_Jack|Coho_Smolt|Coho_Unknown")
+  }    
+})
+```
+
+Steelhead
+============================================
+
+row {data-height=1000}
+--------------------------------------------
+
+### Adult
+
+```{r sthd_adult}
 render_gt({
   if(!is.null(pe$est_catch_s_ts_dt_at)){
     gt_catch("Steelhead_Adult")
@@ -1163,33 +1205,63 @@ render_gt({
 })
 ```
 
-### Sockeye
+### Juvenile
 
-```{r sockeye}
+```{r sthd_other}
 render_gt({
   if(!is.null(pe$est_catch_s_ts_dt_at)){
-    gt_catch("Sockeye_Adult")
+    gt_catch("Steelhead_Jack|steelhead_Smolt|Steelhead_Unknown")
   }    
 })
 ```
 
 
-Salmon jack & other  {data-height=1000}
+Sockeye
+============================================
+
+row {data-height=1000}
 --------------------------------------------
 
-### Jacks
+### Marked
 
-```{r jacks}
+```{r sock_adult_ad}
 render_gt({
   if(!is.null(pe$est_catch_s_ts_dt_at)){
-    gt_catch("Jack|Smolt|Steelhead_Unknown")
+    gt_catch("Sockeye_Adult_AD")
   }    
 })
 ```
+
+### Unmarked
+
+```{r sock_adult_um}
+render_gt({
+  if(!is.null(pe$est_catch_s_ts_dt_at)){
+    gt_catch("Sockeye_Adult_UM")
+  }    
+})
+```
+
+### Jack/other
+
+```{r sock_jacks}
+render_gt({
+  if(!is.null(pe$est_catch_s_ts_dt_at)){
+    gt_catch("Sockeye_Jack|Sockeye_Smolt|Sockeye_Unknown")
+  }    
+})
+```
+
+
+Other encounters
+============================================
+
+row {data-height=1000}
+--------------------------------------------
 
 ### Others
 
-```{r misc}
+```{r others}
 render_gt({
   if(!is.null(pe$est_catch_s_ts_dt_at)){
     gt_catch(cg_string = "Chinook|Coho|Steelhead|Sockeye", negate = T)  
