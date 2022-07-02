@@ -20,11 +20,12 @@ output:
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(warning = FALSE, message = FALSE, fig.width = 9, fig.height = 9)
+knitr::opts_chunk$set(warning = FALSE, message = FALSE, fig.width = 10, fig.height = 8)
 
 library("tidyverse")
 library("patchwork")
 library("gt")
+theme_set(theme_light())
 
 #base endpoints
 dwg_base <- list(
@@ -183,33 +184,31 @@ creel$days_total <- creel$days |>
 ## Days
 
 ```{r gt_creel_days}
-creel$days_total |> pivot_wider(names_from = DayType, values_from = N_days) |> gt()
-```
-
-## Event
-
-```{r gt_creel_event}
-creel$event |> count(water_body, tie_in_indicator) |> gt()
+creel$days_total |> pivot_wider(names_from = c(section, DayType), values_from = N_days) |> gt(rowname_col = "time_strata", caption = "Potential days of fishing by time strata, section and day type")
 ```
 
 ## Effort
 
 ```{r gt_creel_effort}
-creel$effort |> count(water_body, section, tie_in_indicator, location) |> gt()
+creel$effort |> 
+  distinct(water_body, section, location, event_date, tie_in_indicator, count_sequence) |> 
+  count(water_body, section, location, tie_in_indicator) |> 
+  unite("water_body_section", water_body, section) |> 
+  arrange(water_body_section, desc(tie_in_indicator)) |> 
+  gt(groupname_col = "water_body_section", caption = "Index (tie_in: 0) and Census (tie_in: 1) sampling to date")
 ```
 
 ## Interview
 
 ```{r gt_creel_interview}
-creel$interview |> count(water_body, section, location) |> gt()
+creel$interview |> count(water_body, section, location) |> gt(caption = "Number of interviews by analysis section")
 ```
 
 ## Catch
 
 ```{r gt_creel_catch}
-creel$catch |> count(catch_group) |> gt()
+creel$catch |> count(catch_group) |> gt(caption = "Total reported encounters in interviews to date")
 ```
-
 
 # Summarized observations
 
@@ -730,25 +729,13 @@ pe$est_catch_s_ts_dt_at <- left_join(
   drop_na(catch_group)
 
 #### write out a workbook ----------------------------
-writexl::write_xlsx(
+#not a great test, but allows passing "" to stop overwrite...
+if(nchar(params$dir_output) > 1) {
+  writexl::write_xlsx(
   c(pe[rev(names(pe))], set_names(creel, paste0("dwg_", names(creel)))),
   path = file.path(params$dir_output, paste0(params$analysis_name,".xlsx"))
   )
-
-```
-
-## Census counts
-
-```{r pe$effort_census}
-pe$effort_census |>
-  mutate(count_sequence = factor(count_sequence)) |> 
-  ggplot(aes(event_date, count_census, fill = count_sequence, color = count_sequence)) +
-  #geom_point() + geom_text(aes(label = count_census), nudge_y = 1, check_overlap = T) +
-  geom_col(position = position_dodge(width = 0.7)) +
-  scale_x_date("", date_breaks = "3 days") + scale_y_continuous("") +
-  scale_color_brewer(palette = "Set2", aesthetics = c("color", "fill")) +
-  facet_wrap(~section + angler_type, scales = "fixed", ncol = 1, labeller = label_wrap_gen(multi_line = F))
-
+}
 ```
 
 ## Index counts
@@ -765,16 +752,42 @@ pe$effort_index |>
 
 ```
 
-## Interview
+## Census counts
+
+```{r pe$effort_census}
+# pe$effort_census |>
+#   mutate(count_sequence = factor(count_sequence)) |> 
+#   ggplot(aes(event_date, count_census, fill = count_sequence, color = count_sequence)) +
+#   #geom_point() + geom_text(aes(label = count_census), nudge_y = 1, check_overlap = T) +
+#   geom_col(position = position_dodge(width = 0.7)) +
+#   scale_x_date("", date_breaks = "1 day") + scale_y_continuous("") +
+#   scale_color_brewer(palette = "Set2", aesthetics = c("color", "fill")) +
+#   facet_wrap(~section + angler_type, scales = "fixed", ncol = 1, labeller = label_wrap_gen(multi_line = F))
+
+pe$census_TI_expan |> 
+  ggplot(aes(count_index, count_census, color = angler_type)) +
+  geom_abline(slope = 1, intercept = 0, linetype = 2) +
+  scale_x_continuous(limits = c(0, NA)) +
+  scale_y_continuous(limits = c(0, NA)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  facet_wrap(~paste("Section:",section), labeller = label_wrap_gen(multi_line = F))
+
+```
+
+## Total angler hours per interview
 
 ```{r pe$interview_boxplot}
 pe$interview |>
-  mutate(event_date = format(event_date, "%m-%d")) |> 
-  ggplot(aes(event_date, angler_hours_total, fill = angler_type)) +
-  geom_boxplot(position = position_dodge(), outlier.shape = NA) +
-  geom_jitter(width = 0.5) +
-  scale_x_discrete(guide = guide_axis(angle = 90)) +
-  facet_wrap(~section + angler_type, scales = "free", ncol = 2, labeller = label_wrap_gen(multi_line = F)) 
+  ggplot(aes(event_date, angler_hours_total, color = angler_type, fill = angler_type)) +
+  geom_jitter(width = 0.1, alpha = 0.7) +
+  geom_smooth(
+    data = pe$interview |> group_by(section, angler_type, event_date) |> 
+      summarise(angler_hours_total = median(angler_hours_total), .groups = "drop"),
+    se = F
+    ) +
+  scale_x_date() +
+  facet_wrap(~section + angler_type, scales = "free_x", ncol = 2, labeller = label_wrap_gen(multi_line = F)) 
 
 ```
 
@@ -784,8 +797,12 @@ pe$interview |>
 pe$interview_and_catch |>
   group_by(section, time_strata, DayType, event_date, angler_type, catch_group) |> 
   summarise(fish_count = sum(fish_count), .groups = "drop") |> 
-  filter(fish_count > 0) |> #scale_size_area still showing dots... 
-  gt(groupname_col = "catch_group", rowname_col = "event_date")
+  filter(fish_count > 0) |>
+  pivot_wider(names_from = angler_type, values_from = fish_count) |> 
+  gt(groupname_col = "catch_group", rowname_col = "event_date") |> 
+  fmt_missing(c("bank", "boat"))
+  #gt::summary_rows(groups = TRUE, columns = "fish_count", fns = list(sum = ~sum(.)))
+
   # ggplot(aes(event_date, catch_group, size = fish_count, color = fish_count)) +
   # geom_point() +
   # scale_size_area() + scale_color_binned() +
@@ -798,171 +815,152 @@ pe$interview_and_catch |>
 
 ## Grand totals
 
-```{r}
+```{r gt_effort_totals}
 #by angler_type, summed over weekday/weekend and week/month
 pe$est_effort_s_ts_dt_at |>
   group_by(section, angler_type) |>
   summarise(across(c(est, var), ~round(sum(., na.rm = T))), .groups = "drop") |> 
-  gt() |> 
-  gt::summary_rows(columns = est, fns = list(sum = ~round(sum(., na.rm = T),0)))
+  pivot_wider(names_from = angler_type, values_from = c(est, var)) |> 
+  select(section, contains("bank"), contains("boat")) |> 
+  gt(caption = "Total angler hours, sum over temporal strata") |> 
+  fmt_number(columns = -section, decimals = 0) |> 
+  gt::summary_rows(columns = contains("est"), fns = list(sum = ~round(sum(., na.rm = T),0)), decimals = 0)
 
 ```
 
-## Section-time_strata-DayType-angler_type 
+## Census-adjusted daily mean angler hours
+
+```{r gg_angler_hours_daily_mean}
+pe$angler_hours_daily_mean |> 
+  ggplot(aes(event_date, ang_hrs_daily_mean_TI_expan, fill = angler_type)) +
+  geom_col(position = position_stack()) +
+  scale_x_date("", date_breaks = "3 day", guide = guide_axis(n.dodge = 2)) +
+  scale_y_continuous("Hours") +
+  labs(
+    title = "Daily angler hours, sampled days",
+    subtitle = "Day length * (Census-adjusted and interview-informed index counts)")
+```
+
+## Angler hours by section-time_strata-DayType-angler_type 
 
 ```{r}
-(
-  ggplot(pe$angler_hours_daily_mean,
-         aes(event_date, ang_hrs_daily_mean_TI_expan, fill = angler_type)) +
-    geom_col(position = "dodge") +
-    scale_x_date("", date_breaks = "1 week", guide = guide_axis(n.dodge = 2)) +
-    scale_y_continuous("Hours") +
-    labs(
-      title = "Daily angler hours, sampled days",
-      subtitle = "Day length * (Census-adjusted and interview-informed index counts)")
-) + (
-  ggplot(pe$est_effort_s_ts_dt_at,
-         aes(time_strata, est, fill = angler_type)) +
-    geom_col(position = "dodge") +
-    #scale_x_date("", date_breaks = "1 week", guide = guide_axis(n.dodge = 2)) +
-    scale_y_continuous("Hours") +
-    facet_wrap(~section + DayType, scales = "fixed", labeller = label_wrap_gen(multi_line = F), ncol = 2) +
-    labs(
-      title = "Daily estimated angler hours",
-      subtitle = "Section-time-strata-DayType-angler-type means * N-days")
-) + (
-  ggplot(pe$est_effort_s_ts_dt_at |> 
-           group_by(DayType, angler_type) |> mutate(effort_cml = cumsum(est)) |> ungroup(),
-         aes(time_strata, effort_cml, color = angler_type)) +
-    geom_line() +
-    scale_y_continuous("Hours") +
-    facet_wrap(~section + DayType, scales = "fixed", labeller = label_wrap_gen(multi_line = F), ncol = 2) +
-    labs(
-      title = "Cumulative angler hours, strata-means to complete days",
-      subtitle = "Section-time-strata-DayType-angler-type means * N-days")
-) + plot_layout(ncol = 1)
+pe$est_effort_s_ts_dt_at |> 
+  ggplot(aes(time_strata, fill = angler_type, color = angler_type)) +
+  geom_ribbon(aes(y = est, ymin = l95, ymax = u95), alpha = 0.4) +
+  geom_line(aes(y = est)) +
+  scale_y_continuous("Hours") +
+  facet_wrap(~section + DayType, scales = "fixed", labeller = label_wrap_gen(multi_line = F), ncol = 2) +
+  labs(
+    title = "Estimated angler hours by time strata",
+    subtitle = "Section-time-strata-DayType-angler-type means * N-days")
+```
+
+## Cumulative angler hours by day and angler type
+
+```{r}
+pe$est_effort_s_ts_dt_at |> 
+  drop_na(est) |> 
+  group_by(DayType, angler_type) |> 
+  mutate(effort_cml = cumsum(est)) |> 
+  ungroup() |> 
+  ggplot(aes(time_strata, effort_cml, color = angler_type)) +
+  geom_line() +
+  scale_y_continuous("Hours") +
+  facet_wrap(~section + DayType, scales = "fixed", labeller = label_wrap_gen(multi_line = F), ncol = 2) +
+  labs(
+    title = "Cumulative estimated angler hours, strata-means to complete days",
+    subtitle = "Section-time-strata-DayType-angler-type means * N-days")
 ```
 
 
 # Catch estimates
 
 ```{r}
-gt_catch <- function(cg_string){
-  
+gt_catch <- function(cg_string, negate = F){
+  if(negate){
+    d <- filter(pe$est_catch_s_ts_dt_at, !str_detect(catch_group, cg_string))
+  } else {
+    d <- filter(pe$est_catch_s_ts_dt_at, str_detect(catch_group, cg_string))
+  }
+  if(nrow(d)>0){
+    bind_rows(
+      d |> group_by(section, DayType, angler_type, catch_group) |> 
+        summarise(across(c(est, var), ~round(sum(.), 1)), .groups = "drop") |> 
+        pivot_wider(names_from = angler_type, values_from = c(est, var)) |> 
+        select(section, DayType, catch_group, contains("bank"), contains("boat")) |> 
+        mutate(est_total = est_bank + est_boat)
+      ,
+      d |> group_by(section, catch_group) |> 
+        summarise(
+          #angler_type = "total", 
+          DayType = "total",
+          est_total = round(sum(est), 1), .groups = "drop")
+    ) |> 
+      gt(groupname_col = c("section","catch_group")) |> 
+      gt::fmt_number(columns = where(is.numeric), decimals = 1) |> 
+      gt::fmt_missing(columns = where(is.numeric)) |>
+      gt::tab_style(
+        style = gt::cell_text(weight = "bold"),
+        locations = cells_body(columns = starts_with("est_"), rows = DayType != "total")
+      ) |> 
+      gt::tab_style(
+        style = gt::cell_fill(color = "#fc6508", alpha = 0.3),
+        locations = cells_body(columns = contains("_bank"), rows = var_bank/est_bank > 5)
+      ) |> 
+      gt::tab_style(
+        style = gt::cell_fill(color = "#fc6508", alpha = 0.3),
+        locations = cells_body(columns = contains("_boat"), rows = var_boat/est_boat > 5)
+      ) |> 
+      gt::tab_style(
+        style = gt::cell_borders(sides = "left"),
+        locations = cells_body(columns = starts_with("est_"), rows = DayType != "total")
+      ) |> 
+      gt::tab_options(container.overflow.x = TRUE, container.overflow.y = TRUE)
+  }
 }
+
 ```
 
 
 ### Chinook marked
 
 ```{r chin_adult_ad}
-d <- pe$est_catch_s_ts_dt_at |> filter(str_detect(catch_group, "Chinook_Adult_AD"))
-bind_rows(
-  d |> group_by(section, DayType, angler_type, catch_group) |> 
-    summarise(across(c(n_obs, est, var), ~round(sum(.), 0)), .groups = "drop"),
-  d |> group_by(section, catch_group) |> 
-    summarise(angler_type = "total", DayType = "total", across(c(n_obs, est, var), ~round(sum(.), 0)), .groups = "drop")
-) |> 
-  gt(groupname_col = c("section","catch_group"), rowname_col = "angler_type") |> 
-  gt::cols_hide("n_obs") |> 
-  gt::fmt_integer(columns = where(is.numeric)) |> 
-  gt::tab_options(container.overflow.x = TRUE, container.overflow.y = TRUE)
+gt_catch("Chinook_Adult_AD")
 ```
 
 ### Chinook unmarked
 
 ```{r chin_adult_um}
-d <- pe$est_catch_s_ts_dt_at |> filter(str_detect(catch_group, "Chinook_Adult_UM"))
-bind_rows(
-  d |> group_by(section, DayType, angler_type, catch_group) |> 
-    summarise(across(c(n_obs, est, var), ~round(sum(.), 0)), .groups = "drop"),
-  d |> group_by(section, catch_group) |> 
-    summarise(angler_type = "total", DayType = "total", across(c(n_obs, est, var), ~round(sum(.), 0)), .groups = "drop")
-) |> 
-  gt(groupname_col = c("section","catch_group"), rowname_col = "angler_type") |> 
-  gt::cols_hide("n_obs") |> 
-  gt::fmt_integer(columns = where(is.numeric)) |> 
-  gt::tab_options(container.overflow.x = TRUE, container.overflow.y = TRUE)
+gt_catch("Chinook_Adult_UM")
 ```
 
 ### Coho
 
 ```{r coho}
-d <- pe$est_catch_s_ts_dt_at |> filter(str_detect(catch_group, "Coho_Adult"))
-bind_rows(
-  d |> group_by(section, DayType, angler_type, catch_group) |> 
-    summarise(across(c(n_obs, est, var), ~round(sum(.), 0)), .groups = "drop"),
-  d |> group_by(section, catch_group) |> 
-    summarise(angler_type = "total", DayType = "total", across(c(n_obs, est, var), ~round(sum(.), 0)), .groups = "drop")
-) |> 
-  gt(groupname_col = c("section","catch_group"), rowname_col = "angler_type") |>  
-  gt::cols_hide("n_obs") |> 
-  gt::fmt_integer(columns = where(is.numeric)) |> 
-  gt::tab_options(container.overflow.x = TRUE, container.overflow.y = TRUE)
+gt_catch("Coho_Adult")
 ```
 
 ### Steelhead
 
 ```{r sthd}
-d <- pe$est_catch_s_ts_dt_at |> filter(str_detect(catch_group, "Steelhead_Adult"))
-bind_rows(
-  d |> group_by(section, DayType, angler_type, catch_group) |> 
-    summarise(across(c(n_obs, est, var), ~round(sum(.), 0)), .groups = "drop"),
-  d |> group_by(section, catch_group) |> 
-    summarise(angler_type = "total", DayType = "total", across(c(n_obs, est, var), ~round(sum(.), 0)), .groups = "drop")
-) |> 
-  gt(groupname_col = c("section","catch_group"), rowname_col = "angler_type") |> 
-  gt::cols_hide("n_obs") |> 
-  gt::fmt_integer(columns = where(is.numeric)) |> 
-  gt::tab_options(container.overflow.x = TRUE, container.overflow.y = TRUE)
+gt_catch("Steelhead_Adult")
 ```
 
 ### Sockeye
 
 ```{r sockeye}
-d <- pe$est_catch_s_ts_dt_at |> filter(str_detect(catch_group, "Sockeye_Adult"))
-bind_rows(
-  d |> group_by(section, DayType, angler_type, catch_group) |> 
-    summarise(across(c(n_obs, est, var), ~round(sum(.), 0)), .groups = "drop"),
-  d |> group_by(section, catch_group) |> 
-    summarise(angler_type = "total", DayType = "total", across(c(n_obs, est, var), ~round(sum(.), 0)), .groups = "drop")
-) |> 
-  gt(groupname_col = c("section","catch_group"), rowname_col = "angler_type") |>  
-  gt::cols_hide("n_obs") |> 
-  gt::fmt_integer(columns = where(is.numeric)) |> 
-  gt::tab_options(container.overflow.x = TRUE, container.overflow.y = TRUE)
+gt_catch("Sockeye_Adult")
 ```
-
 
 ### Jacks
 
 ```{r chin_jack}
-d <- pe$est_catch_s_ts_dt_at |> filter(str_detect(catch_group, "Chinook_Jack|Coho_Jack|Steelhead_Smolt_Steelhead_Unknown"))
-bind_rows(
-  d |> group_by(section, DayType, angler_type, catch_group) |> 
-    summarise(across(c(n_obs, est, var), ~round(sum(.), 0)), .groups = "drop"),
-  d |> group_by(section, catch_group) |> 
-    summarise(angler_type = "total", DayType = "total", across(c(n_obs, est, var), ~round(sum(.), 0)), .groups = "drop")
-) |> 
-  gt(groupname_col = c("section","catch_group"), rowname_col = "angler_type") |> 
-  gt::cols_hide("n_obs") |> 
-  gt::fmt_integer(columns = where(is.numeric)) |> 
-  gt::tab_options(container.overflow.x = TRUE, container.overflow.y = TRUE)
+gt_catch("Chinook_Jack|Coho_Jack|Steelhead_Smolt_Steelhead_Unknown")
 ```
 
 ### Other species
 
 ```{r misc}
-d <- pe$est_catch_s_ts_dt_at |> filter(!str_detect(catch_group, "Chinook|Coho|Steelhead")) 
-bind_rows(
-  d |> group_by(section, DayType, angler_type, catch_group) |> 
-    summarise(across(c(n_obs, est, var), ~round(sum(.), 0)), .groups = "drop"),
-  d |> group_by(section, catch_group) |> 
-    summarise(angler_type = "total", DayType = "total", across(c(n_obs, est, var), ~round(sum(.), 0)), .groups = "drop")
-) |> 
-  gt(groupname_col = c("section","catch_group"), rowname_col = "angler_type") |> 
-  gt::cols_hide("n_obs") |> 
-  gt::fmt_integer(columns = where(is.numeric)) |> 
-  gt::tab_options(container.overflow.x = TRUE, container.overflow.y = TRUE)
+gt_catch(cg_string = "Chinook|Coho|Steelhead|Sockeye", negate = T)
 ```
 
