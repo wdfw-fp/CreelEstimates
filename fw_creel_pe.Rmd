@@ -2,13 +2,13 @@
 title: "FW Creel Point Estimate"
 date: "`r Sys.Date()`"
 params:
-  analysis_name: "District 13_Skykomish River_summer_chin_2022"
-  days_wkend: !r c('Friday','Saturday', 'Sunday')
+  analysis_name: "District 14_Skagit River_summer_sockeye_2022"
+  days_wkend: !r c('Saturday', 'Sunday')
   model_period: "Week"
   index_count_types: "Vehicle/Trailers Only"
   census_expansion: "Direct"
   int_ang_hrs_tot_min: 0.25
-  dir_output: "C:/Users/auerbdaa/Downloads"
+  dir_output: "T:/DFW-Team FP D14 FW Creel - General/"
 output:
   html_document:
     fig_caption: yes
@@ -246,7 +246,11 @@ pe$effort_census <- dplyr::left_join(
     )
   ) |>
   tidyr::drop_na(angler_type) |> 
-  dplyr::select(section, event_date, tie_in_indicator, count_sequence, angler_type, count_census = count_quantity) |> 
+  dplyr::select(section, event_date, tie_in_indicator, count_sequence, angler_type, count_census = count_quantity) |>
+  # dplyr::group_by(section, event_date, tie_in_indicator, count_sequence, angler_type, count_census) |>
+  # dplyr::summarize(
+  #   count_census = sum(count_census)
+  # ) |> EB added this to account for multiple categories of bank / boat angler types (e.g., "shore - motorized boat, shore - no boat) in tie-in surveys. These categories were used for Skagit winter steelhead creels and were used in 2022 coastal steelhead
   dplyr::arrange(section, event_date, count_sequence)
 
 #### pe$effort_index --------------
@@ -437,6 +441,7 @@ if(str_detect(params$index_count_types, "Bank|Boat")) {
     by = c( "section", "DayType", "event_date", "angler_type")) |>
     group_by(section, DayType, angler_type) |> 
     mutate(
+      count_index_mean = replace_na(count_index_mean, 0 ), # noticed NA's in count_index_mean that I think should be 0's, but should double check this thought 
       anglers_per_vhcl_trlr = if_else(
         is.na(anglers_per_vhcl_trlr),
         mean(anglers_per_vhcl_trlr, na.rm=T),
