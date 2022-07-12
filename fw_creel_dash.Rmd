@@ -116,8 +116,9 @@ Sidebar {.sidebar data-width=350}
 selectInput(inputId = 'analysis_name', label = 'Analysis Name', choices = input_analysis_levels$analysis_name, selected = input_analysis_levels$analysis_name[1])
 
 
-radioButtons(inputId = 'model_period', label = "Model period", choices = c("Week", "Month"), inline = T,
-             , selected = "Week"
+radioButtons(inputId = 'model_period', label = "Model period",
+             choices = c("Week", "Month", "Duration"), inline = T,
+             selected = "Week"
              )
 
 radioButtons(inputId = 'index_count_types', label = "Index count types", 
@@ -133,10 +134,10 @@ radioButtons(inputId = 'census_expansion', label = "Census expansion method", in
 checkboxGroupInput(inputId = 'days_wkend', label = "Days in 'weekends'",
                    choiceNames =  c("Mon", "Tues", "Wed", "Thur", "Fri", "Sat", "Sun"),
                    choiceValues = c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"),
-                   selected = c("Friday", "Saturday", "Sunday"))
+                   selected = c("Saturday", "Sunday"))
 
 numericInput(inputId = 'int_ang_hrs_tot_min', label = "Minimum interview total angler hours", 
-             value = 0.5, min = 0, max = 2)
+             value = 0.25, min = 0, max = 2)
 
 # #can add option to manually upload ...
 # fileInput(inputId = 'sections', label = 'Sections LU', accept = ".csv")
@@ -273,8 +274,12 @@ reactive({
       Week = as.numeric(format(event_date, "%V")),
       Month = as.numeric(format(event_date, "%m")),
       ModelPeriod = input$model_period,
-      time_strata = if_else(ModelPeriod == "Month", Month, Week)
-      ) |>
+      time_strata = case_when(
+        ModelPeriod == "Week" ~ Week,
+        ModelPeriod == "Month" ~ Month,
+        ModelPeriod == "Duration" ~ double(1)
+      )
+    ) |>
       tibble::rowid_to_column(var = "day_index") |>
       dplyr::left_join(lu_input$closures, by = "event_date")
     
@@ -962,7 +967,7 @@ render_gt({
       filter(fish_count > 0) |>
       pivot_wider(names_from = angler_type, values_from = fish_count) |> 
       gt(groupname_col = "catch_group", rowname_col = "event_date") |> 
-      fmt_missing(c("bank", "boat"))
+      sub_missing(c("bank", "boat"))
   }
 })
 
@@ -1102,7 +1107,7 @@ gt_catch <- function(cg_string, negate = F){
     ) |> 
       gt(groupname_col = c("section","catch_group")) |> 
       gt::fmt_number(columns = where(is.numeric), decimals = 1) |> 
-      gt::fmt_missing(columns = where(is.numeric)) |>
+      gt::sub_missing(columns = where(is.numeric)) |>
       gt::tab_style(
         style = gt::cell_text(weight = "bold"),
         locations = cells_body(columns = starts_with("est_"), rows = DayType != "total")
