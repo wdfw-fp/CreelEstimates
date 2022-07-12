@@ -2,7 +2,7 @@
 title: "FW Creel Point Estimate"
 date: "`r Sys.Date()`"
 params:
-  analysis_name: "District 14_Skagit River_summer_sockeye_2022"
+  analysis_name: "District 13_Skykomish River_summer_chin_2022"
   days_wkend: !r c('Saturday', 'Sunday')
   model_period: "Week"
   index_count_types: "Vehicle/Trailers Only"
@@ -140,7 +140,6 @@ creel$catch <- paste0(
   readr::read_csv(show_col_types = F) |>
   dplyr::select(interview_id, catch_id, species, run, life_stage, fin_mark, fate, fish_count) |> 
   dplyr::mutate(
-    life_stage = replace_na(life_stage, "Adult"), # placeholder pending data corrections in fish apps 
     catch_group = paste(species, life_stage, fin_mark, fate, sep = "_") # fish catch groups to estimate catch of 
   )
 
@@ -246,11 +245,8 @@ pe$effort_census <- dplyr::left_join(
     )
   ) |>
   tidyr::drop_na(angler_type) |> 
-  dplyr::select(section, event_date, tie_in_indicator, count_sequence, angler_type, count_census = count_quantity) |>
-  # dplyr::group_by(section, event_date, tie_in_indicator, count_sequence, angler_type, count_census) |>
-  # dplyr::summarize(
-  #   count_census = sum(count_census)
-  # ) |> EB added this to account for multiple categories of bank / boat angler types (e.g., "shore - motorized boat, shore - no boat) in tie-in surveys. These categories were used for Skagit winter steelhead creels and were used in 2022 coastal steelhead
+  dplyr::group_by(section, event_date, tie_in_indicator, count_sequence, angler_type) |>
+  dplyr::summarize(count_census = sum(count_quantity), .groups = "drop") |>
   dplyr::arrange(section, event_date, count_sequence)
 
 #### pe$effort_index --------------
