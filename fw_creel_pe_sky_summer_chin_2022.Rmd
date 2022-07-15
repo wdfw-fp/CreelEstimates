@@ -2,13 +2,13 @@
 title: "FW Creel Point Estimate"
 date: "`r Sys.Date()`"
 params:
-  analysis_name: "District 14_Skagit River_summer_sockeye_2022"
-  days_wkend: !r c('Saturday', 'Sunday')
+  analysis_name: "District 13_Skykomish River_summer_chin_2022"
+  days_wkend: !r c('Friday','Saturday', 'Sunday')
   model_period: "Week"
   index_count_types: "Vehicle/Trailers Only"
   census_expansion: "Direct"
   int_ang_hrs_tot_min: 0.25
-  dir_output: "T:/DFW-Team FP D14 FW Creel - General/"
+  dir_output: "model_output"
 output:
   html_document:
     fig_caption: yes
@@ -914,47 +914,6 @@ gt_catch <- function(cg_string, negate = F){
 }
 
 ```
-
-
-### Sockeye estimates by section
-
-```{r sockeye_by_section}
-d2 <- pe$est_catch_s_ts_dt_at |> filter(catch_group %in% c("Sockeye_Adult_AD_Kept", "Sockeye_Adult_UM_Kept"))
-bind_rows(
-  d2 |> group_by(section) |>
-  summarise(
-    catch = sum(est)
-    # ,
-    # var = sum(var),
-    # se = sqrt(var)
-  ) |> 
-mutate(across(where(is.numeric), round, 3)) |>
-left_join(
-  lu_input$sections |> filter(location %in% c("From Hwy. 536 at Mt. Vernon (Memorial Hwy. Bridge) to mouth of Gilligan Creek", "From mouth of Gilligan Creek to the Dalles Bridge at Concrete"))
-|> select(section,location)
-) |> 
-  select(section, location, catch) 
-) |>
-  gt(groupname_col = c("section")) |>
-  gt::tab_options(container.overflow.x = TRUE, container.overflow.y = TRUE)
-
-
-```
-
-### Sockeye weekly
-
-```{r sockeye_weekly}
-d <- pe$est_catch_s_ts_dt_at |> filter(catch_group %in% c("Sockeye_Adult_AD_Kept", "Sockeye_Adult_UM_Kept"))
-bind_rows(
-  d |> group_by(time_strata, catch_group) |> 
-    summarise(across(c(n_obs, est, var, se), ~round(sum(.), 0)), .groups = "drop")
-) |> 
-  gt(groupname_col = c("section","catch_group"), rowname_col = "angler_type") |> 
-  gt::cols_hide("n_obs") |> 
-  gt::fmt_integer(columns = where(is.numeric)) |> 
-  gt::tab_options(container.overflow.x = TRUE, container.overflow.y = TRUE)
-```
-
 
 ### Chinook marked
 
