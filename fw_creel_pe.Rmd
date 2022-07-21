@@ -164,7 +164,8 @@ creel$days <- tibble::tibble(
   ) |>
     mutate(DayL = as.numeric((sunset + 3600) - (sunrise - 3600))) |>
     pluck("DayL"),
-  Week = as.numeric(format(event_date, "%V")),
+  #Sunday to Saturday stat weeks
+  Week = 1 + as.numeric(format(event_date, "%U")) - as.numeric(format(as.Date(cut(event_date, "year")), "%U")),
   Month = as.numeric(format(event_date, "%m")),
   ModelPeriod = params$model_period,
   time_strata = case_when(
