@@ -915,15 +915,44 @@ gt_catch <- function(cg_string, negate = F){
 
 ```
 
-### Totals
 
-```{r gt_total_by_catch_group}
-pe$est_catch_s_ts_dt_at |> 
-  group_by(catch_group) |> 
-  summarise(est = round(sum(est), 1), .groups = "drop") |> 
-  gt() |> 
-  fmt_number(columns = where(is.numeric), decimals = 1)
+### Sockeye estimates by section
 
+```{r sockeye_by_section}
+d2 <- pe$est_catch_s_ts_dt_at |> filter(catch_group %in% c("Sockeye_Adult_AD_Kept", "Sockeye_Adult_UM_Kept"))
+bind_rows(
+  d2 |> group_by(section) |>
+  summarise(
+    catch = sum(est)
+    # ,
+    # var = sum(var),
+    # se = sqrt(var)
+  ) |> 
+mutate(across(where(is.numeric), round, 3)) |>
+left_join(
+  lu_input$sections |> filter(location %in% c("From Hwy. 536 at Mt. Vernon (Memorial Hwy. Bridge) to mouth of Gilligan Creek", "From mouth of Gilligan Creek to the Dalles Bridge at Concrete"))
+|> select(section,location)
+) |> 
+  select(section, location, catch) 
+) |>
+  gt(groupname_col = c("section")) |>
+  gt::tab_options(container.overflow.x = TRUE, container.overflow.y = TRUE)
+
+
+```
+
+### Sockeye weekly
+
+```{r sockeye_weekly}
+d <- pe$est_catch_s_ts_dt_at |> filter(catch_group %in% c("Sockeye_Adult_AD_Kept", "Sockeye_Adult_UM_Kept"))
+bind_rows(
+  d |> group_by(time_strata, catch_group) |> 
+    summarise(across(c(n_obs, est, var, se), ~round(sum(.), 0)), .groups = "drop")
+) |> 
+  gt(groupname_col = c("section","catch_group"), rowname_col = "angler_type") |> 
+  gt::cols_hide("n_obs") |> 
+  gt::fmt_integer(columns = where(is.numeric)) |> 
+  gt::tab_options(container.overflow.x = TRUE, container.overflow.y = TRUE)
 ```
 
 
