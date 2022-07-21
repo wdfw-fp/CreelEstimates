@@ -18,7 +18,7 @@ output:
     toc_float: yes
     code_folding: hide
 ---
-```{css}
+```{css, include=FALSE}
   .chart-shim {
     overflow: auto;
     }

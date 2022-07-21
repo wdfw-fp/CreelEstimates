@@ -2,8 +2,8 @@
 title: "FW Creel Point Estimate"
 date: "`r Sys.Date()`"
 params:
-  analysis_name: "District 14_Skagit River_summer_sockeye_2022"
-  days_wkend: !r c('Saturday', 'Sunday')
+  analysis_name: "District 17 South_Willapa River_winter_steelhead_2022"
+  days_wkend: !r c('Friday', 'Saturday', 'Sunday')
   model_period: "Week"
   index_count_types: "Vehicle/Trailers Only"
   census_expansion: "Direct"
@@ -18,7 +18,7 @@ output:
     toc_float: yes
     code_folding: hide
 ---
-```{css}
+```{css, include=FALSE}
   .chart-shim {
     overflow: auto;
     }
@@ -300,7 +300,8 @@ pe$interview <- dplyr::left_join(
       angler_type == "bank" ~ "bank", #pass through
       angler_type == "Unk" ~ "bank",  #Kalama, others?
       angler_type == "No" ~ "bank",   #value from boat_used
-      angler_type == "Yes" ~ "boat"   #value from boat_used
+      angler_type == "Yes" & str_detect(boat_type, "ontoon|ayak") ~ "bank",
+      angler_type == "Yes" & !str_detect(boat_type, "ontoon|ayak")  ~ "boat" #value from boat_used
     ),
     angler_type_ind = as.integer(factor(angler_type)),
     
