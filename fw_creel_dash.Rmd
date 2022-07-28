@@ -310,7 +310,7 @@ reactive({
         mutate(DayL = as.numeric((sunset + 3600) - (sunrise - 3600))) |>
         pluck("DayL"),
       #Monday to Sunday weeks, see ?strptime
-      Week = Week = as.numeric(format(event_date, "%W")),
+      Week = as.numeric(format(event_date, "%W")),
       Month = as.numeric(format(event_date, "%m")),
       ModelPeriod = input$model_period,
       time_strata = case_when(
