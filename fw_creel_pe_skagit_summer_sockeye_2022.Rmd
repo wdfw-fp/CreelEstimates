@@ -917,7 +917,7 @@ gt_catch <- function(cg_string, negate = F){
 ```
 
 
-### Sockeye estimates by section
+### Total sockeye estimates by section
 
 ```{r sockeye_by_section}
 sockeye_harvest_groups <- c("Sockeye_Adult_UM_Kept", "Sockeye_Adult_AD_Kept", "Sockeye_Jack_AD_Kept", "Sockeye_Jack_UM_Kept", "Sockeye_Adult_UNK_Kept")
@@ -944,7 +944,7 @@ left_join(
 
 ```
 
-### Sockeye weekly
+### Sockeye weekly estimates by catch group
 
 ```{r sockeye_weekly}
 d <- pe$est_catch_s_ts_dt_at |> filter(catch_group %in% sockeye_harvest_groups)
@@ -959,7 +959,7 @@ bind_rows(
 ```
 
 
-### Sockeye weekly and daily estimates
+### Total sockeye weekly and daily estimates
 
 ```{r sockeye_total_weekly}
 d1 <- pe$est_catch_s_ts_dt_at |> 
