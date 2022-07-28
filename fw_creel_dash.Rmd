@@ -189,13 +189,13 @@ numericInput(inputId = 'int_ang_hrs_tot_min', label = "Minimum interview total a
 actionButton("fetch", label = "Fetch raw data")
 
 
-# ## uncomment for console dev
+## uncomment for console dev
 # lu_input <- list()
 # input <- list()
 # creel <- list()
 # pe <- list()
 # 
-# input$analysis_name <- input_analysis_levels$analysis_name[5]
+# input$analysis_name <- input_analysis_levels$analysis_name[8]
 # 
 # input$model_period <- "Week"
 # # input$model_period <- "Month"
