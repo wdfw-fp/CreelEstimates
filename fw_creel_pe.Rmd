@@ -2,12 +2,12 @@
 title: "FW Creel Point Estimate"
 date: "`r Sys.Date()`"
 params:
-  analysis_name: "District 17 South_Willapa River_winter_steelhead_2022"
-  days_wkend: !r c('Friday', 'Saturday', 'Sunday')
+  analysis_name: "District 14_Skagit River,Sauk River_summer_gamefish_2022"
+  days_wkend: !r c('Friday','Saturday', 'Sunday')
   model_period: "Week"
   index_count_types: "Vehicle/Trailers Only"
-  census_expansion: "Direct"
-  int_ang_hrs_tot_min: 0.25
+  census_expansion: "Indirect"
+  int_ang_hrs_tot_min: 0.5
   dir_output: "model_output"
 output:
   html_document:
@@ -85,10 +85,22 @@ gt(tibble(param = names(params), value = as.character(params)))
 # Fetch data
 
 ```{r dwg_fetch, echo=FALSE}
+# creel$event <- paste0(
+#   dwg_base$event,
+#   "?$where=project_name in('", input_analysis$proj_name, "')",
+#   " AND water_body in('", paste0(input_analysis$water_body, collapse = "','"), "')", 
+#   " AND event_date between '", first(lu_input$closures$event_date),
+#   "T00:00:00' and '", last(lu_input$closures$event_date),
+#   "T00:00:00'&$limit=100000"
+# ) |>
+#   utils::URLencode() |>
+#   readr::read_csv(show_col_types = F) |>
+#   dplyr::select(creel_event_id, water_body, event_date, tie_in_indicator)
+
 creel$event <- paste0(
   dwg_base$event,
   "?$where=project_name in('", input_analysis$proj_name, "')",
-  " AND water_body in('", paste0(input_analysis$water_body, collapse = "','"), "')", 
+  " AND water_body in('", str_replace(input_analysis$water_body, ",|\\|", "','"), "')",
   " AND event_date between '", first(lu_input$closures$event_date),
   "T00:00:00' and '", last(lu_input$closures$event_date),
   "T00:00:00'&$limit=100000"
@@ -96,6 +108,7 @@ creel$event <- paste0(
   utils::URLencode() |>
   readr::read_csv(show_col_types = F) |>
   dplyr::select(creel_event_id, water_body, event_date, tie_in_indicator)
+
 
 ##directly passing the desired section-locations works (with a double single quote)
 #   " AND location in('", 
@@ -764,7 +777,7 @@ pe$effort_index |>
 #   scale_color_brewer(palette = "Set2", aesthetics = c("color", "fill")) +
 #   facet_wrap(~section + angler_type, scales = "fixed", ncol = 1, labeller = label_wrap_gen(multi_line = F))
 
-pe$census_TI_expan |> 
+pe$census_TI_expan |>
   ggplot(aes(count_index, count_census, color = angler_type)) +
   geom_abline(slope = 1, intercept = 0, linetype = 2) +
   scale_x_continuous(limits = c(0, NA)) +
