@@ -2,11 +2,11 @@
 title: "FW Creel Point Estimate"
 date: "`r Sys.Date()`"
 params:
-  analysis_name: "District 14_Skagit River,Sauk River_summer_gamefish_2022"
-  days_wkend: !r c('Friday','Saturday', 'Sunday')
+  analysis_name: "District 14_Skagit River_summer_sockeye_2022"
+  days_wkend: !r c('Saturday', 'Sunday')
   model_period: "Week"
   index_count_types: "Vehicle/Trailers Only"
-  census_expansion: "Indirect"
+  census_expansion: "Direct"
   int_ang_hrs_tot_min: 0.5
   dir_output: "model_output"
 output:
@@ -323,7 +323,7 @@ pe$interview <- dplyr::left_join(
       interview_time,
       fishing_end_time),
     angler_hours = round(as.numeric(fishing_end_time - fishing_start_time) / 3600, 5),
-    angler_hours_total = angler_count * angler_hours
+    angler_hours_total = total_group_count * angler_hours # changed this to total group count to match census count protocol
   ) |>
   dplyr::filter(angler_hours_total >= params$int_ang_hrs_tot_min) |> 
   #drop a few unused cols for ease of dev
