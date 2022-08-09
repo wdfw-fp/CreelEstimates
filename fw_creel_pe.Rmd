@@ -2,8 +2,8 @@
 title: "FW Creel Point Estimate"
 date: "`r Sys.Date()`"
 params:
-  analysis_name: "District 14_Skagit River_summer_sockeye_2022"
-  days_wkend: !r c('Saturday', 'Sunday')
+  analysis_name: "District 13_Skykomish River_summer_chin_2022"
+  days_wkend: !r c('Friday', 'Saturday', 'Sunday')
   model_period: "Week"
   index_count_types: "Vehicle/Trailers Only"
   census_expansion: "Direct"
@@ -529,7 +529,8 @@ if(str_detect(params$index_count_types, "Bank|Boat")) {
       pe$census_TI_expan <- pe$census_TI_expan |> 
         pivot_longer(cols = c(count_census, count_index), names_to = "count_type", values_to = "count") |> 
         pivot_wider(names_from = angler_type, values_from = count) |>
-        mutate(bank = total - boat, total = NULL) |> #filter(is.na(boat) | is.na(bank) | bank < 0)
+        mutate(boat = replace_na(boat, 0), # NA's here are implicit 0's due to lack of boat anglers in data  (example section = Cascade River, when grouped with other Skagit sections)
+               bank = total - boat, total = NULL) |> #filter(is.na(boat) | is.na(bank) | bank < 0)
         pivot_longer(cols = c(boat, bank), names_to = "angler_type", values_to = "count") |>
         pivot_wider(names_from = count_type, values_from = count) |> 
         filter(
