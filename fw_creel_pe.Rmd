@@ -2,8 +2,8 @@
 title: "FW Creel Point Estimate"
 date: "`r Sys.Date()`"
 params:
-  analysis_name: "District 13_Skykomish River_summer_chin_2022"
-  days_wkend: !r c('Friday', 'Saturday', 'Sunday')
+  analysis_name: "District 14_Skagit River_summer_sockeye_2022"
+  days_wkend: !r c('Saturday', 'Sunday')
   model_period: "Week"
   index_count_types: "Vehicle/Trailers Only"
   census_expansion: "Direct"
@@ -62,7 +62,7 @@ lu_input$river_lonlat <- readr::read_csv("input_files/river_locations_master.csv
 #!!note the current fetch drops/excludes effort and interview rows
 #!!if no section assigned from section LU
 lu_input$sections <- readr::read_csv(paste0("input_files/", params$analysis_name, "_sections.csv")) |> 
- dplyr::select(water_body_desc, location = location_code, section)
+ dplyr::select(water_body_desc, location = location_code, section, section_name)
 
 lu_input$census_exp <- readr::read_csv(paste0("input_files/", params$analysis_name, "_tiexp.csv")) |>  
   dplyr::mutate(cen_exp_meth = params$census_expansion)
@@ -80,6 +80,18 @@ pe <- list() #intermediate objects wrangled from creel list elements
 
 ```{r}
 gt(tibble(param = names(params), value = as.character(params)))
+```
+
+# Fishery sections
+
+```{r}
+# display the section names so user can crosswalk section number to section name in subsequent output
+
+pe$section_table <- lu_input$sections |>
+              distinct(section,section_name) |> 
+              select(section,section_name)
+
+gt(pe$section_table)
 ```
 
 # Fetch data
@@ -890,6 +902,109 @@ pe$est_effort_s_ts_dt_at |>
     subtitle = "Section-time-strata-DayType-angler-type means * N-days")
 ```
 
+## Comparison of angler hour totals from effort counts and interviews
+
+```{r pe$proportion_of_total_effort_sampled_from_interviews}
+
+## produce chunk to evaluate proportion of estimated total angler hours (effort) sampled during interviews, grouped by angler type
+
+pe$interview |>
+  drop_na(angler_type) |>  
+  group_by(time_strata, section, DayType, angler_type) |> 
+  summarise(
+    interview_hours_total = sum(angler_hours_total)
+  ) |> 
+  left_join(pe$est_effort_s_ts_dt_at |> ## join expanded catch estimates in pe$est_effort_s_ts_dt_at to total angler hours from interviews in pe$interview 
+              select(section, time_strata, section, DayType, angler_type, effort_est = est) |>
+               group_by(section, time_strata, DayType, angler_type) |> 
+               summarise(
+                 angler_effort_total = sum(effort_est))
+             , 
+            by = c("section", "time_strata", "DayType", "angler_type")) |> 
+  group_by(section, angler_type) |> 
+  summarise(
+    interview_hours_total = sum(interview_hours_total),
+    angler_effort_total = sum(angler_effort_total),
+    proportion_interviewed_effort = (interview_hours_total / angler_effort_total)
+    ) |>
+  bind_rows(
+    pe$interview |>
+  drop_na(angler_type) |>  
+  group_by(time_strata, section, DayType, angler_type) |> 
+  summarise(
+    interview_hours_total = sum(angler_hours_total)
+  ) |> 
+  left_join(pe$est_effort_s_ts_dt_at |> ## join expanded catch estimates in pe$est_effort_s_ts_dt_at to total angler hours from interviews in pe$interview 
+              select(section, time_strata, section, DayType, angler_type, effort_est = est) |>
+               group_by(section, time_strata, DayType, angler_type) |> 
+               summarise(
+                 angler_effort_total = sum(effort_est))
+             , 
+            by = c("section", "time_strata", "DayType", "angler_type")) |> 
+  group_by(section) |> 
+  summarise(
+    interview_hours_total = sum(interview_hours_total),
+    angler_effort_total = sum(angler_effort_total),
+    proportion_interviewed_effort = (interview_hours_total / angler_effort_total)
+    ) |> 
+    mutate(
+      angler_type = "total"
+    )
+  ) |> 
+  mutate(across(where(is.numeric), round, 2)) |> 
+  left_join(pe$section_table) |> 
+  gt(groupname_col = "section_name") |> 
+  cols_label(
+    angler_type = md("angler type"),
+    interview_hours_total = md("Total angler hours from direct sampling (interviews)"),
+    angler_effort_total = md("Total angler hours from expanded effort estimates"),
+    proportion_interviewed_effort = md("proportion of total effort sampled in interviews")
+  ) |> 
+  tab_header(
+    title = md("Estimated total angler effort sampled during interviews"),
+    subtitle = md("The season-long total of angler hours from interviews and effort counts. The third column displays the estimated proportion of total angling effort (angler hours) that was directly sampled during creel interviews.")) |> 
+  tab_options(container.overflow.x = T, container.overflow.y = T)
+
+```
+
+
+```{r pe$proportion_effort_and_interview_hours_by_angler_type}
+
+pe$interview |>
+  drop_na(angler_type) |>  
+  group_by(time_strata, section, DayType, angler_type) |> 
+  summarise(
+    interview_hours_total = sum(angler_hours_total)
+  ) |> 
+  left_join(pe$est_effort_s_ts_dt_at |> ## join expanded catch estimates in pe$est_effort_s_ts_dt_at to total angler hours from interviews in pe$interview 
+              select(section, time_strata, section, DayType, angler_type, effort_est = est) |>
+               group_by(section, time_strata, DayType, angler_type) |> 
+               summarise(
+                 angler_effort_total = sum(effort_est))
+             , 
+            by = c("section", "time_strata", "DayType", "angler_type"), .groups = "drop") |> 
+  pivot_wider(names_from = angler_type, values_from = c("interview_hours_total", "angler_effort_total"), values_fill = 0) |>
+  group_by(section) |>
+  summarise(
+     proportion_angler_effort_boat = sum(angler_effort_total_boat) / (sum(angler_effort_total_boat) + sum(angler_effort_total_bank)),
+    proportion_interview_hours_boat = sum(interview_hours_total_boat) / (sum(interview_hours_total_boat) + sum(interview_hours_total_bank)),
+    proportion_angler_effort_bank = sum(angler_effort_total_bank) / (sum(angler_effort_total_boat) + sum(angler_effort_total_bank)),
+    proportion_interview_hours_bank = sum(interview_hours_total_bank) / (sum(interview_hours_total_boat) + sum(interview_hours_total_bank))) |>
+  mutate(across(where(is.numeric), round, 2)) |>
+  left_join(pe$section_table) |> 
+  gt(groupname_col = "section_name") |> 
+  tab_header(
+    title = md("Proportion of angler hours from interviews and total effort estimates by angler type"),
+    subtitle = md("Season-long proportions (prop.) of the sum total of angler hours by angler type (e.g., boat, bank) from total estimates of angler effort and angler interviews.")) |> 
+  cols_label(
+    proportion_angler_effort_boat = md("prop. boat angler hours in expanded effort estimates"),
+    proportion_interview_hours_boat = md("prop. boat angler hours sampled from interviews"),
+    proportion_angler_effort_bank = md("prop. bank angler hours in expanded effort estimates"),
+    proportion_interview_hours_bank = md("prop. bank angler hours sampled from interviews")
+  ) |>
+  tab_options(container.overflow.x = T, container.overflow.y = T)
+
+```
 
 # Catch estimates
 
