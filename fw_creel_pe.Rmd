@@ -2,11 +2,11 @@
 title: "FW Creel Point Estimate"
 date: "`r Sys.Date()`"
 params:
-  analysis_name: "District 14_Skagit River_summer_sockeye_2022"
+  analysis_name: "District 14_Skagit River,Cascade River_fall_salmon_2022"
   days_wkend: !r c('Saturday', 'Sunday')
   model_period: "Week"
   index_count_types: "Vehicle/Trailers Only"
-  census_expansion: "Direct"
+  census_expansion: "Indirect"
   int_ang_hrs_tot_min: 0.5
   dir_output: "model_output"
 output:
@@ -790,6 +790,7 @@ pe$effort_index |>
 #   scale_color_brewer(palette = "Set2", aesthetics = c("color", "fill")) +
 #   facet_wrap(~section + angler_type, scales = "fixed", ncol = 1, labeller = label_wrap_gen(multi_line = F))
 
+if(params$census_expansion == "Direct") {
 pe$census_TI_expan |>
   ggplot(aes(count_index, count_census, color = angler_type)) +
   geom_abline(slope = 1, intercept = 0, linetype = 2) +
@@ -798,7 +799,7 @@ pe$census_TI_expan |>
   geom_point() +
   geom_smooth(method = "lm", se = FALSE) +
   facet_wrap(~paste("Section:",section), labeller = label_wrap_gen(multi_line = F))
-
+}
 ```
 
 ## Total angler hours per interview
@@ -904,7 +905,7 @@ pe$est_effort_s_ts_dt_at |>
 
 ## Comparison of angler hour totals from effort counts and interviews
 
-```{r pe$proportion_of_total_effort_sampled_from_interviews}
+```{r pe$proportion_of_total_effort_sampled_from_interviews, eval=TRUE}
 
 ## produce chunk to evaluate proportion of estimated total angler hours (effort) sampled during interviews, grouped by angler type
 
@@ -968,7 +969,7 @@ pe$interview |>
 ```
 
 
-```{r pe$proportion_effort_and_interview_hours_by_angler_type}
+```{r pe$proportion_effort_and_interview_hours_by_angler_type, eval=TRUE}
 
 pe$interview |>
   drop_na(angler_type) |>  
