@@ -6,7 +6,7 @@ params:
   days_wkend: !r c('Saturday', 'Sunday')
   model_period: "Week"
   index_count_types: "Vehicle/Trailers Only"
-  census_expansion: "Indirect"
+  census_expansion: "Direct"
   int_ang_hrs_tot_min: 0.5
   dir_output: "model_output"
 output:
@@ -406,7 +406,9 @@ if(str_detect(params$index_count_types, "Bank|Boat")) {
       across(c(count_census, count_index), sum),
       TI_expan_weighted = count_census / count_index,
       TI_expan_weighted = if_else(TI_expan_weighted == 0, 1, TI_expan_weighted) |> replace_na(1),
-      .groups = "drop") |>
+      .groups = "drop",
+      TI_expan_weighted = if_else(is.infinite(TI_expan_weighted), 1, TI_expan_weighted)
+      ) |>
     left_join(
       lu_input$census_exp |>
         select(cen_exp_meth, angler_type, section, p_TI, TI_expan_indirect = Indirect_TI_Expan),
@@ -560,7 +562,9 @@ if(str_detect(params$index_count_types, "Bank|Boat")) {
         across(c(count_census, count_index), sum),
         TI_expan_weighted = count_census / count_index,
         TI_expan_weighted = if_else(TI_expan_weighted == 0, 1, TI_expan_weighted) |> replace_na(1),
-        .groups = "drop") |> 
+        .groups = "drop",
+      TI_expan_weighted = if_else(is.infinite(TI_expan_weighted), 1, TI_expan_weighted)
+      ) |> 
       #and now bring in the external expansion values if any
       left_join(
         lu_input$census_exp |>
