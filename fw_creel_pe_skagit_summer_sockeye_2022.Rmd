@@ -165,7 +165,7 @@ creel$days <- tibble::tibble(
     mutate(DayL = as.numeric((sunset + 3600) - (sunrise - 3600))) |>
     pluck("DayL"),
   #Sunday to Saturday stat weeks
-  Week = 1 + as.numeric(format(event_date, "%U")) - as.numeric(format(as.Date(cut(event_date, "year")), "%U")),
+  Week = 1 + as.numeric(format(event_date, "%W")) - as.numeric(format(as.Date(cut(event_date, "year")), "%W")),
   Month = as.numeric(format(event_date, "%m")),
   ModelPeriod = params$model_period,
   time_strata = case_when(
@@ -916,10 +916,13 @@ gt_catch <- function(cg_string, negate = F){
 
 ```
 
-### Sockeye estimates by section
+
+### Total sockeye estimates by section
 
 ```{r sockeye_by_section}
-d2 <- pe$est_catch_s_ts_dt_at |> filter(catch_group %in% c("Sockeye_Adult_AD_Kept", "Sockeye_Adult_UM_Kept"))
+sockeye_harvest_groups <- c("Sockeye_Adult_UM_Kept", "Sockeye_Adult_AD_Kept", "Sockeye_Jack_AD_Kept", "Sockeye_Jack_UM_Kept", "Sockeye_Adult_UNK_Kept")
+
+d2 <- pe$est_catch_s_ts_dt_at |> filter(catch_group %in% sockeye_harvest_groups)
 bind_rows(
   d2 |> group_by(section) |>
   summarise(
@@ -941,10 +944,10 @@ left_join(
 
 ```
 
-### Sockeye weekly
+### Sockeye weekly estimates by catch group
 
 ```{r sockeye_weekly}
-d <- pe$est_catch_s_ts_dt_at |> filter(catch_group %in% c("Sockeye_Adult_AD_Kept", "Sockeye_Adult_UM_Kept"))
+d <- pe$est_catch_s_ts_dt_at |> filter(catch_group %in% sockeye_harvest_groups)
 bind_rows(
   d |> group_by(time_strata, catch_group) |> 
     summarise(across(c(n_obs, est, var, se), ~round(sum(.), 0)), .groups = "drop")
@@ -953,6 +956,46 @@ bind_rows(
   gt::cols_hide("n_obs") |> 
   gt::fmt_integer(columns = where(is.numeric)) |> 
   gt::tab_options(container.overflow.x = TRUE, container.overflow.y = TRUE)
+```
+
+
+### Total sockeye weekly and daily estimates
+
+```{r sockeye_total_weekly}
+d1 <- pe$est_catch_s_ts_dt_at |> 
+  filter(catch_group %in% sockeye_harvest_groups & section == 1) |>
+  group_by(section, time_strata, DayType) |> 
+  summarise(
+    catch_est_mean = sum(catch_est_mean)
+  ) |> 
+  left_join(creel$days |> 
+              filter(open_section_1 == TRUE) |> 
+              select(event_date, DayType, time_strata))
+
+d2 <- pe$est_catch_s_ts_dt_at |> 
+  filter(catch_group %in% sockeye_harvest_groups & section == 2) |>
+  group_by(section, time_strata, DayType) |> 
+  summarise(
+    catch_est_mean = sum(catch_est_mean)
+  ) |> 
+  left_join(creel$days |> 
+              filter(open_section_2 == TRUE) |> 
+              select(event_date, DayType, time_strata))
+
+d3 <- d1 |> 
+  bind_rows(d2) |> 
+  group_by(event_date, time_strata, DayType) |>
+  summarise(
+    daily_est = sum(catch_est_mean)
+  ) |> 
+  mutate(across(where(is.numeric), round, 0)) |> 
+  ungroup()
+  # write_csv("sockeye_daily_estimates.csv") |> 
+  
+gt(d3, rowname_col = "rowname") |> 
+  gt::fmt_integer(columns = where(is.numeric)) |> 
+  gt::tab_options(container.overflow.x = TRUE, container.overflow.y = TRUE)
+
 ```
 
 

@@ -189,13 +189,13 @@ numericInput(inputId = 'int_ang_hrs_tot_min', label = "Minimum interview total a
 actionButton("fetch", label = "Fetch raw data")
 
 
-# ## uncomment for console dev
+## uncomment for console dev
 # lu_input <- list()
 # input <- list()
 # creel <- list()
 # pe <- list()
 # 
-# input$analysis_name <- input_analysis_levels$analysis_name[5]
+# input$analysis_name <- input_analysis_levels$analysis_name[8]
 # 
 # input$model_period <- "Week"
 # # input$model_period <- "Month"
@@ -309,8 +309,8 @@ reactive({
         ) |>
         mutate(DayL = as.numeric((sunset + 3600) - (sunrise - 3600))) |>
         pluck("DayL"),
-      #Sunday to Saturday stat weeks
-      Week = 1 + as.numeric(format(event_date, "%U")) - as.numeric(format(as.Date(cut(event_date, "year")), "%U")),
+      #Monday to Sunday weeks, see ?strptime
+      Week = as.numeric(format(event_date, "%W")),
       Month = as.numeric(format(event_date, "%m")),
       ModelPeriod = input$model_period,
       time_strata = case_when(
@@ -435,7 +435,7 @@ reactive({
         interview_time,
         fishing_end_time),
       angler_hours = round(as.numeric(fishing_end_time - fishing_start_time) / 3600, 5),
-      angler_hours_total = angler_count * angler_hours
+      angler_hours_total = total_group_count * angler_hours # changed to total_group_count to match census count protocol
     ) |>
     dplyr::filter(angler_hours_total >= input$int_ang_hrs_tot_min) |> 
     #drop a few unused cols for ease of dev
@@ -639,7 +639,8 @@ reactive({
         pe$census_TI_expan <- pe$census_TI_expan |> 
           pivot_longer(cols = c(count_census, count_index), names_to = "count_type", values_to = "count") |> 
           pivot_wider(names_from = angler_type, values_from = count) |>
-          mutate(bank = total - boat, total = NULL) |> #filter(is.na(boat) | is.na(bank) | bank < 0)
+          mutate(boat = replace_na(boat, 0), # NA's here are implicit 0's due to lack of boat anglers in data  (example section = Cascade River, when grouped with other Skagit sections)
+               bank = total - boat, total = NULL) |> #filter(is.na(boat) | is.na(bank) | bank < 0)
           pivot_longer(cols = c(boat, bank), names_to = "angler_type", values_to = "count") |>
           pivot_wider(names_from = count_type, values_from = count) |> 
           filter(
