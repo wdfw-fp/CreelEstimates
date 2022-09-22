@@ -177,7 +177,7 @@ creel$days <- tibble::tibble(
   event_date = lu_input$closures$event_date,
   Day = weekdays(event_date),
   DayType = if_else(
-    Day %in% params$days_wkend | Day %in% lu_input$dates_holidays_2015_2030,
+    Day %in% params$days_wkend | event_date %in% lu_input$dates_holidays_2015_2030,
     "Weekend", "Weekday"),
   DayType_num = if_else(str_detect(DayType, "end"),1,0),
   DayL = suncalc::getSunlightTimes(
