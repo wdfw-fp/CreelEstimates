@@ -1,13 +1,19 @@
+
 prep_days <- function(
     date_begin, date_end,
     weekends = c("Saturday", "Sunday"),
-    holidays,
+    holidays, #date/char vector of YYYY-MM-DD dates to categorize as "weekend" strata
     Lat, Long,
     mod_per,
-    closures,
+    sections, #numeric vector of all possible sections to estimate
+    closures, #tibble of fishery_name, section number and date of closures
     ...){
   
-  tibble::tibble(
+  date_begin <- as.Date(date_begin, format="%Y-%m-%d")
+  date_end <- as.Date(date_end, format="%Y-%m-%d")
+  holidays <- as.Date(holidays, format="%Y-%m-%d")
+  
+  days <- tibble::tibble(
     event_date = seq.Date(date_begin, date_end, by = "day"),
     Day = weekdays(event_date),
     DayType = if_else(Day %in% weekends | event_date %in% holidays, "Weekend", "Weekday"),
@@ -30,7 +36,25 @@ prep_days <- function(
       ModelPeriod == "Duration" ~ double(1)
     )
   ) |>
-    tibble::rowid_to_column(var = "day_index") |>
-    dplyr::left_join(closures, by = "event_date")
+    tibble::rowid_to_column(var = "day_index") 
   
+  days <- left_join(
+    days,
+    dplyr::rows_update(
+      tidyr::expand_grid(event_date = days$event_date, section = sections, open = TRUE),
+      closures |> dplyr::select(section, event_date) |> dplyr::mutate(open = FALSE),
+      by = c("section", "event_date")
+      ) |> 
+      arrange(section, event_date) |> 
+      mutate(section = paste0("open_section_", section)) |> 
+      pivot_wider(names_from = section, values_from = open)
+    ,
+    by = "event_date"
+  )
+  
+  return(days)
 }
+
+
+#event_date = seq.Date(as.Date(params$est_date_start), as.Date(params$est_date_end), by = "day")
+

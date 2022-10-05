@@ -18,8 +18,8 @@ fetch_dwg <- function(fishery_name, ...){
   ) |>
     utils::URLencode() |>
     readr::read_csv(show_col_types = F) |>
-    dplyr::filter(!is.na(count_type)) |>
-    dplyr::select(-created_datetime, -modified_datetime) #|> dplyr::inner_join(lu_input$sections, by = c("location"))
+    tidyr::drop_na(count_type) |> 
+    dplyr::select(-created_datetime, -modified_datetime)
   
   dwg$interview <- paste0(
     dwg_base$interview,
@@ -31,13 +31,7 @@ fetch_dwg <- function(fishery_name, ...){
     readr::read_csv(show_col_types = F) |>
     dplyr::select(
       -created_datetime, -modified_datetime,
-      -state_residence, -zip_code) |>
-    dplyr::mutate(
-      location = dplyr::if_else(
-        is.na(interview_location),
-        as.character(fishing_location),
-        as.character(interview_location))
-    )
+      -state_residence, -zip_code)
   
   dwg$catch <- paste0(
     dwg_base$catch,
