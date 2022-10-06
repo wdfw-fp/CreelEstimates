@@ -2,7 +2,7 @@
 title: "FW Creel Point Estimate"
 date: "`r Sys.Date()`"
 params:
-  analysis_name: "District 14_Skagit River,Cascade River_fall_salmon_2022"
+  analysis_name: "District 14_Skagit River_fall_salmon_2022_alt"
   days_wkend: !r c('Saturday', 'Sunday')
   model_period: "Week"
   index_count_types: "Vehicle/Trailers Only"
@@ -274,9 +274,20 @@ pe$effort_census <- dplyr::left_join(
   by = c("section", "location", "event_date")
 ) |>
   dplyr::mutate(
-    angler_type = dplyr::case_when(
-      stringr::word(count_type, 1) %in% c("Bank","bank","Shore") ~ "bank",
-      stringr::word(count_type, 1) %in% c("Boat","boat") ~ "boat" #Note "Boats" plural intentionally excluded
+angler_type = dplyr::case_when(
+        count_type %in% c("Boat", "Boat Anglers") ~ "boat",
+        count_type %in% c("Bank", "Bank Anglers") ~ "bank",
+        
+        #expecting future mods to allow position rather than craft type
+        #https://dfw-fp-r5.s3.us-west-2.amazonaws.com/data-dictionaries/creel_data_dictionary.html#effort_count_type_lut
+        count_type == c("Boat - Motor") ~ "boat",
+        count_type == c("Boat - Drift Raft") ~ "boat",
+        count_type == c("Shore - Drift/Raft") ~ "boat", #possibly subject to mod along with interview case_when
+        count_type == c("Shore - Motor Boat") ~ "boat", #possibly subject to mod along with interview case_when
+        
+        count_type == c("Boat - Pontoon/Kick/Kayak") ~ "bank",
+        count_type == c("Shore - No Boat") ~ "bank",
+        count_type == c("Shore - Pontoon/Kick/Kayak") ~ "bank"
     )
   ) |>
   tidyr::drop_na(angler_type) |> 
@@ -317,16 +328,21 @@ pe$interview <- dplyr::left_join(
   dplyr::mutate(
     dplyr::across(c(vehicle_count, trailer_count), ~replace_na(., 0)),
     trip_status = replace_na(trip_status, "Unknown"),
-    
-    angler_type = tolower(angler_type),
-    angler_type = dplyr::if_else(is.na(angler_type), boat_used, angler_type),
+  
     angler_type = dplyr::case_when( 
-      angler_type == "boat" ~ "boat", #pass through
-      angler_type == "bank" ~ "bank", #pass through
-      angler_type == "Unk" ~ "bank",  #Kalama, others?
-      angler_type == "No" ~ "bank",   #value from boat_used
-      angler_type == "Yes" & str_detect(boat_type, "ontoon|ayak") ~ "bank",
-      angler_type == "Yes" & !str_detect(boat_type, "ontoon|ayak")  ~ "boat" #value from boat_used
+        tolower(angler_type) == "boat" ~ "boat", 
+        tolower(angler_type) == "bank" ~ "bank", 
+
+        boat_used == "No" ~ "bank",
+        boat_used == "Yes" & 
+          stringr::str_detect(boat_type, "ontoon|ayak") & 
+          (is.na(fish_from_boat) | fish_from_boat == "Bank") ~ "bank",
+        #allow kayaks as "boat": boat_used == "Yes" & stringr::str_detect(boat_type, "ontoon|ayak") & fish_from_boat == "Boat" ~ "boat",
+        boat_used == "Yes" & 
+          !stringr::str_detect(boat_type, "ontoon|ayak") & 
+          (is.na(fish_from_boat) | fish_from_boat == "Boat") ~ "boat",
+        boat_used == "Yes" & !stringr::str_detect(boat_type, "ontoon|ayak") & 
+          fish_from_boat == "Bank" ~ "boat"
     ),
     angler_type_ind = as.integer(factor(angler_type)),
     
@@ -603,13 +619,16 @@ if(str_detect(params$index_count_types, "Bank|Boat")) {
 pe$daily_cpue_catch_est <- pe$interview_and_catch |>
   mutate(cpue_interview = fish_count / angler_hours_total) |>
   group_by(section, time_strata, DayType, event_date, angler_type, catch_group) |>
-  summarise(cpue_mor_daily = mean(cpue_interview), .groups = "drop") |> 
+  summarise(
+    total_catch = sum(fish_count),
+    total_hours = sum(angler_hours_total),
+    cpue_rom_daily = total_catch / total_hours, .groups = "drop") |> 
   left_join(
     pe$angler_hours_daily_mean, 
     by = c("section", "DayType", "event_date", "angler_type")
   ) |>
   tidyr::drop_na(ang_hrs_daily_mean_TI_expan) |> 
-  mutate(catch_estimate = round(cpue_mor_daily * ang_hrs_daily_mean_TI_expan, 3)) |>
+  mutate(catch_estimate = round(cpue_rom_daily * ang_hrs_daily_mean_TI_expan, 3)) |>
   arrange(section, event_date, angler_type, catch_group)
 
 # #degrees of freedom by section and angler type to apply to time strata estimates
