@@ -2,11 +2,12 @@
 title: "FW Creel Point Estimate"
 date: "`r Sys.Date()`"
 params:
-  analysis_name: "District 14_Skagit River_fall_salmon_2022_alt"
+  analysis_name: "District 17 North_Humptulips River_fall_salmon_2022"
   days_wkend: !r c('Saturday', 'Sunday')
   model_period: "Week"
   index_count_types: "Vehicle/Trailers Only"
   census_expansion: "Direct"
+  person_count_type: "angler"
   int_ang_hrs_tot_min: 0.5
   dir_output: "model_output"
 output:
@@ -351,7 +352,14 @@ pe$interview <- dplyr::left_join(
       interview_time,
       fishing_end_time),
     angler_hours = round(as.numeric(fishing_end_time - fishing_start_time) / 3600, 5),
-    angler_hours_total = total_group_count * angler_hours # changed this to total group count to match census count protocol
+    
+    person_count_final = case_when(
+        params$person_count_type == "group" ~ total_group_count,
+        params$person_count_type == "angler" ~ angler_count
+      ),
+      
+      angler_hours_total = angler_hours * person_count_final
+     # changed this to total group count to match census count protocol
   ) |>
   dplyr::filter(angler_hours_total >= params$int_ang_hrs_tot_min) |> 
   #drop a few unused cols for ease of dev
@@ -884,7 +892,7 @@ pe$est_effort_s_ts_dt_at |>
 ## Census-adjusted daily mean angler hours
 
 ```{r gg_angler_hours_daily_mean}
-pe$angler_hours_daily_mean |> 
+pe$angler_hours_daily_mean |>
   ggplot(aes(event_date, ang_hrs_daily_mean_TI_expan, fill = angler_type)) +
   geom_col(position = position_stack()) +
   scale_x_date("", date_breaks = "3 day", guide = guide_axis(n.dodge = 2)) +
