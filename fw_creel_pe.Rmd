@@ -2,7 +2,7 @@
 title: "FW Creel Point Estimate"
 date: "`r Sys.Date()`"
 params:
-  analysis_name: "District 14_Skagit River_fall_salmon_2022_alt"
+  analysis_name: "District 14_Skagit River_fall_salmon_2022"
   days_wkend: !r c('Saturday', 'Sunday')
   model_period: "Week"
   index_count_types: "Vehicle/Trailers Only"
