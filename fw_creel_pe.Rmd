@@ -2,12 +2,12 @@
 title: "FW Creel Point Estimate"
 date: "`r Sys.Date()`"
 params:
-  analysis_name: "District 17 North_Humptulips River_fall_salmon_2022"
+  analysis_name: "District 14_Skagit River_fall_salmon_2022_alt"
   days_wkend: !r c('Saturday', 'Sunday')
   model_period: "Week"
   index_count_types: "Vehicle/Trailers Only"
   census_expansion: "Direct"
-  person_count_type: "angler"
+  person_count_type: "group"
   int_ang_hrs_tot_min: 0.5
   dir_output: "model_output"
 output:
@@ -343,7 +343,7 @@ pe$interview <- dplyr::left_join(
           !stringr::str_detect(boat_type, "ontoon|ayak") & 
           (is.na(fish_from_boat) | fish_from_boat == "Boat") ~ "boat",
         boat_used == "Yes" & !stringr::str_detect(boat_type, "ontoon|ayak") & 
-          fish_from_boat == "Bank" ~ "boat"
+          fish_from_boat == "Bank" ~ "boat" #needed to assign boat anglers that primarily fished from the bank as boat anglers, otherwise assigned NA
     ),
     angler_type_ind = as.integer(factor(angler_type)),
     
