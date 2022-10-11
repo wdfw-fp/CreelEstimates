@@ -41,8 +41,13 @@ prep_days <- function(
   days <- left_join(
     days,
     dplyr::rows_update(
-      tidyr::expand_grid(event_date = days$event_date, section = sections, open = TRUE),
-      closures |> dplyr::select(section, event_date) |> dplyr::mutate(open = FALSE),
+      tidyr::expand_grid(event_date = days$event_date, section = sections, open = TRUE)
+      ,
+      closures |> 
+        filter(between(event_date, date_begin, date_end)) |> 
+        dplyr::select(section, event_date) |> 
+        dplyr::mutate(open = FALSE)
+      ,
       by = c("section", "event_date")
       ) |> 
       arrange(section, event_date) |> 

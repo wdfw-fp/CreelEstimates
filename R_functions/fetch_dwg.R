@@ -4,7 +4,8 @@ fetch_dwg <- function(fishery_name, ...){
     #event = "https://data.wa.gov/resource/ui95-axtn.csv",
     effort = "https://data.wa.gov/resource/h9a6-g38s.csv",
     interview = "https://data.wa.gov/resource/rpax-ahqm.csv",
-    catch = "https://data.wa.gov/resource/6y4e-8ftk.csv"
+    catch = "https://data.wa.gov/resource/6y4e-8ftk.csv",
+    water_bodies = "https://data.wa.gov/resource/nbd2-vdmz.csv"
     #,gear = "https://data.wa.gov/resource/d2ks-afhz.csv" #currently unused?
   )
   
@@ -21,6 +22,15 @@ fetch_dwg <- function(fishery_name, ...){
     tidyr::drop_na(count_type) |> 
     dplyr::select(-created_datetime, -modified_datetime)
   
+  dwg$ll <- paste0(
+    dwg_base$water_bodies,
+    "?$where=water_body_desc in('",
+    paste0(unique(dwg$effort$water_body), collapse = "','"),
+    "')&$limit=100000"
+  ) |>
+    utils::URLencode() |>
+    readr::read_csv(show_col_types = F)
+    
   dwg$interview <- paste0(
     dwg_base$interview,
     "?$where=fishery_name='",

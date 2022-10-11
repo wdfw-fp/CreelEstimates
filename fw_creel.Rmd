@@ -5,6 +5,14 @@ params:
   fishery_name: "Skagit fall salmon 2022"
   est_date_start: "2022-09-01"
   est_date_end: "2022-10-02"
+  est_catch_groups: !r data.frame(rbind(
+    c(species = 'Coho', life_stage = 'Adult', fin_mark = 'AD', fate = 'Kept'),
+    c(species = 'Coho', life_stage = 'Adult', fin_mark = 'AD|UM|UNK|NA', fate = 'Kept'),
+    c(species = 'Coho', life_stage = 'Adult', fin_mark = 'AD|UM|UNK|NA', fate = 'Released'),
+    c(species = 'Coho', life_stage = 'Adult', fin_mark = 'AD|UM|UNK|NA', fate = 'Kept|Released'),
+    c(species = 'Chinook', life_stage = 'Adult', fin_mark = 'UM|UNK|NA', fate = 'Kept'),
+    c(species = 'Whitefish', life_stage = 'NA', fin_mark = 'AD|UM|UNK|NA', fate = 'Kept|Released|NA')
+    ))
   person_count_type: "group"
   analysis_name: "District 14_Skagit River,Cascade River_fall_salmon_2022"
   days_wkend: !r c('Saturday', 'Sunday')
@@ -22,6 +30,8 @@ output:
     toc_float: yes
     code_folding: hide
 ---
+
+
 ```{css, include=FALSE}
   .chart-shim {
     overflow: auto;
@@ -37,14 +47,6 @@ library("gt")
 theme_set(theme_light())
 
 purrr::walk(list.files("R_functions/", full.names = T), source)
-
-dwg_summ <- list() #intermediate objects wrangled from creel list elements
-
-
-input_analysis <- as_tibble(
-  str_split_fixed(params$analysis_name, pattern = "_", n = 6),
-  .name_repair = ~c("proj_name", "water_body", "season", "species", "year", "misc")
-)
 
 ```
 
@@ -73,24 +75,22 @@ dwg <- fetch_dwg(params$fishery_name)
 #   arrange(event_date, section) |> 
 #   write_csv("input_files/closures.csv")
 
-
-#!! TEMPORARY hopefully this mostly goes away when lat/lon added to view(s)
-ll <- readr::read_csv("input_files/river_locations_master.csv") |> 
-  dplyr::filter(River %in% dwg$effort$water_body[1]) |> #input_analysis$water_body 
-  dplyr::distinct(River, .keep_all = T) |> 
-  dplyr::select(Lat,Long)
-
+# #to fix up Excel bunged date format
+# read_csv("input_files/closures.csv", show_col_types = FALSE) |> 
+#   mutate(event_date = as.Date(event_date, format = '%m/%d/%Y')) |> 
+#   write_csv("input_files/closures.csv")
 
 days <- prep_days(
   date_begin = params$est_date_start, #head(lu_input$closures$event_date, 1),
   date_end = params$est_date_end, #tail(lu_input$closures$event_date, 1),
   weekends = params$days_wkend,
   holidays = read_lines("input_files/dates_holidays_2015_2030.txt"), #lu_input$dates_holidays_2015_2030
-  Lat = ll$Lat, Long = ll$Long,
+  Lat = mean(dwg$ll$centroid_lat), #can/should consider smarter options
+  Long = mean(dwg$ll$centroid_lon),#can/should consider smarter options 
   mod_per = params$model_period,
   sections = unique(dwg$effort$section_num),
   closures = read_csv("input_files/closures.csv", show_col_types = FALSE) |> 
-    filter(fishery_name == params$fishery_name) #coming from DWG eventually..
+    filter(fishery_name == params$fishery_name)
   )
 
 
@@ -106,6 +106,19 @@ days_total <- days |>
 
 ```
 
+# Review data
+
+## Fishery sections
+
+```{r table_sections}
+dwg$effort |> 
+  filter(location_type == "Section") |> 
+  distinct(water_body, section_num, location) |> 
+  arrange(section_num) |>
+  select(`Water Body` = water_body, `Section Number` = section_num, `Location description` = location) |> 
+  gt()
+```
+
 ## Days
 
 ```{r gt_creel_days}
@@ -115,50 +128,45 @@ creel$days_total |> pivot_wider(names_from = c(section, DayType), values_from = 
 ## Effort
 
 ```{r gt_creel_effort}
-creel$effort |> 
-  distinct(water_body, section, location, event_date, tie_in_indicator, count_sequence) |> 
-  count(water_body, section, location, tie_in_indicator) |> 
-  unite("water_body_section", water_body, section) |> 
-  arrange(water_body_section, desc(tie_in_indicator)) |> 
-  gt(groupname_col = "water_body_section", caption = "Index (tie_in: 0) and Census (tie_in: 1) sampling to date")
+#NEEDS FINISHING
+dwg$effort |> 
+  distinct(section_num, location, event_date, tie_in_indicator, count_sequence) |> 
+  count(section_num, location, tie_in_indicator)
+  # mutate(tie_in_indicator = case_when(
+  #   tie_in_indicator == 1 ~ "census",
+  #   tie_in_indicator == 0 ~ "index"
+  # )) |> 
+  # pivot_wider(names_from = tie_in_indicator, values_from = n)
 ```
 
 ## Interview
 
 ```{r gt_creel_interview}
-creel$interview |> count(water_body, section, location) |> gt(caption = "Number of interviews by analysis section")
+dwg$interview |> count(water_body, section_num, fishing_location) |> arrange(section_num) |> gt(caption = "Number of interviews by analysis section")
 ```
 
 ## Catch
 
 ```{r gt_creel_catch}
-creel$catch |> group_by(catch_group) |> summarise(fish_count = sum(fish_count), .groups = "drop") |> gt(caption = "Total reported encounters in interviews to date")
-```
-
-# Fishery sections
-
-```{r table_sections}
-dwg$effort |> 
-  filter(location_type == "Section") |> 
-  distinct(section_num, location) |> 
-  arrange(section_num) |>
-  select(Section = section_num, Description = location) |> 
-  gt()
+dwg$catch |> group_by(catch_group) |> summarise(fish_count = sum(fish_count), .groups = "drop") |> gt(caption = "Total reported encounters in interviews to date")
 ```
 
 # Summarized observations
 
 ```{r summarized_intermediates, echo=FALSE}
-#get count_type levels from interview to ensure alignmnet...?
+dwg_summ <- list() #intermediate objects wrangled from creel list elements
 
-#prep_interview() excludes observations with NA vehicle_count/trailer_count
-#for fisheries where these were not collected, the raw data require adjustment before calling
-#e.g., int_adg <- dwg$interview |> mutate(dplyr::across(c(vehicle_count, trailer_count), ~replace_na(., 0)))
+#get count_type levels from interview to ensure alignment...?
+
+#prep_interview() no longer excludes observations with NA vehicle_count/trailer_count
+#requires handling during summarization for fisheries/records where these were not collected
 dwg_summ$interview <- prep_interview(
-  interview = dwg$interview,
-  catch = dwg$catch,
+  dwg_interview = dwg$interview,
+  dwg_catch = dwg$catch,
   person_count_type = params$person_count_type,
-  min_fishing_time = params$min_fishing_time)
+  min_fishing_time = params$min_fishing_time,
+  est_catch_groups = params$est_catch_groups 
+  )
 
 #Aggregates census (tie in) effort counts, associating to closest-in-time index count.
 dwg_summ$effort_census <- prep_effort_census(eff = dwg$effort)

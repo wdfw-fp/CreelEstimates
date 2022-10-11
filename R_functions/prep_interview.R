@@ -1,23 +1,27 @@
 #creates angler_final categorical and calcs fishing_time & total time conditional on user choice of angler vs group counts
 #joins catch values (wide)
 
-#best practice: section_num of fishing_loc as Section
-#when no fishing_loc, then can use section_num of interview_loc
-#but question of what section_num is assigned if both present
+#section_num of fishing_loc is assigned as Section whether or not interview_loc present
+#when no fishing_loc, then use section_num of interview_loc
 
 prep_interview <- function(
-    interview, 
-    catch,
+    dwg_interview, 
+    dwg_catch,
     person_count_type, #string passed from params controlling angler_count vs total_group_count 
     min_fishing_time, #numeric passed from params to filter fishing_time at least as long as this per-person duration
+    est_catch_groups, #data.fram passed from params of possibly-aggregated catch groups of interest to estimate
     ...){
   
-  if(any(is.na(c(interview$vehicle_count, interview$trailer_count)))){
-    cat("Interview data have NA values for vehicle/trailer_count fields\n These records are dropped!")
+  if(any(is.na(c(dwg_interview$vehicle_count, dwg_interview$trailer_count)))){
+    cat("Interview data have NA values for vehicle/trailer_count fields")
   }
-
-  interview |> 
-    tidyr::drop_na(vehicle_count, trailer_count) |> 
+  
+  #coerce missing values to actual strings to allow params$est_catch_groups to include NAs alongside non-NA
+  #to allow 'run' specification in params, add back within across()
+  dwg_catch <- dwg_catch |> mutate(across(c(species, life_stage, fin_mark, fate), ~replace_na(., "NA")))
+    
+  interviews <- dwg_interview |> 
+#   tidyr::drop_na(vehicle_count, trailer_count) |> 
     filter(is.na(angler_type) | str_detect(angler_type, "ank|oat")) |> 
     dplyr::mutate(
       trip_status = replace_na(trip_status, "Unknown"),
@@ -65,17 +69,36 @@ prep_interview <- function(
       # -crc_area, -fishing_location, -ends_with("_time"),
       # -comment_txt, -water_body_desc
     ) |> 
-    dplyr::arrange(section_num, event_date, angler_final) |> 
-    dplyr::left_join(
-      catch |> 
-        group_by(interview_id, catch_group) |> 
-        summarise(fish_count = sum(fish_count, na.rm = T), .groups = "drop") |> 
-        pivot_wider(names_from = catch_group, values_from = fish_count) |> 
-        pivot_longer(cols = -interview_id, names_to = "catch_group", values_to = "fish_count") |> 
-        mutate(fish_count = replace_na(fish_count, 0))
-      ,
-      by = "interview_id"
-    )
+    dplyr::arrange(section_num, event_date, angler_final)
   
+  catches <- map_df(
+    1:nrow(est_catch_groups),
+    ~dwg_catch |> 
+      filter(
+        str_detect(species, est_catch_groups$species[.x]),
+        str_detect(life_stage, est_catch_groups$life_stage[.x]),
+        str_detect(fin_mark, est_catch_groups$fin_mark[.x]),
+        str_detect(fate, est_catch_groups$fate[.x])
+      ) |> 
+      mutate(
+        est_cg = paste0(unlist(est_catch_groups[.x,]), collapse = "_")
+      ) |> 
+      group_by(est_cg, interview_id) |> 
+      summarise(fish_count = sum(fish_count, na.rm = T), .groups = "drop")
+  )
+  
+  #replicate wrangled interviews n-many of catch_groups to estimate
+  int_cat <- map_df(
+    1:nrow(est_catch_groups), #unique(catches$est_cg),
+    ~interviews |> 
+      mutate(est_cg = paste0(unlist(est_catch_groups[.x,]), collapse = "_")) 
+    ) |> 
+    left_join(catches, by = c("est_cg", "interview_id")) |> 
+    mutate(fish_count = replace_na(fish_count, 0))
+  
+  return(
+    #list(interviews = interviews, catches = catches, int_cat = int_cat)
+    int_cat
+    )
 }
 
