@@ -1,7 +1,5 @@
 #Aggregates index effort counts over locations within count_seq & section
-
-#MAYBE MOVE MUTATE TO LATER TO ALLOW SUMMARIZATION SHARED WITH BSS
-#WHICH DOES NOT WANT TRAILERS/VEHICLES COERCED TO boat/total
+#Note summarize() does not account for missed locations with date-section-sequence 
 prep_effort_index <- function(eff, ...){
   
   eff |> dplyr::filter( 

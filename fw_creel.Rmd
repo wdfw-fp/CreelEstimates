@@ -14,6 +14,8 @@ params:
     c(species = 'Whitefish', life_stage = 'NA', fin_mark = 'AD|UM|UNK|NA', fate = 'Kept|Released|NA')
     ))
   person_count_type: "group"
+  period_pe: "week"
+  period_bss: "day"
   analysis_name: "District 14_Skagit River,Cascade River_fall_salmon_2022"
   days_wkend: !r c('Saturday', 'Sunday')
   model_period: "Week"
@@ -80,29 +82,28 @@ dwg <- fetch_dwg(params$fishery_name)
 #   mutate(event_date = as.Date(event_date, format = '%m/%d/%Y')) |> 
 #   write_csv("input_files/closures.csv")
 
-days <- prep_days(
+dwg$days <- prep_days(
   date_begin = params$est_date_start, #head(lu_input$closures$event_date, 1),
   date_end = params$est_date_end, #tail(lu_input$closures$event_date, 1),
   weekends = params$days_wkend,
   holidays = read_lines("input_files/dates_holidays_2015_2030.txt"), #lu_input$dates_holidays_2015_2030
   Lat = mean(dwg$ll$centroid_lat), #can/should consider smarter options
   Long = mean(dwg$ll$centroid_lon),#can/should consider smarter options 
-  mod_per = params$model_period,
   sections = unique(dwg$effort$section_num),
   closures = read_csv("input_files/closures.csv", show_col_types = FALSE) |> 
     filter(fishery_name == params$fishery_name)
   )
 
-
-# excluding specified closures, total number of days by section, weekday/end, and time strata for which to generate estimates
-days_total <- days |>
-  pivot_longer(
-    cols = starts_with("open_section"), 
-    names_to = "section", 
-    values_to = "is_open") |>
-  filter(is_open) |> 
-  mutate(section = as.numeric(gsub("^.*_", "", section))) |>
-  count(time_strata, DayType, section, name = "N_days")
+##LEAVING BROKEN (on time_strata dropped from prep_days() pending post-BSS stanlist completion)
+# # excluding specified closures, total number of days by section, weekday/end, and time strata for which to generate estimates
+# dwg$days_total <- dwg$days |>
+#   pivot_longer(
+#     cols = starts_with("open_section"), 
+#     names_to = "section", 
+#     values_to = "is_open") |>
+#   filter(is_open) |> 
+#   mutate(section = as.numeric(gsub("^.*_", "", section))) |>
+#   count(time_strata, DayType, section, name = "N_days")
 
 ```
 
@@ -161,20 +162,31 @@ dwg_summ <- list() #intermediate objects wrangled from creel list elements
 #prep_interview() no longer excludes observations with NA vehicle_count/trailer_count
 #requires handling during summarization for fisheries/records where these were not collected
 dwg_summ$interview <- prep_interview(
-  dwg_interview = dwg$interview,
+  dwg_interview = dwg$interview |> filter(between(event_date, as.Date(params$est_date_start), as.Date(params$est_date_end))),
   dwg_catch = dwg$catch,
   person_count_type = params$person_count_type,
   min_fishing_time = params$min_fishing_time,
   est_catch_groups = params$est_catch_groups 
   )
 
-#Aggregates census (tie in) effort counts, associating to closest-in-time index count.
-dwg_summ$effort_census <- prep_effort_census(eff = dwg$effort)
+#Aggregates census (tie in) effort counts, associating to closest-in-time index count
+dwg_summ$effort_census <- prep_effort_census(
+  eff = dwg$effort |> filter(between(event_date, as.Date(params$est_date_start), as.Date(params$est_date_end))))
 
-dwg_summ$effort_index <- prep_effort_index(eff = dwg$effort)
+#Aggregates index effort counts over locations within count_seq & section
+dwg_summ$effort_index <- prep_effort_index(
+  eff = dwg$effort |> filter(between(event_date, as.Date(params$est_date_start), as.Date(params$est_date_end))))
 
-#MOVE angler_final MUTATE in current function TO LATER IN SCRIPT TO ALLOW SUMMARIZATION SHARED WITH BSS
-#WHICH DOES NOT WANT TRAILERS/VEHICLES COERCED TO boat/total
+dwg_summ$stan_list <- prep_stan_list(
+  period = params$period_bss,
+  days = dwg$days,
+  interview = dwg_summ$interview,
+  effort_census = dwg_summ$effort_census,
+  effort_index = dwg_summ$effort_index
+)
+
+
+#Note PE will require coercing from count_type to angler_final...incomplete version:
 dwg_summ$effort_index |>
     dplyr::mutate(
       angler_final = word(count_type, 1) |> tolower()
@@ -185,17 +197,6 @@ dwg_summ$effort_index |>
       #   count_type == "Vehicle Only" ~ "total"
       # )
     ) 
-#START WITH FUNCTIONALIZING STAN_DAT?
-
-
-
-
-
-
-
-
-
-
 
 #### pe$angler_hours_daily_mean --------------
 # depending on the types of index counts, reach the calc: ang_hrs_daily_mean_TI_expan = angler_hours_daily_mean * TI_expan_final

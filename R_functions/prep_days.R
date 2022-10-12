@@ -29,14 +29,10 @@ prep_days <- function(
     #Monday to Sunday weeks, see ?strptime
     Week = as.numeric(format(event_date, "%W")),
     Month = as.numeric(format(event_date, "%m")),
-    ModelPeriod = mod_per,
-    time_strata = dplyr::case_when(
-      ModelPeriod == "Week" ~ Week,
-      ModelPeriod == "Month" ~ Month,
-      ModelPeriod == "Duration" ~ double(1)
+    day_index = as.integer(seq_along(event_date)),
+    week_index = as.integer(factor(Week, levels = unique(Week))),
+    month_index = as.integer(factor(Month, levels = unique(Month)))
     )
-  ) |>
-    tibble::rowid_to_column(var = "day_index") 
   
   days <- left_join(
     days,
