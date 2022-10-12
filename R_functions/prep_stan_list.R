@@ -1,17 +1,26 @@
-
+#could pass single dwg_summ list rather than separate interview & effort_index & effort_census objects
+#pretty simple to revise if desired...
+#similarly, could pass list of priors while including current values as default argument value
 prep_stan_list <- function(
     period,
     days,
-    interview,
+    interview_cg, #if passing single dwg_summ list, would also want to pass est_catch_group to declare filtered intermediate
     effort_index,
     effort_census,
+    tie_in_mat,
     ...){
   
   effort_index_vehicle <- effort_index |> filter(str_detect(count_type, "ehicle"))
+  effort_index_trailer <- effort_index |> filter(str_detect(count_type, "railer"))
+  effort_index_angler <- effort_index |> filter(str_detect(count_type, "ngler"))
   
-  list(
+  interview_cg_daily_summ <- interview_cg |> 
+    group_by(event_date, section_num, angler_final_int) |> 
+    summarise(across(c(fishing_time_total, fish_count), sum), .groups = "drop")
+  
+  stan_list <- list(
     D = nrow(days), # int; number of fishing days
-    G = length(unique(interview$angler_final_int)),  # int; final number of unique gear/angler types 
+    G = length(unique(interview_cg$angler_final_int)),  # int; final number of unique gear/angler types 
     S = as.integer(length(unique(effort_census$section_num))),  # int; final number of river sections 
     H = max(effort_index$count_sequence), # int; max number of index counts within a sample day
     
@@ -38,112 +47,73 @@ prep_stan_list <- function(
     
     # Vehicle index effort counts 
     V_n = nrow(effort_index_vehicle), # int; total number of individual vehicle index effort counts 
-    V_I = effort_index_vehicle$count_index, # int; observed # of vehicles 
+    V_I = effort_index_vehicle$count_index, # num vec; observed # of vehicles 
     day_V = left_join(effort_index_vehicle, days, by = "event_date") |> pull(day_index),   # int; index for day/period 
     gear_V = as.integer(rep(1, nrow(effort_index_vehicle))), #update naming...
     section_V = as.integer(effort_index_vehicle$section_num), # int; index for section
-    countnum_V = as.integer(effort_index_vehicle$count_sequence),     # int; index for count_num  
+    countnum_V = as.integer(effort_index_vehicle$count_sequence),     # int; index for count_sequence  
 
-        
     # Trailer index effort counts
-    # int; total number of boat trailer index effort counts 
-    T_n = nrow(stan_data_prelim$effort_index),
-    # int; observed # of boat trailers 
-    T_I = stan_data_prelim$effort_index$`Trailers Only`,
-    # int; index for day/period
-    ## INTENTIONALLY LEFT "WRONG" TO MARK LATER REVISION IN ABOVE WRANGLING
-    ## TO ALLOW RAGGED VEHICLE/TRAILER VECTORS 
-    day_T = stan_data_prelim$effort_index$day_index, #day_V,
-    gear_T = as.integer(rep(2, nrow(stan_data_prelim$effort_index))), #SAME - TEMP OPTION PENDING OTHER CHANGES
-    # int; index for section
-    section_T = stan_data_prelim$effort_index$section,
-    # int; index for count_num  
-    countnum_T = stan_data_prelim$effort_index$count_sequence,
+    T_n = nrow(effort_index_trailer), # int; total number of boat trailer index effort counts 
+    T_I = effort_index_trailer$count_index, # num vec; observed # of boat trailers 
+    day_T = left_join(effort_index_trailer, days, by = "event_date") |> pull(day_index), # int; index for day/period
+    gear_T = as.integer(rep(2, nrow(effort_index_vehicle))), 
+    section_T = as.integer(effort_index_trailer$section_num), # int vec; index for section
+    countnum_T = as.integer(effort_index_trailer$count_sequence), # int vec; index for count_sequence  
     
+    #10/12/22 DA temp in-function intermediate resolves to previous "all 0s" (including classes) when no "Angler" in passed count_types
+    #have not yet tested on dataset with mixed vehicle+trailer+angler, but suggests that any filtered intermediates with 0 rows will behave as desired?
+    #old comment: Need to circle back on how to deal with this when applicable, set all values to 0 as a placeholder, matching example standat_2021-05-28.txt
     # Angler index effort counts
-    # int; total number of angler index effort counts
-    # Need to circle back on how to deal with this when applicable, set all values to 0 as a placeholder, matching example standat_2021-05-28.txt
-    A_n = 0,
-    # int; observed # of anglers
-    A_I = numeric(0), #EB placeholder
-    # int; index for day/period
-    day_A = numeric(0),
-    # int; index denoting "gear/angler type"  
-    gear_A = numeric(0), #EB placeholder 
-    # int; index for section 
-    section_A = numeric(0),
-    # int; index for count_num
-    countnum_A = numeric(0),
+    A_n = nrow(effort_index_angler), # int; total number of angler index effort counts
+    A_I = effort_index_angler$count_index, #num vec; observed # of anglers
+    day_A = left_join(effort_index_angler, days, by = "event_date") |> pull(day_index), # int; index for day/period
+    gear_A = as.integer(rep(0, nrow(effort_index_angler))),   # int vec; index denoting "gear/angler type"
+    section_A = as.integer(effort_index_angler$section_num), # int vec; index for section
+    countnum_A = as.integer(effort_index_angler$count_sequence), # int vec; index for count_num
     
+    # Census (tie-in) effort counts 
+    E_n = nrow(effort_census), # int; total number of angler tie-in effort counts
+    E_s = effort_census$count_census, # num vec; observed # of anglers
+    day_E = left_join(effort_census, days, by = "event_date") |> pull(day_index), # int vec; index denoting day/period
+    #10/12/22 DA temp fix - not yet assured to match interview|index
+    #when angler_final takes "bank" and "boat" this resolves to 1 & 2
+    gear_E = as.integer(factor(effort_census$angler_final)), # int vec; index denoting "gear/angler type"  
+    section_E = as.integer(effort_census$section_num), # int vec; index for section
+    countnum_E = as.integer(effort_census$count_sequence), # int vec; index for count_sequence
     
-    # Census (tie-in) effort counts   
-    # int; total number of angler tie-in effort counts
-    E_n = nrow(stan_data_prelim$effort_census),
-    # int; index denoting day/period
-    day_E = stan_data_prelim$effort_census$day_index,
-    # int; index denoting "gear/angler type"  
-    gear_E = stan_data_prelim$effort_census$angler_type_ind, #if_else(stan_data_prelim$effort_census$angler_type == "Boat", 2, 1),
-    # int; index for section
-    section_E = stan_data_prelim$effort_census$section,
-    # EB count_sequence here needs to match that of the closest effort_index count (if my understanding is correct)
-    # int; index for count_num
-    countnum_E = stan_data_prelim$effort_census$count_sequence, 
-    # int; observed # of anglers
-    E_s = stan_data_prelim$effort_census$count_quantity,
-    
-    # Proportion tie-in expansion mat; proportion of section covered by tie in counts KB: user defined (see "Proportional_Expansions_for_Tie_In_Sections_Kalama_Example"; need to format)
-    
-    p_TI = lu_input$census_exp |> 
-      select(gear_num, angler_type, section, p_TI) |> 
-      pivot_wider(names_from = section, values_from = p_TI) |> 
-      select(-gear_num, -angler_type) |> 
-      as.matrix(),
+
+    #10/12/22 DA temp solution, pass in desired matrix built from dwg$effort
+    #unclear on longer-term desired approach
+    # Proportion tie-in expansion mat; proportion of section covered by tie in counts
+    p_TI = tie_in_mat,
     
     # interview data - CPUE 
-    # int; total number of angler interviews with c & h data 
-    IntC = nrow(stan_data_prelim$interview),
-    # int; index denoting day/period   
-    day_IntC = stan_data_prelim$interview$day_index,
-    # int; index denoting "gear/angler type" 
-    gear_IntC = stan_data_prelim$interview$angler_type_ind, #if_else(stan_data_prelim$interview$angler_type == "Boat", 2, 1),
-    # int; index for section
-    section_IntC = stan_data_prelim$interview$section, 
-    # int; total catch
-    c = stan_data_prelim$interview$fish_count,
-    # vec; total hours fished
-    # EB Does Total_Hours refer to fishing time (angler hours) multiplied by the total number of anglers in an                    interviewed party (group_angler_hours)? 
-    h = stan_data_prelim$interview$angler_hours_total,
+    IntC = nrow(distinct(interview_cg, interview_id)),  # int; total number of angler interviews with c & h data; distinct() here should be redundant
+    day_IntC = left_join(interview_cg, days, by = "event_date") |> pull(day_index), # int vec; index denoting day/period   
+    gear_IntC = interview_cg$angler_final_int, # int vec; index denoting "gear/angler type"
+    section_IntC = interview_cg$section_num, # int vec; index for section
+    c = interview_cg$fish_count, # num vec; total catch
+    h = interview_cg$fishing_time_total, # num vec; total hours fished as fishing_time * person_count_final
     
     # interview data - Total Effort & Catch Creeled
-    # int; total interviews by sub-groups	
-    IntCreel = nrow(stan_data_prelim$interview_daily_totals),
-    # int; index denoting day/period     
-    day_Creel = stan_data_prelim$interview_daily_totals$day_index,
-    # int; index denoting "gear/angler type"  
-    gear_Creel = stan_data_prelim$interview_daily_totals$angler_type_ind, #if_else(stan_data_prelim$interview_daily_totals$angler_type == "Boat", 2, 1),
-    # int; index for section 
-    section_Creel = stan_data_prelim$interview_daily_totals$section,
-    # int; total catch  
-    C_Creel = stan_data_prelim$interview_daily_totals$catch_dailysum,	  
-    # vec; total hours fished 
-    E_Creel = stan_data_prelim$interview_daily_totals$angler_hours_total_dailysum,
+    IntCreel = nrow(interview_cg_daily_summ), # int; totals from interviews aggregated by date-section-anglertype	
+    day_Creel = left_join(interview_cg_daily_summ, days, by = "event_date") |> pull(day_index), # int vec; index denoting day/period
+    gear_Creel = interview_cg_daily_summ$angler_final_int,  # int vec; index denoting "gear/angler type"
+    section_Creel = interview_cg_daily_summ$section_num, # int vec; index for section 
+    C_Creel = interview_cg_daily_summ$fish_count, # num vec; total reported catch by day-section-anglertype
+    E_Creel = interview_cg_daily_summ$fishing_time_total,  #num vec; total hours fished by day-section-anglertype
     
+    #10/12/22 DA temp soln; not sure exactly how to interpret "where V_A, T_A, A_A were collected" - all? any? something else?
+    #Leaving for now same as IntC
     # interview data - angler expansion 
-    
-    # int; total number of angler interviews where V_A, T_A, A_A were collected 
-    IntA = nrow(stan_data_prelim$interview),
-    # int; index denoting day/period
-    day_IntA = stan_data_prelim$interview$day_index,
-    # int; index denoting gear/angler  
-    gear_IntA = stan_data_prelim$interview$angler_type_ind, #if_else(stan_data_prelim$interview$angler_type == "Boat", 2, 1),
-    # int; index denoting day/period
-    section_IntA = stan_data_prelim$interview$section, 
-    # int; total number of vehicles an angler group brought
-    V_A = stan_data_prelim$interview$vehicle_count,
-    # int; total number of trailers an angler group brought
-    T_A = stan_data_prelim$interview$trailer_count, 
-    # int; total number of anglers in the groups interviewed
-    A_A = stan_data_prelim$interview$angler_count,
+    IntA = nrow(distinct(interview_cg, interview_id)),     # int; total number of angler interviews where V_A, T_A, A_A were collected
+    day_IntA = left_join(interview_cg, days, by = "event_date") |> pull(day_index), # int vec; index denoting day/period
+    gear_IntA = interview_cg$angler_final_int, # int vec; index denoting "gear/angler type"
+    section_IntA = interview_cg$section_num, # int vec; index for section
+    V_A = interview_cg$vehicle_count,  # num vec; total number of vehicles an angler group brought
+    T_A = interview_cg$trailer_count,  # num vec; total number of trailers an angler group brought
+    A_A = interview_cg$angler_count,   # num vec; total number of anglers in the groups interviewed
     
     #priors
     #hyperhyper scale (degrees of freedom) parameters
@@ -166,5 +136,6 @@ prep_stan_list <- function(
     value_betashape_phi_C_scaled = 1 #the rate (alpha) and shape (beta) hyperparameters in phi_C_scaled; default = 1 (i.e., beta(1,1) which is uniform), alternative beta(2,2)
     
   )
-    
+  
+ return(stan_list)   
 }

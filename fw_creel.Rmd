@@ -177,13 +177,30 @@ dwg_summ$effort_census <- prep_effort_census(
 dwg_summ$effort_index <- prep_effort_index(
   eff = dwg$effort |> filter(between(event_date, as.Date(params$est_date_start), as.Date(params$est_date_end))))
 
+#could pass single dwg_summ list rather than separate interview & effort_index & effort_census objects
+#pretty simple to revise if desired...
+#but would also probably want to pass est_catch_group argument to filter interview within function
+#since function wants single catch_group, non-duplicated slice interview object
+#similarly, could pass list of priors while including current values as default argument value
 dwg_summ$stan_list <- prep_stan_list(
   period = params$period_bss,
   days = dwg$days,
-  interview = dwg_summ$interview,
+  interview_cg = dwg_summ$interview |> 
+    filter(est_cg == unique(dwg_summ$interview$est_cg)[1]),
   effort_census = dwg_summ$effort_census,
-  effort_index = dwg_summ$effort_index
+  effort_index = dwg_summ$effort_index,
+  #likely warrants revision? targeting n-gears-rows by n-sections-cols matrix of values
+  tie_in_mat = dwg$effort |> 
+    filter(tie_in_indicator == 1) |> 
+    distinct(section_num, p_census_bank, p_census_boat) |> 
+    pivot_longer(starts_with("p_census"), names_to = "ang", values_to = "val") |> 
+    arrange(section_num) |> 
+    pivot_wider(names_from = section_num, values_from = val) |> 
+    select(-ang) |> 
+    as.matrix()
 )
+
+
 
 
 #Note PE will require coercing from count_type to angler_final...incomplete version:
