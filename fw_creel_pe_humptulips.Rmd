@@ -2,7 +2,7 @@
 title: "FW Creel Point Estimate"
 date: "`r Sys.Date()`"
 params:
-  analysis_name: "District 14_Skagit River_fall_salmon_2022"
+  analysis_name: "District 17 North_Humptulips River_fall_salmon_2022"
   days_wkend: !r c('Saturday', 'Sunday')
   model_period: "Week"
   index_count_types: "Vehicle/Trailers Only"
@@ -274,8 +274,8 @@ pe$effort_census <- dplyr::left_join(
   ,
   by = c("section", "location", "event_date")
 ) |>
-    dplyr::mutate(
-      angler_type = dplyr::case_when(
+  dplyr::mutate(
+angler_type = dplyr::case_when(
         count_type %in% c("Boat", "Boat Anglers") ~ "boat",
         count_type %in% c("Bank", "Bank Anglers") ~ "bank",
         
@@ -289,8 +289,8 @@ pe$effort_census <- dplyr::left_join(
         count_type == c("Boat - Pontoon/Kick/Kayak") ~ "bank",
         count_type == c("Shore - No Boat") ~ "bank",
         count_type == c("Shore - Pontoon/Kick/Kayak") ~ "bank"
-      )
-    ) |>
+    )
+  ) |>
   tidyr::drop_na(angler_type) |> 
   dplyr::group_by(section, event_date, tie_in_indicator, count_sequence, angler_type) |>
   dplyr::summarize(count_census = sum(count_quantity), .groups = "drop") |>
@@ -329,21 +329,21 @@ pe$interview <- dplyr::left_join(
   dplyr::mutate(
     dplyr::across(c(vehicle_count, trailer_count), ~replace_na(., 0)),
     trip_status = replace_na(trip_status, "Unknown"),
-
+  
     angler_type = dplyr::case_when( 
         tolower(angler_type) == "boat" ~ "boat", 
-        tolower(angler_type) == "bank" ~ "bank",
-        
+        tolower(angler_type) == "bank" ~ "bank", 
+
         boat_used == "No" ~ "bank",
         boat_used == "Yes" & 
           stringr::str_detect(boat_type, "ontoon|ayak") & 
           (is.na(fish_from_boat) | fish_from_boat == "Bank") ~ "bank",
-        #allow kayaks as "boat": boat_used == "Yes" & stringr::str_detect(boat_type, "ontoon|ayak") & fish_from_boat == "Boat" ~ "boat",
+        boat_used == "Yes" & stringr::str_detect(boat_type, "ontoon|ayak") & fish_from_boat == "Boat" ~ "boat", #allow kayaks as "boat": 
         boat_used == "Yes" & 
           !stringr::str_detect(boat_type, "ontoon|ayak") & 
           (is.na(fish_from_boat) | fish_from_boat == "Boat") ~ "boat",
         boat_used == "Yes" & !stringr::str_detect(boat_type, "ontoon|ayak") & 
-          fish_from_boat == "Bank" ~ "boat" #needed to assign boat anglers that primarily fished from the bank as boat anglers, otherwise assigned NA
+          fish_from_boat == "Bank" ~ "boat"
     ),
     angler_type_ind = as.integer(factor(angler_type)),
     
@@ -367,7 +367,9 @@ pe$interview <- dplyr::left_join(
                 -crc_area, -fishing_location, -ends_with("_time"),
                 -previously_interviewed, -comment_txt, -water_body_desc
   ) |> 
-  dplyr::arrange(section, time_strata, event_date, angler_type, location)
+  dplyr::arrange(section, time_strata, event_date, angler_type, location) |> 
+  drop_na(angler_type) #placeholder pending data correction on interviews: 38CE68FD-C974-4736-9F76-091DBC2CE919, 93B6970C-4F81-4375-92D9-C39F935F09A2, CA211A91-CEBC-40C7-9C68-9409A84431B2
+
 
 #### pe$interview_and_catch --------------
 # join catch data to interview after inferring complete cases (counts or 0s for all catch_groups encountered)
@@ -477,7 +479,8 @@ if(str_detect(params$index_count_types, "Bank|Boat")) {
   
   #initially dropped rows of index counts where a given date-section-angler_type is missing from interview data
   #replace with a version using means if no interviews available to assign angler numbers per vehicle/trailer on a given day
-  pe$angler_hours_daily_mean <- full_join(
+   
+pe$angler_hours_daily_mean <- full_join(
     pe$interview_ang_per_vehic, #coerced above to total/boat
     pe$effort_index |> #already in total/boat
       dplyr::group_by(section, DayType, event_date, angler_type) |>
@@ -891,7 +894,7 @@ pe$est_effort_s_ts_dt_at |>
 
 ## Census-adjusted daily mean angler hours
 
-```{r gg_angler_hours_daily_mean}
+```{r gg_angler_hours_daily_mean, eval = FALSE}
 pe$angler_hours_daily_mean |>
   ggplot(aes(event_date, ang_hrs_daily_mean_TI_expan, fill = angler_type)) +
   geom_col(position = position_stack()) +
@@ -905,7 +908,7 @@ pe$angler_hours_daily_mean |>
 
 ## Angler hours by section-time_strata-DayType-angler_type 
 
-```{r gg_angler_hours_est_ribbons}
+```{r gg_angler_hours_est_ribbons, eval = FALSE}
 pe$est_effort_s_ts_dt_at |> 
   ggplot(aes(time_strata, fill = angler_type, color = angler_type)) +
   geom_ribbon(aes(y = est, ymin = l95, ymax = u95), alpha = 0.4) +
@@ -1000,7 +1003,7 @@ pe$interview |>
 ```
 
 
-```{r pe$proportion_effort_and_interview_hours_by_angler_type, eval=TRUE}
+```{r pe$proportion_effort_and_interview_hours_by_angler_type, eval=FALSE}
 
 pe$interview |>
   drop_na(angler_type) |>  

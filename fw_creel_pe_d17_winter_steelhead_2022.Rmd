@@ -2,12 +2,11 @@
 title: "FW Creel Point Estimate"
 date: "`r Sys.Date()`"
 params:
-  analysis_name: "District 14_Skagit River_fall_salmon_2022"
+  analysis_name: "District 17 South_Willapa River_winter_steelhead_2022"
   days_wkend: !r c('Saturday', 'Sunday')
   model_period: "Week"
   index_count_types: "Vehicle/Trailers Only"
   census_expansion: "Direct"
-  person_count_type: "group"
   int_ang_hrs_tot_min: 0.5
   dir_output: "model_output"
 output:
@@ -274,23 +273,18 @@ pe$effort_census <- dplyr::left_join(
   ,
   by = c("section", "location", "event_date")
 ) |>
-    dplyr::mutate(
-      angler_type = dplyr::case_when(
-        count_type %in% c("Boat", "Boat Anglers") ~ "boat",
-        count_type %in% c("Bank", "Bank Anglers") ~ "bank",
-        
-        #expecting future mods to allow position rather than craft type
-        #https://dfw-fp-r5.s3.us-west-2.amazonaws.com/data-dictionaries/creel_data_dictionary.html#effort_count_type_lut
-        count_type == c("Boat - Motor") ~ "boat",
-        count_type == c("Boat - Drift Raft") ~ "boat",
-        count_type == c("Shore - Drift/Raft") ~ "boat", #possibly subject to mod along with interview case_when
-        count_type == c("Shore - Motor Boat") ~ "boat", #possibly subject to mod along with interview case_when
-        
-        count_type == c("Boat - Pontoon/Kick/Kayak") ~ "bank",
-        count_type == c("Shore - No Boat") ~ "bank",
-        count_type == c("Shore - Pontoon/Kick/Kayak") ~ "bank"
-      )
-    ) |>
+  dplyr::mutate(
+    angler_type = dplyr::case_when(
+      count_type %in% c("Shore - No Boat") ~ "bank",
+      count_type %in% c("Shore - Pontoon/Kick/Kayak", "Shore - Drift/Raft", " Boat - Motor", "Shore - Motor Boat", "Boat - Drift Raft") ~ "boat" # EB relevel specific to Nasselle / Willapa angler type categories of interest and assessed in data collection
+    )
+  ) |> 
+  # dplyr::mutate(
+  #   angler_type = dplyr::case_when(
+  #     stringr::word(count_type, 1) %in% c("Bank","bank","Shore") ~ "bank",
+  #     stringr::word(count_type, 1) %in% c("Boat","boat") ~ "boat" #Note "Boats" plural intentionally excluded
+  #   )
+  # ) |>
   tidyr::drop_na(angler_type) |> 
   dplyr::group_by(section, event_date, tie_in_indicator, count_sequence, angler_type) |>
   dplyr::summarize(count_census = sum(count_quantity), .groups = "drop") |>
@@ -329,37 +323,27 @@ pe$interview <- dplyr::left_join(
   dplyr::mutate(
     dplyr::across(c(vehicle_count, trailer_count), ~replace_na(., 0)),
     trip_status = replace_na(trip_status, "Unknown"),
-
-    angler_type = dplyr::case_when( 
-        tolower(angler_type) == "boat" ~ "boat", 
-        tolower(angler_type) == "bank" ~ "bank",
-        
-        boat_used == "No" ~ "bank",
-        boat_used == "Yes" & 
-          stringr::str_detect(boat_type, "ontoon|ayak") & 
-          (is.na(fish_from_boat) | fish_from_boat == "Bank") ~ "bank",
-        #allow kayaks as "boat": boat_used == "Yes" & stringr::str_detect(boat_type, "ontoon|ayak") & fish_from_boat == "Boat" ~ "boat",
-        boat_used == "Yes" & 
-          !stringr::str_detect(boat_type, "ontoon|ayak") & 
-          (is.na(fish_from_boat) | fish_from_boat == "Boat") ~ "boat",
-        boat_used == "Yes" & !stringr::str_detect(boat_type, "ontoon|ayak") & 
-          fish_from_boat == "Bank" ~ "boat" #needed to assign boat anglers that primarily fished from the bank as boat anglers, otherwise assigned NA
-    ),
+    angler_type = tolower(angler_type),
+    angler_type = if_else(boat_used == "Yes", "boat", "bank"), # EB adjusted specifically for Nasselle / Willapa script
+    # angler_type = dplyr::if_else(is.na(angler_type), boat_used, angler_type),
+    # angler_type = dplyr::case_when( 
+    #   angler_type == "boat" ~ "boat", #pass through
+    #   angler_type == "bank" ~ "bank", #pass through
+    #   angler_type == "Unk" ~ "bank",  #Kalama, others?
+    #   angler_type == "No" ~ "bank",   #value from boat_used
+    #   angler_type == "Yes" & str_detect(boat_type, "ontoon|ayak") ~ "bank",
+    #   angler_type == "Yes" & !str_detect(boat_type, "ontoon|ayak")  ~ "boat" #value from boat_used
+    # ),
     angler_type_ind = as.integer(factor(angler_type)),
+    
+    total_group_count = angler_count, # EB adjusted specifically for Nasselle / Willapa script, did not use total group count field
     
     fishing_end_time = dplyr::if_else(
       trip_status == "Incomplete" | is.na(fishing_end_time),
       interview_time,
       fishing_end_time),
     angler_hours = round(as.numeric(fishing_end_time - fishing_start_time) / 3600, 5),
-    
-    person_count_final = case_when(
-        params$person_count_type == "group" ~ total_group_count,
-        params$person_count_type == "angler" ~ angler_count
-      ),
-      
-      angler_hours_total = angler_hours * person_count_final
-     # changed this to total group count to match census count protocol
+    angler_hours_total = total_group_count * angler_hours # changed this to total group count to match census count protocol
   ) |>
   dplyr::filter(angler_hours_total >= params$int_ang_hrs_tot_min) |> 
   #drop a few unused cols for ease of dev
@@ -627,16 +611,13 @@ if(str_detect(params$index_count_types, "Bank|Boat")) {
 pe$daily_cpue_catch_est <- pe$interview_and_catch |>
   mutate(cpue_interview = fish_count / angler_hours_total) |>
   group_by(section, time_strata, DayType, event_date, angler_type, catch_group) |>
-  summarise(
-    total_catch = sum(fish_count),
-    total_hours = sum(angler_hours_total),
-    cpue_rom_daily = total_catch / total_hours, .groups = "drop") |> 
+  summarise(cpue_mor_daily = mean(cpue_interview), .groups = "drop") |> 
   left_join(
     pe$angler_hours_daily_mean, 
     by = c("section", "DayType", "event_date", "angler_type")
   ) |>
   tidyr::drop_na(ang_hrs_daily_mean_TI_expan) |> 
-  mutate(catch_estimate = round(cpue_rom_daily * ang_hrs_daily_mean_TI_expan, 3)) |>
+  mutate(catch_estimate = round(cpue_mor_daily * ang_hrs_daily_mean_TI_expan, 3)) |>
   arrange(section, event_date, angler_type, catch_group)
 
 # #degrees of freedom by section and angler type to apply to time strata estimates
@@ -735,7 +716,8 @@ pe$est_effort_s_ts_dt_at <- left_join(
     ),
     l95 = est - qt(1-(0.05/2),df)*(var^0.5),
     u95 = est + qt(1-(0.05/2),df)*(var^0.5)
-  ) 
+  ) |> 
+  filter(!n_obs == 0)
 
 pe$est_catch_s_ts_dt_at <- left_join(
   #dates expanded to n-sections * n-angler_types * n-days, previously held as "creel$days_section_angler_type" but only used once
@@ -783,7 +765,8 @@ pe$est_catch_s_ts_dt_at <- left_join(
     l95 = est - qt(1-(0.05/2),df)*(var^0.5),
     u95 = est + qt(1-(0.05/2),df)*(var^0.5)
   ) |> 
-  drop_na(catch_group)
+  drop_na(catch_group) |> 
+  filter(!n_obs == 0)
 
 #### write out a workbook ----------------------------
 #not a great test, but allows passing "" to stop overwrite...
@@ -892,7 +875,7 @@ pe$est_effort_s_ts_dt_at |>
 ## Census-adjusted daily mean angler hours
 
 ```{r gg_angler_hours_daily_mean}
-pe$angler_hours_daily_mean |>
+pe$angler_hours_daily_mean |> 
   ggplot(aes(event_date, ang_hrs_daily_mean_TI_expan, fill = angler_type)) +
   geom_col(position = position_stack()) +
   scale_x_date("", date_breaks = "3 day", guide = guide_axis(n.dodge = 2)) +
@@ -956,8 +939,9 @@ pe$interview |>
   group_by(section, angler_type) |> 
   summarise(
     interview_hours_total = sum(interview_hours_total),
-    angler_effort_total = sum(angler_effort_total),
-    proportion_interviewed_effort = (interview_hours_total / angler_effort_total)
+    angler_effort_total = sum(angler_effort_total)
+    ,
+    # proportion_interviewed_effort = (interview_hours_total / angler_effort_total)
     ) |>
   bind_rows(
     pe$interview |>
@@ -965,7 +949,7 @@ pe$interview |>
   group_by(time_strata, section, DayType, angler_type) |> 
   summarise(
     interview_hours_total = sum(angler_hours_total)
-  ) |> 
+  ) |>
   left_join(pe$est_effort_s_ts_dt_at |> ## join expanded catch estimates in pe$est_effort_s_ts_dt_at to total angler hours from interviews in pe$interview 
               select(section, time_strata, section, DayType, angler_type, effort_est = est) |>
                group_by(section, time_strata, DayType, angler_type) |> 
@@ -976,9 +960,10 @@ pe$interview |>
   group_by(section) |> 
   summarise(
     interview_hours_total = sum(interview_hours_total),
-    angler_effort_total = sum(angler_effort_total),
+    angler_effort_total = sum(angler_effort_total)
+    ,
     proportion_interviewed_effort = (interview_hours_total / angler_effort_total)
-    ) |> 
+    ) |>
     mutate(
       angler_type = "total"
     )
@@ -989,7 +974,8 @@ pe$interview |>
   cols_label(
     angler_type = md("angler type"),
     interview_hours_total = md("Total angler hours from direct sampling (interviews)"),
-    angler_effort_total = md("Total angler hours from expanded effort estimates"),
+    angler_effort_total = md("Total angler hours from expanded effort estimates")
+    ,
     proportion_interviewed_effort = md("proportion of total effort sampled in interviews")
   ) |> 
   tab_header(
