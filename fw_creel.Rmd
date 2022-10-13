@@ -230,12 +230,16 @@ dwg_summ$stan_list <- prep_stan_list(
 # Run BSS model
 ```{r BSS_analysis, echo=FALSE}
 
-
+# PLACEHOLDER - next steps: 1.) paste in code from "CreelAnalysis_dwg_1.1.Rmd" that runs BSS in stan (e.g., feeds in stan_dat along with priors, specifics model arguments, etc.) and 2.) create model input summaries (writing the stan_dat object, creating .txt of model arguments), 3.) wrap in a function
 
 ```
 
 # Summarize BSS model output
+```{r BSS_summary, echo=FALSE}
 
+# PLACEHOLDER - next steps 1.) save model output, save model warnings (divergent transition...), model run time, and very basic summary table (e.g., catch & effort by section, angler, and total), 2.) revisiting model diagnostics (posterior distribution plots, key parameters, shinystan), 3.) revisiting more detailed summaries (e.g., daily plots of CPUE, effort, catch) and re-generating
+
+```
 
 # Run PE analysis 
 ```{r PE_analysis, echo=FALSE}
