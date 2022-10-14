@@ -707,4 +707,13 @@ pe_estimates$est_catch_s_ts_dt_at <- left_join(
   ) |> 
   drop_na(est_cg)
 
+# Next steps - 1.) wrap "Run PE Analysis" inside 1 or 5 functions, 2.) revisit creation and use of the "pe_data" object, 3.) update "pe_data$census_expan" object -- currenlty not using the indirect census expansion values from database due to naming issue in database (i.e., direct_census_bank should be indirect_census_boat) and ability/use of pivot_wider function to handle column header prefixes.
+
+```
+
+
+# Summarize PE model output
+```{r BSS_summary, echo=FALSE}
+
+# PLACEHOLDER - next steps 1.) incorporate/translate PE analysis script that is currently pasted in the file "DeleteMe - pe_model_summary_script.Rmd", 2.) wrap in 1 or more functions
 ```
