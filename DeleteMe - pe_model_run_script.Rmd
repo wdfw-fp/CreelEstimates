@@ -1,0 +1,403 @@
+# Run PE analysis 
+```{r PE_analysis, echo=FALSE}
+
+#### pe$angler_hours_daily_mean --------------
+# depending on the types of index counts, reach the calc: ang_hrs_daily_mean_TI_expan = angler_hours_daily_mean * TI_expan_final
+# when index counts are already bank & boat, matching census counts,
+#   then angler_hour daily means are just effort index counts of anglers expanded by day length,
+#   which are multiplied against tie-in expanded census counts of anglers by type (per section)
+# but when index counts are trailers & vehicles,
+#   then angler_hour daily means require first using interviews to estimate anglers_per_vhcl_trlr by angler_type total & boat 
+#   so anglers_per_vhcl_trlr can be multiplied against the trailer & vehicle counts in effort_index, releveled to boat/total
+#   and then TI-expanded counts similarly require splitting, releveling and rebinding census to boat/total to allow join with effort_index
+#   and THEN generating a final object with total, boat and derived-bank, including dealing with case of only-bank (e.g., Cascade)
+
+if(str_detect(params$index_count_types, "Bank|Boat")) {
+  #initial angler_hours_daily_mean: join day length against mean counts over count_seqs per section-day-angler_type
+  pe$angler_hours_daily_mean <- left_join(
+    pe$effort_index |> 
+      dplyr::group_by(section, event_date, angler_type) |>
+      dplyr::summarise(count_index_mean = mean(count_index), .groups = "drop"),
+    creel$days |> select(event_date, DayL),
+    by = "event_date") |>
+    mutate(angler_hours_daily_mean = count_index_mean * DayL) |>
+    arrange(section, event_date)
+  
+  #census_TI_expan: left join effort index counts to census counts and expand by TI
+  #count_census begins summed by event_date, section, tie_in_indicator, count_sequence, with angler_type in [bank, boat]
+  #excluding date-section-anglers with missing (or negative) counts as invalid to support inferring point estimates
+  pe$census_TI_expan <- left_join(
+    pe$effort_census,
+    pe$effort_index,
+    by = c("section", "event_date", "count_sequence", "angler_type")
+  ) |>
+    filter(
+      !is.na(count_census), !is.na(count_index),
+      count_census >= 0, count_index >= 0
+    ) |> 
+    group_by(section, angler_type) |>
+    summarise(
+      across(c(count_census, count_index), sum),
+      TI_expan_weighted = count_census / count_index,
+      TI_expan_weighted = if_else(TI_expan_weighted == 0, 1, TI_expan_weighted) |> replace_na(1),
+      .groups = "drop",
+      TI_expan_weighted = if_else(is.infinite(TI_expan_weighted), 1, TI_expan_weighted)
+      ) |>
+    left_join(
+      lu_input$census_exp |>
+        select(cen_exp_meth, angler_type, section, p_TI, TI_expan_indirect = Indirect_TI_Expan),
+      by = c("section", "angler_type")) |>
+    mutate(
+      cen_exp_meth = replace_na(cen_exp_meth, params$census_expansion),
+      p_TI = replace_na(p_TI, 1),
+      TI_expan_indirect = as.numeric(TI_expan_indirect) |> replace_na(1),
+      TI_expan_final = if_else(
+        cen_exp_meth == "Direct",
+        TI_expan_weighted / p_TI,
+        TI_expan_indirect)
+    )
+  #now overwrite object, adding TI-expansions
+  pe$angler_hours_daily_mean <- left_join(
+    pe$angler_hours_daily_mean,
+    pe$census_TI_expan,
+    by = c("section", "angler_type")
+  ) |>
+    mutate(ang_hrs_daily_mean_TI_expan = angler_hours_daily_mean * replace_na(TI_expan_final, 1)) 
+  
+} else if(str_detect(params$index_count_types, "Vehicle|Trailer")) {
+  #in this case, boat and bank counts must be indirectly calc'd
+  #first the interviews are used to estimate anglers per vehicle, stratified by boat vs total (from boat|bank angler_type rows in interview)
+  #note that further below the section-dayType-angler_type mean is used to infer missing values 
+  #both where a given section-date has interviews but lacks an angler_type
+  #and where a section-date index count is missing interview data for either/both angler_types
+  #the full date range of observations is included in the sample distribution under the assumptions that
+  #more observations will tend to stablize the mean and that major temporal trends in carpooling are unlikely over the fishery duration
+  #note that this can still fail if no interviews are available within section-dayType-angler_type...
+  ##7/15/22 - dropping stratification to avoid Inf from no-trailer boat anglers and to better match BSS 
+  pe$interview_ang_per_vehic <- bind_rows(
+    pe$interview |>
+      #could re-introduce here: group_by(section)
+      summarize(angler_type = "total", anglers_per_vhcl_trlr = sum(angler_count) / sum(vehicle_count), .groups = "drop")
+    ,
+    pe$interview |>
+      filter(angler_type == "boat") |>
+      #could re-introduce here: group_by(section)
+      summarize(angler_type = "boat", anglers_per_vhcl_trlr = sum(angler_count) / sum(trailer_count), .groups = "drop")
+    )
+  
+  #initially dropped rows of index counts where a given date-section-angler_type is missing from interview data
+  #replace with a version using means if no interviews available to assign angler numbers per vehicle/trailer on a given day
+  pe$angler_hours_daily_mean <- full_join(
+    pe$interview_ang_per_vehic, #coerced above to total/boat
+    pe$effort_index |> #already in total/boat
+      dplyr::group_by(section, DayType, event_date, angler_type) |>
+      dplyr::summarise(count_index_mean = mean(count_index), .groups = "drop")
+    ,
+    by = c("angler_type")) |>
+    group_by(section, DayType, angler_type) |> 
+    mutate(
+      count_index_mean = replace_na(count_index_mean, 0 ), # noticed NA's in count_index_mean that I think should be 0's, but should double check this thought 
+      anglers_per_vhcl_trlr = if_else(
+        is.na(anglers_per_vhcl_trlr),
+        mean(anglers_per_vhcl_trlr, na.rm=T),
+        anglers_per_vhcl_trlr)) |> 
+    ungroup() |> 
+    left_join(creel$days |> select(event_date, DayL), by = "event_date") |>
+    mutate(angler_hours_daily_mean = anglers_per_vhcl_trlr * count_index_mean * DayL) |>
+    select(-DayL, -anglers_per_vhcl_trlr, -count_index_mean) |> 
+    drop_na(angler_hours_daily_mean) |> 
+    arrange(section, event_date)
+  
+  #now coerce back to angler_type bank/boat (unexpanded)
+  if(any(pe$angler_hours_daily_mean$angler_type=="boat")){
+    pe$angler_hours_daily_mean <- pe$angler_hours_daily_mean |> 
+      pivot_wider(
+        names_from = angler_type, 
+        values_from = c(angler_hours_daily_mean), 
+      ) |>
+      mutate(
+        boat = tidyr::replace_na(boat, 0),
+        bank = total - boat, total = NULL) |> 
+      pivot_longer(cols = c(boat, bank), names_to = "angler_type", values_to = "angler_hours_daily_mean") |> 
+      #NAs and negatives here reflect inadequate or problematic data barring meaningful inference...
+      filter(!is.na(angler_hours_daily_mean), angler_hours_daily_mean >= 0)
+  } else {
+    pe$angler_hours_daily_mean <- pe$angler_hours_daily_mean |> 
+      mutate(angler_type = "bank")
+  }
+  
+  if(all(creel$effort$tie_in_indicator < 1)) {
+    pe$census_TI_expan <- expand_grid(
+      section = unique(pe$angler_hours_daily_mean$section), 
+      angler_type = unique(pe$angler_hours_daily_mean$angler_type),
+      TI_expan_final = 1)
+  } else {
+    #begin census expansion values object by joining census and index in terms of total & boat
+    pe$census_TI_expan <- left_join(
+      #census already grouped & summed by event_date, section, tie_in_indicator, count_sequence, and angler_type [bank, boat]
+      #but as for interview above, first split and collapse to reassign angler_type as total & boat
+      bind_rows(
+        pe$effort_census |>
+          group_by(section, event_date, count_sequence) |>
+          summarize(angler_type = "total", count_census = sum(count_census),  .groups = "drop")
+        ,
+        pe$effort_census |>
+          filter(angler_type == "boat") |>
+          group_by(section, event_date, count_sequence) |>
+          summarize(angler_type = "boat", count_census = sum(count_census), .groups = "drop")
+      ),
+      #index counts via interviews for angler-per-vehic; angler_type already total & boat
+      #this is very similar to above pe$angler_hours_daily_mean
+      #but all count_seqs rather than summarized to daily mean
+      #as above, applies mean ang-per-vehic within section-daytype-angtype
+      #where interview missing an ang-type or no interviews on that date
+      #prevents loss of use of census info b/c of a single day missing interviews...
+      full_join(
+        pe$interview_ang_per_vehic,
+        pe$effort_index,
+        by = c("angler_type")
+        ) |>
+        group_by(section, DayType, angler_type) |> 
+        mutate(
+          anglers_per_vhcl_trlr = if_else(
+            is.na(anglers_per_vhcl_trlr),
+            mean(anglers_per_vhcl_trlr, na.rm=T),
+            anglers_per_vhcl_trlr)) |> 
+        ungroup() |> 
+        mutate(count_index = anglers_per_vhcl_trlr * count_index) |>
+        select(section, event_date, count_sequence, angler_type, count_index)
+      ,
+      by = c("section", "event_date", "count_sequence", "angler_type")
+    ) |> 
+      tidyr::drop_na(count_index)
+    
+    #now overwrite, coercing angler_type back to bank/boat as above for pe$angler_hours_daily_mean
+    #again dropping NAs and negatives as invalid for inferring estimates
+    if(any(pe$census_TI_expan$angler_type=="boat")){
+      pe$census_TI_expan <- pe$census_TI_expan |> 
+        pivot_longer(cols = c(count_census, count_index), names_to = "count_type", values_to = "count") |> 
+        pivot_wider(names_from = angler_type, values_from = count) |>
+        mutate(boat = replace_na(boat, 0), # NA's here are implicit 0's due to lack of boat anglers in data  (example section = Cascade River, when grouped with other Skagit sections)
+               bank = total - boat, total = NULL) |> #filter(is.na(boat) | is.na(bank) | bank < 0)
+        pivot_longer(cols = c(boat, bank), names_to = "angler_type", values_to = "count") |>
+        pivot_wider(names_from = count_type, values_from = count) |> 
+        filter(
+          !is.na(count_census), !is.na(count_index),
+          count_census >= 0, count_index >= 0
+        )      
+    } else {
+      pe$census_TI_expan <- pe$census_TI_expan |>
+        mutate(angler_type = "bank")
+    }
+    
+    pe$census_TI_expan <- pe$census_TI_expan |> 
+      group_by(section, angler_type) |> 
+      summarise(
+        across(c(count_census, count_index), sum),
+        TI_expan_weighted = count_census / count_index,
+        TI_expan_weighted = if_else(TI_expan_weighted == 0, 1, TI_expan_weighted) |> replace_na(1),
+        .groups = "drop",
+      TI_expan_weighted = if_else(is.infinite(TI_expan_weighted), 1, TI_expan_weighted)
+      ) |> 
+      #and now bring in the external expansion values if any
+      left_join(
+        lu_input$census_exp |>
+          select(cen_exp_meth, angler_type, section, p_TI, TI_expan_indirect = Indirect_TI_Expan),
+        by = c("section", "angler_type")) |>
+      mutate(
+        cen_exp_meth = replace_na(cen_exp_meth, params$census_expansion),
+        p_TI = replace_na(p_TI, 1),
+        TI_expan_indirect = as.numeric(TI_expan_indirect) |> replace_na(1),
+        TI_expan_final = if_else(
+          cen_exp_meth == "Direct",
+          TI_expan_weighted / p_TI,
+          TI_expan_indirect)
+      )
+  }
+  
+  #now multiply mean daily effort in angler_hours by tie-in ratio bias term 
+  #aiming for event_date, section, angler_type [total, boat, bank (as total-boat)]
+  pe$angler_hours_daily_mean <- left_join(
+    pe$angler_hours_daily_mean, 
+    pe$census_TI_expan |> select(section, angler_type, TI_expan_final),
+    by = c("section", "angler_type")
+  ) |>
+    mutate(ang_hrs_daily_mean_TI_expan = angler_hours_daily_mean * TI_expan_final)
+  
+}
+
+#### pe$daily_cpue_catch_est ------------------------
+
+#aggregate interviews per day per strata of [week/month-weekend/day-section-bank/boat-catch_group]
+#   here including only "mean of ratios" (mean over interviews)
+#   dropping "ratio of the means" (actually sums): sum(fish_count) / sum(angler_hours_total)
+#then multiply by TI-expanded effort estimate
+#dropping any date-section-angler_type-catch_groups for which only interview-based CPUE is available
+#but census-corrected effort estimates are not (various reasons why a day-section-angler_type hours could be NA)
+pe$daily_cpue_catch_est <- pe$interview_and_catch |>
+  mutate(cpue_interview = fish_count / angler_hours_total) |>
+  group_by(section, time_strata, DayType, event_date, angler_type, catch_group) |>
+  summarise(cpue_mor_daily = mean(cpue_interview), .groups = "drop") |> 
+  left_join(
+    pe$angler_hours_daily_mean, 
+    by = c("section", "DayType", "event_date", "angler_type")
+  ) |>
+  tidyr::drop_na(ang_hrs_daily_mean_TI_expan) |> 
+  mutate(catch_estimate = round(cpue_mor_daily * ang_hrs_daily_mean_TI_expan, 3)) |>
+  arrange(section, event_date, angler_type, catch_group)
+
+# #degrees of freedom by section and angler type to apply to time strata estimates
+#!! should the count of days sampled account for DayType within a week/month-section-angler_type?
+pe$df <- left_join(
+  pe$angler_hours_daily_mean, #already has DayType
+  creel$days |> select(event_date, time_strata),
+  by = "event_date"
+) |> 
+  count(section, time_strata, DayType, angler_type, name = "n_days_samp") |> 
+  #count(time_strata, section, angler_type, name = "n_days_samp") |> 
+  group_by(section, angler_type) |>
+  mutate(df = (min(n_days_samp - 1) + sum(n_days_samp))/2) |> 
+  ungroup()
+# #!! to recover section-angler_type level only...
+#   pe$df |> distinct(section, angler_type, df)
+
+#!!pending above...note still incorrect actual "df = " calc...will update if needed  
+# #used in final set of objects, could move into pe or make inline?
+# ests$degrees_freedom_total <- pe$angler_hours_daily_mean |>
+#   distinct(section, angler_type, n_days = n_days_total) |>
+#   group_by(section, angler_type) |>
+#   summarize(
+#     min_n_days = min(n_days),
+#     sum_n_days = sum(n_days),
+#     degrees_freedom = min_n_days + sum_n_days / 2,
+#     .groups = "drop"
+#   )
+
+
+#### pe$est_effort and $est_catch ---------------------
+
+#!!the intersection of section-day-angler_type interview and effort observations may differ...
+#!!opting to derive summarized estimates from the object more likely to encompass more observations
+#!!but could revert to using hours in cpue object, in order to stay fully consistent with catch info?
+#!!     pe$daily_cpue_catch_est |> distinct(section, time_strata, DayType, event_date, angler_type, ang_hrs_daily_mean_TI_expan)
+
+#calculate mean and variance for section-time_strata-dayType-angler_type
+#this is the finest stratification above individual days 
+#sample size is inherently small for a DayType within week stratification
+# -the var() and sd() functions return NA when passed a length-1 vector (single obs)
+# -variance has limited meaning even when n=3, e.g. if sampling Fri & Sat & Sun
+#BUT sample design itself (and first principles) stratify on DayType
+#such that pooling over weekend/weekday is counter to data collection protocol/design
+#could pool over weeks (and perhaps angler_type) if a better variance is desired over the fishery duration
+
+pe$est_effort_s_ts_dt_at <- left_join(
+  #dates expanded to n-sections * n-angler_types * n-days, previously held as "creel$days_section_angler_type" but only used once
+  creel$days |>
+    select(time_strata, DayType, event_date, starts_with("open_section")) |>
+    pivot_longer(
+      cols = starts_with("open_section"), 
+      names_to = "section", 
+      values_to = "is_open") |>
+    filter(is_open) |> # what is this doing?
+    mutate(
+      section = as.numeric(gsub("^.*_", "", section)), 
+      is_open = NULL,
+      angler_type = list(unique(pe$angler_hours_daily_mean$angler_type)) 
+    ) |> 
+    # unnest(cols = section) |> 
+    unnest(angler_type)
+  ,
+  #estimates of angler_hours possible to calculate for sampled dates-sections-angler_type 
+  pe$angler_hours_daily_mean |> select(section, DayType, event_date, angler_type, ang_hrs_daily_mean_TI_expan)
+  ,
+  by = c("section", "DayType", "event_date", "angler_type")
+) |>
+  group_by(section, time_strata, DayType, angler_type) |>
+  summarize(
+    n_obs = sum(!is.na(ang_hrs_daily_mean_TI_expan)), #n_days = n(),
+    across(
+      .cols = c(ang_hrs_daily_mean_TI_expan),
+      .fns = list(
+        mean = ~mean(.x, na.rm = T),
+        var = ~var(.x, na.rm = T)
+      ), #sd = ~sd(.x, na.rm = T), med = ~median(.x, na.rm=T),
+      .names = "ang_hrs_{.fn}"
+    ), .groups = "drop") |> 
+  right_join(creel$days_total, by = c("section", "time_strata", "DayType")) |> 
+  #!!not sure this is correct - could/should recalc df for within-week/month?
+  left_join(pe$df |> distinct(section, angler_type, df), by = c("section", "angler_type")) |> 
+  #!!this carries forward the orig variance eqns but not sure if
+  #!!1) eqns are correctly implemented or 
+  #!!2) eqns are meaningful relative to the ang_hrs_var already present from base var() 
+  #!! i.e., the 3rd term "adjustment coef" in the first case 
+  #!! acts to reduce the first 2 terms' computed "variance", and is asymptotic to 0 for complete sampling
+  #!! such that case logic prevents 0 total_effort_var at n_obs==N_days 
+  mutate(
+    ang_hrs_var = replace_na(ang_hrs_var, 0),
+    est = N_days * ang_hrs_mean,
+    var = if_else(
+      n_obs < N_days,
+      (N_days^2) * (ang_hrs_var / n_obs) * (1-(n_obs/N_days)),
+      (N_days^2) * (ang_hrs_var / n_obs)
+    ),
+    l95 = est - qt(1-(0.05/2),df)*(var^0.5),
+    u95 = est + qt(1-(0.05/2),df)*(var^0.5)
+  ) 
+
+pe$est_catch_s_ts_dt_at <- left_join(
+  #dates expanded to n-sections * n-angler_types * n-days, previously held as "creel$days_section_angler_type" but only used once
+  creel$days |>
+    select(time_strata, DayType, event_date, starts_with("open_section")) |> 
+    pivot_longer(
+      cols = starts_with("open_section"), 
+      names_to = "section", 
+      values_to = "is_open") |>
+    filter(is_open) |> 
+    mutate(
+      section = as.numeric(gsub("^.*_", "", section)), 
+      is_open = NULL,
+      angler_type = list(unique(pe$angler_hours_daily_mean$angler_type)) 
+    ) |> 
+    # unnest(cols = section) |> 
+    unnest(angler_type)
+  ,
+  pe$daily_cpue_catch_est |> select(section, time_strata, DayType, event_date, angler_type, catch_group, catch_estimate)
+  ,
+  by = c("section", "time_strata", "DayType", "event_date", "angler_type")
+) |> 
+  group_by(section, time_strata, DayType, angler_type, catch_group) |>
+  summarize(
+    n_obs = sum(!is.na(catch_estimate)), #n_days = n(),
+    across(
+      .cols = c(catch_estimate),
+      .fns = list(
+        mean = ~mean(.x, na.rm = T),
+        var = ~var(.x, na.rm = T)
+      ), #sd = ~sd(.x, na.rm = T), med = ~median(.x, na.rm=T),
+      .names = "catch_est_{.fn}"
+    ), .groups = "drop") |> 
+  right_join(creel$days_total, by = c("section", "time_strata", "DayType")) |> 
+  left_join(pe$df |> distinct(section, angler_type, df), by = c("section", "angler_type")) |> 
+  mutate(
+    catch_est_var = replace_na(catch_est_var, 0),
+    est = N_days * catch_est_mean,
+    var = if_else(
+      n_obs < N_days,
+      (N_days^2) * (catch_est_var / n_obs) * (1-(n_obs/N_days)),
+      (N_days^2) * (catch_est_var / n_obs)
+    ),
+    se = sqrt(var),
+    l95 = est - qt(1-(0.05/2),df)*(var^0.5),
+    u95 = est + qt(1-(0.05/2),df)*(var^0.5)
+  ) |> 
+  drop_na(catch_group)
+
+#### write out a workbook ----------------------------
+#not a great test, but allows passing "" to stop overwrite...
+if(nchar(params$dir_output) > 1) {
+  writexl::write_xlsx(
+  c(pe[rev(names(pe))], set_names(creel, paste0("dwg_", names(creel)))),
+  path = file.path(params$dir_output, paste0(params$analysis_name,".xlsx"))
+  )
+}
+```
