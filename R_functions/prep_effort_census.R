@@ -39,10 +39,11 @@ prep_effort_census <- function(eff, ...){
         count_type == c("Boat - Pontoon/Kick/Kayak") ~ "bank",
         count_type == c("Shore - No Boat") ~ "bank",
         count_type == c("Shore - Pontoon/Kick/Kayak") ~ "bank"
-      )
+      ),
+      angler_final_int = as.integer(factor(angler_final))
     ) |>
     tidyr::drop_na(angler_final) |> 
-    dplyr::group_by(section_num, event_date, tie_in_indicator, count_sequence, angler_final) |>
+    dplyr::group_by(section_num, event_date, tie_in_indicator, count_sequence, angler_final, angler_final_int) |>
     dplyr::summarize(count_census = sum(count_quantity), .groups = "drop") |>
     dplyr::arrange(section_num, event_date, count_sequence)
   

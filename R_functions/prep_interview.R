@@ -17,11 +17,10 @@ prep_interview <- function(
   }
   
   #coerce missing values to actual strings to allow params$est_catch_groups to include NAs alongside non-NA
-  #to allow 'run' specification in params, add back within across()
+  #to allow 'run' specification in params, add 'run' within across()
   dwg_catch <- dwg_catch |> mutate(across(c(species, life_stage, fin_mark, fate), ~replace_na(., "NA")))
     
   interviews <- dwg_interview |> 
-#   tidyr::drop_na(vehicle_count, trailer_count) |> 
     filter(is.na(angler_type) | str_detect(angler_type, "ank|oat")) |> 
     dplyr::mutate(
       trip_status = replace_na(trip_status, "Unknown"),
@@ -55,6 +54,8 @@ prep_interview <- function(
         person_count_type == "angler" ~ angler_count
       ),
       
+      vehicle_count = if_else(vehicle_count > person_count_final, person_count_final, vehicle_count),
+        
       fishing_time_total = fishing_time * person_count_final
     ) |>
     dplyr::filter(fishing_time >= min_fishing_time) |> 

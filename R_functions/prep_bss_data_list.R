@@ -1,28 +1,40 @@
 #could pass single dwg_summ list rather than separate interview & effort_index & effort_census objects
 #pretty simple to revise if desired...
 #similarly, could pass list of priors while including current values as default argument value
-prep_stan_list <- function(
+prep_bss_data_list <- function(
     period,
     days,
-    interview_cg, #if passing single dwg_summ list, would also want to pass est_catch_group to declare filtered intermediate
-    effort_index,
-    effort_census,
+    dwg_summarized,
+    est_catch_group,
     tie_in_mat,
+    priors,
     ...){
+
+  #in-function-scope intermediates
+  effort_index_vehicle <- dwg_summarized$effort_index |> filter(str_detect(count_type, "ehicle"))
+  effort_index_trailer <- dwg_summarized$effort_index |> filter(str_detect(count_type, "railer"))
+  effort_index_angler <- dwg_summarized$effort_index |> filter(str_detect(count_type, "ngler")) |> 
+    #based on outdated study design/database values that do not include current, more detailed census count levels  
+    mutate(
+      angler_final_int = case_when(
+        count_type == "Bank Anglers"  ~ as.integer(1),
+        count_type == "Boat Anglers"  ~ as.integer(2)
+      )
+    )
   
-  effort_index_vehicle <- effort_index |> filter(str_detect(count_type, "ehicle"))
-  effort_index_trailer <- effort_index |> filter(str_detect(count_type, "railer"))
-  effort_index_angler <- effort_index |> filter(str_detect(count_type, "ngler"))
-  
+  interview_cg <- dwg_summarized$interview |> filter(est_cg == est_catch_group)
+  interview_cg_intA <- interview_cg |> 
+    drop_na(vehicle_count, trailer_count, person_count_final) 
   interview_cg_daily_summ <- interview_cg |> 
     group_by(event_date, section_num, angler_final_int) |> 
     summarise(across(c(fishing_time_total, fish_count), sum), .groups = "drop")
   
+  #returned list object
   stan_list <- list(
     D = nrow(days), # int; number of fishing days
     G = length(unique(interview_cg$angler_final_int)),  # int; final number of unique gear/angler types 
-    S = as.integer(length(unique(effort_census$section_num))),  # int; final number of river sections 
-    H = max(effort_index$count_sequence), # int; max number of index counts within a sample day
+    S = as.integer(length(unique(dwg_summarized$effort_census$section_num))),  # int; final number of river sections 
+    H = max(dwg_summarized$effort_index$count_sequence), # int; max number of index counts within a sample day
     
     P_n = case_when( #int; total number of periods
       tolower(period) == 'day' ~ max(days$day_index),
@@ -61,26 +73,21 @@ prep_stan_list <- function(
     section_T = as.integer(effort_index_trailer$section_num), # int vec; index for section
     countnum_T = as.integer(effort_index_trailer$count_sequence), # int vec; index for count_sequence  
     
-    #10/12/22 DA temp in-function intermediate resolves to previous "all 0s" (including classes) when no "Angler" in passed count_types
-    #have not yet tested on dataset with mixed vehicle+trailer+angler, but suggests that any filtered intermediates with 0 rows will behave as desired?
-    #old comment: Need to circle back on how to deal with this when applicable, set all values to 0 as a placeholder, matching example standat_2021-05-28.txt
     # Angler index effort counts
     A_n = nrow(effort_index_angler), # int; total number of angler index effort counts
     A_I = effort_index_angler$count_index, #num vec; observed # of anglers
     day_A = left_join(effort_index_angler, days, by = "event_date") |> pull(day_index), # int; index for day/period
-    gear_A = as.integer(rep(0, nrow(effort_index_angler))),   # int vec; index denoting "gear/angler type"
+    gear_A = effort_index_angler$angler_final_int, # int vec; index denoting "gear/angler type"
     section_A = as.integer(effort_index_angler$section_num), # int vec; index for section
     countnum_A = as.integer(effort_index_angler$count_sequence), # int vec; index for count_num
     
     # Census (tie-in) effort counts 
-    E_n = nrow(effort_census), # int; total number of angler tie-in effort counts
-    E_s = effort_census$count_census, # num vec; observed # of anglers
-    day_E = left_join(effort_census, days, by = "event_date") |> pull(day_index), # int vec; index denoting day/period
-    #10/12/22 DA temp fix - not yet assured to match interview|index
-    #when angler_final takes "bank" and "boat" this resolves to 1 & 2
-    gear_E = as.integer(factor(effort_census$angler_final)), # int vec; index denoting "gear/angler type"  
-    section_E = as.integer(effort_census$section_num), # int vec; index for section
-    countnum_E = as.integer(effort_census$count_sequence), # int vec; index for count_sequence
+    E_n = nrow(dwg_summarized$effort_census), # int; total number of angler tie-in effort counts
+    E_s = dwg_summarized$effort_census$count_census, # num vec; observed # of anglers
+    day_E = left_join(dwg_summarized$effort_census, days, by = "event_date") |> pull(day_index), # int vec; index denoting day/period
+    gear_E = dwg_summarized$effort_census$angler_final_int, # int vec; index denoting "gear/angler type"  
+    section_E = as.integer(dwg_summarized$effort_census$section_num), # int vec; index for section
+    countnum_E = as.integer(dwg_summarized$effort_census$count_sequence), # int vec; index for count_sequence
     
 
     #10/12/22 DA temp solution, pass in desired matrix built from dwg$effort
@@ -107,33 +114,33 @@ prep_stan_list <- function(
     #10/12/22 DA temp soln; not sure exactly how to interpret "where V_A, T_A, A_A were collected" - all? any? something else?
     #Leaving for now same as IntC
     # interview data - angler expansion 
-    IntA = nrow(distinct(interview_cg, interview_id)),     # int; total number of angler interviews where V_A, T_A, A_A were collected
-    day_IntA = left_join(interview_cg, days, by = "event_date") |> pull(day_index), # int vec; index denoting day/period
-    gear_IntA = interview_cg$angler_final_int, # int vec; index denoting "gear/angler type"
-    section_IntA = interview_cg$section_num, # int vec; index for section
-    V_A = interview_cg$vehicle_count,  # num vec; total number of vehicles an angler group brought
-    T_A = interview_cg$trailer_count,  # num vec; total number of trailers an angler group brought
-    A_A = interview_cg$angler_count,   # num vec; total number of anglers in the groups interviewed
+    IntA = nrow(distinct(interview_cg_intA, interview_id)),     # int; total number of angler interviews where V_A, T_A, A_A were collected
+    day_IntA = left_join(interview_cg_intA, days, by = "event_date") |> pull(day_index), # int vec; index denoting day/period
+    gear_IntA = interview_cg_intA$angler_final_int, # int vec; index denoting "gear/angler type"
+    section_IntA = interview_cg_intA$section_num, # int vec; index for section
+    V_A = as.integer(interview_cg_intA$vehicle_count),  # num vec; total number of vehicles an angler group brought
+    T_A = as.integer(interview_cg_intA$trailer_count),  # num vec; total number of trailers an angler group brought
+    A_A = as.integer(interview_cg_intA$person_count_final),  # num vec; total number of anglers in the groups interviewed
     
     #priors
     #hyperhyper scale (degrees of freedom) parameters
-    value_cauchyDF_sigma_eps_C = 0.5, #for the hyperprior distribution sigma_eps_C; default = 1  
-    value_cauchyDF_sigma_eps_E = 0.5, #for the hyperprior distribution sigma_eps_E; default = 1  
-    value_cauchyDF_sigma_r_E = 0.5,   #for the hyperprior distribution sigma_r_E; default = 1  
-    value_cauchyDF_sigma_r_C = 0.5,   #for the hyperprior distribution sigma_r_C; default = 1 
-    value_cauchyDF_sigma_mu_C = 0.5,  #the hyperhyper SD parameter in the hyperprior distribution sigma_mu_C
-    value_cauchyDF_sigma_mu_E = 0.5,   #the hyperhyper SD parameter in the hyperprior distribution sigma_mu_E
+    value_cauchyDF_sigma_eps_C = priors["value_cauchyDF_sigma_eps_C"] , #for the hyperprior distribution sigma_eps_C; default = 1  
+    value_cauchyDF_sigma_eps_E = priors["value_cauchyDF_sigma_eps_E"], #for the hyperprior distribution sigma_eps_E; default = 1  
+    value_cauchyDF_sigma_r_E = priors["value_cauchyDF_sigma_r_E"],   #for the hyperprior distribution sigma_r_E; default = 1  
+    value_cauchyDF_sigma_r_C = priors["value_cauchyDF_sigma_r_C"],   #for the hyperprior distribution sigma_r_C; default = 1 
+    value_cauchyDF_sigma_mu_C = priors["value_cauchyDF_sigma_mu_C"],  #the hyperhyper SD parameter in the hyperprior distribution sigma_mu_C
+    value_cauchyDF_sigma_mu_E = priors["value_cauchyDF_sigma_mu_E"],   #the hyperhyper SD parameter in the hyperprior distribution sigma_mu_E
     
-    value_normal_sigma_omega_C_0 = 1, #the SD hyperparameter in the prior distribution omega_C_0; normal sd (log-space); default = 1   
-    value_normal_sigma_omega_E_0 = 3, #the SD hyperparameter in the prior distribution omega_E_0; normal sd (log-space);; default = 3  
-    value_lognormal_sigma_b = 1,      #the SD hyperparameter in the prior distribution b; default = 1  
-    value_normal_sigma_B1 = 5,        #the SD hyperparameter in the prior distribution B1; default = 5  
-    value_normal_mu_mu_C = log(0.02), #the mean hyperparameter in the prior distribution mu_C; median (log-space); default = 0.02 (was originally  0.05) 
-    value_normal_sigma_mu_C = 1.5,    #the SD hyperparameter in the prior distribution mu_C; normal sd (log-space); default = 1.5 (was originally 5)
-    value_normal_mu_mu_E = log(5),    #the mean hyperparameter in the prior distribution mu_E; median effort (log-space); default = 15 
-    value_normal_sigma_mu_E = 2,      #the SD hyperparameter in the prior distribution mu_E; normal sd (log-space); default = 2 (was originally 5) 
-    value_betashape_phi_E_scaled = 1, #the rate (alpha) and shape (beta) hyperparameters in phi_E_scaled; default = 1 (i.e., beta(1,1) which is uniform), alternative beta(2,2) 
-    value_betashape_phi_C_scaled = 1 #the rate (alpha) and shape (beta) hyperparameters in phi_C_scaled; default = 1 (i.e., beta(1,1) which is uniform), alternative beta(2,2)
+    value_normal_sigma_omega_C_0 = priors["value_normal_sigma_omega_C_0"], #the SD hyperparameter in the prior distribution omega_C_0; normal sd (log-space); default = 1   
+    value_normal_sigma_omega_E_0 = priors["value_normal_sigma_omega_E_0"], #the SD hyperparameter in the prior distribution omega_E_0; normal sd (log-space);; default = 3  
+    value_lognormal_sigma_b = priors["value_lognormal_sigma_b"],      #the SD hyperparameter in the prior distribution b; default = 1  
+    value_normal_sigma_B1 = priors["value_normal_sigma_B1"],        #the SD hyperparameter in the prior distribution B1; default = 5  
+    value_normal_mu_mu_C = priors["value_normal_mu_mu_C"], #the mean hyperparameter in the prior distribution mu_C; median (log-space); default = 0.02 (was originally  0.05) 
+    value_normal_sigma_mu_C = priors["value_normal_sigma_mu_C"],    #the SD hyperparameter in the prior distribution mu_C; normal sd (log-space); default = 1.5 (was originally 5)
+    value_normal_mu_mu_E = priors["value_normal_mu_mu_E"],    #the mean hyperparameter in the prior distribution mu_E; median effort (log-space); default = 15 
+    value_normal_sigma_mu_E = priors["value_normal_sigma_mu_E"],      #the SD hyperparameter in the prior distribution mu_E; normal sd (log-space); default = 2 (was originally 5) 
+    value_betashape_phi_E_scaled = priors["value_betashape_phi_E_scaled"], #the rate (alpha) and shape (beta) hyperparameters in phi_E_scaled; default = 1 (i.e., beta(1,1) which is uniform), alternative beta(2,2) 
+    value_betashape_phi_C_scaled = priors["value_betashape_phi_C_scaled"] #the rate (alpha) and shape (beta) hyperparameters in phi_C_scaled; default = 1 (i.e., beta(1,1) which is uniform), alternative beta(2,2)
     
   )
   
