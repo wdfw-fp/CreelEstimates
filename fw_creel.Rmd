@@ -43,10 +43,14 @@ output:
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(warning = FALSE, message = FALSE, fig.width = 10, fig.height = 8)
 
+library("suncalc")
 library("tidyverse")
 library("patchwork")
 library("gt")
 theme_set(theme_light())
+
+library("rstan")
+rstan_options(auto_write = TRUE)
 
 purrr::walk(list.files("R_functions/", full.names = T), source)
 
@@ -166,19 +170,17 @@ dwg_summ$effort_census <- prep_effort_census(
 #Aggregates index effort counts over locations within count_seq & section
 dwg_summ$effort_index <- prep_effort_index(
   eff = dwg$effort |> filter(between(event_date, as.Date(params$est_date_start), as.Date(params$est_date_end))))
+```
 
-#could pass single dwg_summ list rather than separate interview & effort_index & effort_census objects
-#pretty simple to revise if desired...
-#but would also probably want to pass est_catch_group argument to filter interview within function
-#since function wants single catch_group, non-duplicated slice interview object
-#similarly, could pass list of priors while including current values as default argument value
-dwg_summ$stan_list <- prep_stan_list(
+# Run BSS analysis
+
+```{r make_bss_data_list}
+
+bss_data_list <- prep_bss_data_list(
   period = params$period_bss,
   days = dwg$days,
-  interview_cg = dwg_summ$interview |> 
-    filter(est_cg == unique(dwg_summ$interview$est_cg)[1]),
-  effort_census = dwg_summ$effort_census,
-  effort_index = dwg_summ$effort_index,
+  dwg_summarized = dwg_summ,
+  est_catch_group = unique(dwg_summ$interview$est_cg)[1],
   #likely warrants revision? targeting n-gears-rows by n-sections-cols matrix of values
   tie_in_mat = dwg$effort |> 
     filter(tie_in_indicator == 1) |> 
@@ -187,38 +189,38 @@ dwg_summ$stan_list <- prep_stan_list(
     arrange(section_num) |> 
     pivot_wider(names_from = section_num, values_from = val) |> 
     select(-ang) |> 
-    as.matrix()
+    as.matrix(),
+  priors = c(
+      value_cauchyDF_sigma_eps_C = 0.5,
+      value_cauchyDF_sigma_eps_E = 0.5,
+      value_cauchyDF_sigma_r_E = 0.5,  
+      value_cauchyDF_sigma_r_C = 0.5,  
+      value_cauchyDF_sigma_mu_C = 0.5, 
+      value_cauchyDF_sigma_mu_E = 0.5, 
+      value_normal_sigma_omega_C_0 = 1,
+      value_normal_sigma_omega_E_0 = 3,
+      value_lognormal_sigma_b = 1,
+      value_normal_sigma_B1 = 5,  
+      value_normal_mu_mu_C = log(0.02),
+      value_normal_sigma_mu_C = 1.5,  
+      value_normal_mu_mu_E = log(5),
+      value_normal_sigma_mu_E = 2,  
+      value_betashape_phi_E_scaled = 1, 
+      value_betashape_phi_C_scaled = 1 
+    )
 )
 
-# BELOW IS ALTERNATIVE VERSION OF dwg_summ$stan_list ABOVE THAT COULD ACCOMMADATE >1 CATCH GROUPS TO ITERATE THROUGH VIA BSS ANALYSIS
-# #this whole declaration can be mapped into a list of stan_lists per est_catch_group
-# #and the encompassing list can then be iterated over...perhaps eventually in parallel?
-# #but might be nicer to revise arguments a bit? only thing changing in this demo is the slice of interview rows... 
-# dwg_summ$stan_list <- map(
-#   set_names(unique(dwg_summ$interview$est_cg))[1:2]
-#   ,
-#   ~prep_stan_list(
-#     period = params$period_bss,
-#     days = dwg$days,
-#     interview_cg = dwg_summ$interview |> filter(est_cg == .x),
-#     effort_census = dwg_summ$effort_census,
-#     effort_index = dwg_summ$effort_index,
-#     tie_in_mat = dwg$effort |> 
-#       filter(tie_in_indicator == 1) |> 
-#       distinct(section_num, p_census_bank, p_census_boat) |> 
-#       pivot_longer(starts_with("p_census"), names_to = "ang", values_to = "val") |> 
-#       arrange(section_num) |> 
-#       pivot_wider(names_from = section_num, values_from = val) |> 
-#       select(-ang) |> 
-#       as.matrix()
-#   )
-# )
 ```
 
-# Run BSS analysis
 ```{r BSS_analysis, echo=FALSE}
 
 # PLACEHOLDER - next steps: 1.) paste in code from "CreelAnalysis_dwg_1.1.Rmd" that runs BSS in stan (e.g., feeds in stan_dat along with priors, specifics model arguments, etc.) and 2.) create model input summaries (writing the stan_dat object, creating .txt of model arguments), 3.) wrap in a function
+
+bss_fit <- fit_bss(bss_data_list = bss_data_list
+  #...override other default args here...
+)
+
+
 
 ```
 
@@ -380,12 +382,12 @@ if(str_detect(params$index_count_types, "Bank|Boat")) {
   pe_estimates$interview_ang_per_vehic <- bind_rows(
     pe_data$interview |>
       #could re-introduce here: group_by(section_num)
-      summarize(angler_final = "total", anglers_per_vhcl_trlr = sum(angler_count) / sum(vehicle_count), .groups = "drop")
+      summarize(angler_final = "total", anglers_per_vhcl_trlr = sum(person_count_final) / sum(vehicle_count), .groups = "drop")
     ,
     pe_data$interview |>
       filter(angler_final == "boat") |>
       #could re-introduce here: group_by(section_num)
-      summarize(angler_final = "boat", anglers_per_vhcl_trlr = sum(angler_count) / sum(trailer_count), .groups = "drop")
+      summarize(angler_final = "boat", anglers_per_vhcl_trlr = sum(person_count_final) / sum(trailer_count), .groups = "drop")
     )
   
   #initially dropped rows of index counts where a given date-section_num-angler_final is missing from interview data
