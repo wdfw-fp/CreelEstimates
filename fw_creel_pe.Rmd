@@ -2,7 +2,7 @@
 title: "FW Creel Point Estimate"
 date: "`r Sys.Date()`"
 params:
-  analysis_name: "District 14_Skagit River_fall_salmon_2022"
+  analysis_name: "District 14_Skagit River_summer_sockeye_2022"
   days_wkend: !r c('Saturday', 'Sunday')
   model_period: "Week"
   index_count_types: "Vehicle/Trailers Only"
@@ -467,12 +467,12 @@ if(str_detect(params$index_count_types, "Bank|Boat")) {
   pe$interview_ang_per_vehic <- bind_rows(
     pe$interview |>
       #could re-introduce here: group_by(section)
-      summarize(angler_type = "total", anglers_per_vhcl_trlr = sum(angler_count) / sum(vehicle_count), .groups = "drop")
+      summarize(angler_type = "total", anglers_per_vhcl_trlr = sum(person_count_final) / sum(vehicle_count), .groups = "drop")
     ,
     pe$interview |>
       filter(angler_type == "boat") |>
       #could re-introduce here: group_by(section)
-      summarize(angler_type = "boat", anglers_per_vhcl_trlr = sum(angler_count) / sum(trailer_count), .groups = "drop")
+      summarize(angler_type = "boat", anglers_per_vhcl_trlr = sum(person_count_final) / sum(trailer_count), .groups = "drop")
     )
   
   #initially dropped rows of index counts where a given date-section-angler_type is missing from interview data
@@ -1000,7 +1000,7 @@ pe$interview |>
 ```
 
 
-```{r pe$proportion_effort_and_interview_hours_by_angler_type, eval=TRUE}
+```{r pe$proportion_effort_and_interview_hours_by_angler_type, eval=FALSE}
 
 pe$interview |>
   drop_na(angler_type) |>  
