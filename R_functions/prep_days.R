@@ -4,7 +4,7 @@ prep_days <- function(
     weekends = c("Saturday", "Sunday"),
     holidays, #date/char vector of YYYY-MM-DD dates to categorize as "weekend" strata
     Lat, Long,
-    mod_per,
+    period_pe,
     sections, #numeric vector of all possible sections to estimate
     closures, #tibble of fishery_name, section number and date of closures
     ...){
@@ -29,6 +29,11 @@ prep_days <- function(
     #Monday to Sunday weeks, see ?strptime
     Week = as.numeric(format(event_date, "%W")),
     Month = as.numeric(format(event_date, "%m")),
+    period = case_when(
+      period_pe == "week" ~ Week,
+      period_pe == "month" ~ Month,
+      period_pe == "duration" ~ double(1)
+    ),
     day_index = as.integer(seq_along(event_date)),
     week_index = as.integer(factor(Week, levels = unique(Week))),
     month_index = as.integer(factor(Month, levels = unique(Month)))

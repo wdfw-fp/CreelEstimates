@@ -1,7 +1,7 @@
 #thin wrapper on stan()
 fit_bss <- function(
     model_file = "stan_models/BSS_creel_model_02_2021-01-22.stan",
-    bss_data_list,
+    bss_inputs_list,
     n_chain = 4,  
     n_cores = 4,
     n_iter = 200,
@@ -14,7 +14,7 @@ fit_bss <- function(
   
   stan(
     file = model_file,
-    data = bss_data_list,
+    data = bss_inputs_list,
     chains = n_chain,
     cores = n_cores,
     iter = n_iter,
