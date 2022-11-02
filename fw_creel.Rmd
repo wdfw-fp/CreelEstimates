@@ -222,18 +222,9 @@ bss_fit <- fit_bss(bss_inputs_list = inputs_bss
 ```{r PE_analysis_data, echo=FALSE}
 inputs_pe <- list()
 
-inputs_pe$census_expan <- dwg$effort |> 
-  filter(location_type == "Section") |> 
-  distinct(section_num, p_census_bank, p_census_boat) |>
-  pivot_longer(
-    cols = starts_with("p_census_"), 
-    names_prefix = "p_census_",
-    names_to = "angler_final",
-    values_to = "p_census"
-    ) |> 
-  dplyr::mutate(census_indir = 1) |> 
-  dplyr::mutate(cen_exp_meth = params$census_expansion) |> 
-  arrange(angler_final, section_num)
+#derive a table of potentially section-anglerType-specific values to modify census expansions
+inputs_pe$census_expan <- prep_inputs_pe_census_expan(eff = dwg$effort, census_expansion = params$census_expansion)
+
 
 # Calculate total days the fishery was open per strata (strata = period, DayType, and section_num)
 inputs_pe$days_total <- dwg$days |>
