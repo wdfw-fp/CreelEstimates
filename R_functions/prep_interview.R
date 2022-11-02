@@ -33,14 +33,14 @@ prep_interview <- function(
         boat_used == "Yes" & 
           stringr::str_detect(boat_type, "ontoon|ayak") & 
           (is.na(fish_from_boat) | fish_from_boat == "Bank") ~ "bank",
-        #allow kayaks as "boat": boat_used == "Yes" & stringr::str_detect(boat_type, "ontoon|ayak") & fish_from_boat == "Boat" ~ "boat",
+        #allow kayaks as "boat": 
+        boat_used == "Yes" & stringr::str_detect(boat_type, "ontoon|ayak") & fish_from_boat == "Boat" ~ "boat", # EB if kayaks that fished from boat are left NA, they will break the code for BSS
         boat_used == "Yes" & 
           !stringr::str_detect(boat_type, "ontoon|ayak") & 
           (is.na(fish_from_boat) | fish_from_boat == "Boat") ~ "boat",
         boat_used == "Yes" & !stringr::str_detect(boat_type, "ontoon|ayak") & 
-          fish_from_boat == "Bank" ~ "boat"
-        # EB these cases were left NA when tested on skagit fall salmon 2022 data; assigning to boat under current angler_type assignment protocol
-      ),
+          fish_from_boat == "Bank" ~ "boat" # EB anglers who used a non- "ontoon|ayak" boat but primarily fished from shore
+        ),
       angler_final_int = as.integer(factor(angler_final)),
       
       end_time_final = dplyr::if_else(
