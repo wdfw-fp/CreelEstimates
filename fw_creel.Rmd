@@ -16,7 +16,6 @@ params:
   person_count_type: "group"
   period_pe: "week"
   period_bss: "day"
-  analysis_name: "District 14_Skagit River,Cascade River_fall_salmon_2022"
   days_wkend: !r c('Saturday', 'Sunday')
   model_period: "Week"
   index_count_types: "Vehicle/Trailers Only"
@@ -32,7 +31,6 @@ output:
     toc_float: yes
     code_folding: hide
 ---
-
 
 ```{css, include=FALSE}
   .chart-shim {
@@ -62,7 +60,7 @@ purrr::walk(list.files("R_functions/", full.names = T), source)
 gt(tibble(param = names(params), value = as.character(params)))
 ```
 
-# Fetch data
+# Fetch raw data
 
 ```{r dwg_fetch, echo=FALSE}
 dwg <- fetch_dwg(params$fishery_name)
@@ -99,7 +97,7 @@ dwg$days <- prep_days(
   )
 ```
 
-# Review data
+# Review fetched data
 
 ## Fishery sections
 
@@ -146,16 +144,16 @@ dwg$interview |> count(water_body, section_num, fishing_location) |> arrange(sec
 dwg$catch |> group_by(catch_group) |> summarise(fish_count = sum(fish_count), .groups = "drop") |> gt(caption = "Total reported encounters in interviews to date")
 ```
 
-# Summarized observations
+# Summarize observations
 
-```{r summarized_intermediates, echo=FALSE}
+```{r prep_dwg_summ_shared_summary_objects, echo=FALSE}
 dwg_summ <- list() #intermediate objects wrangled from creel list elements
 
 #get count_type levels from interview to ensure alignment...?
 
 #prep_interview() no longer excludes observations with NA vehicle_count/trailer_count
 #requires handling during summarization for fisheries/records where these were not collected
-dwg_summ$interview <- prep_interview(
+dwg_summ$interview <- prep_dwg_interview(
   dwg_interview = dwg$interview |> filter(between(event_date, as.Date(params$est_date_start), as.Date(params$est_date_end))),
   dwg_catch = dwg$catch,
   person_count_type = params$person_count_type,
@@ -164,19 +162,18 @@ dwg_summ$interview <- prep_interview(
   )
 
 #Aggregates census (tie in) effort counts, associating to closest-in-time index count
-dwg_summ$effort_census <- prep_effort_census(
+dwg_summ$effort_census <- prep_dwg_effort_census(
   eff = dwg$effort |> filter(between(event_date, as.Date(params$est_date_start), as.Date(params$est_date_end))))
 
 #Aggregates index effort counts over locations within count_seq & section
-dwg_summ$effort_index <- prep_effort_index(
+dwg_summ$effort_index <- prep_dwg_effort_index(
   eff = dwg$effort |> filter(between(event_date, as.Date(params$est_date_start), as.Date(params$est_date_end))))
 ```
 
-# Run BSS analysis
+# BSS estimation
 
-```{r make_bss_data_list}
-
-bss_data_list <- prep_bss_data_list(
+```{r prep_inputs_bss}
+inputs_bss <- prep_inputs_bss(
   period = params$period_bss,
   days = dwg$days,
   dwg_summarized = dwg_summ,
@@ -213,25 +210,14 @@ bss_data_list <- prep_bss_data_list(
 ```
 
 ```{r BSS_analysis, echo=FALSE}
-
-# PLACEHOLDER - next steps: 1.) paste in code from "CreelAnalysis_dwg_1.1.Rmd" that runs BSS in stan (e.g., feeds in stan_dat along with priors, specifics model arguments, etc.) and 2.) create model input summaries (writing the stan_dat object, creating .txt of model arguments), 3.) wrap in a function
-
-bss_fit <- fit_bss(bss_data_list = bss_data_list
+bss_fit <- fit_bss(bss_inputs_list = inputs_bss
   #...override other default args here...
 )
 
-
-
 ```
 
-# Summarize BSS model output
-```{r BSS_summary, echo=FALSE}
+# PE estimation 
 
-# PLACEHOLDER - next steps 1.) save model output, save model warnings (divergent transition...), model run time, and very basic summary table (e.g., catch & effort by section, angler, and total), 2.) revisiting model diagnostics (posterior distribution plots, key parameters, shinystan), 3.) revisiting more detailed summaries (e.g., daily plots of CPUE, effort, catch) and re-generating
-
-```
-
-# Run PE analysis 
 ```{r PE_analysis_data, echo=FALSE}
 pe_data <- list()
 
@@ -714,7 +700,16 @@ pe_estimates$est_catch_s_ts_dt_at <- left_join(
 ```
 
 
-# Summarize PE model output
+
+
+# Results
+
+```{r BSS_summary, echo=FALSE}
+
+# PLACEHOLDER - next steps 1.) save model output, save model warnings (divergent transition...), model run time, and very basic summary table (e.g., catch & effort by section, angler, and total), 2.) revisiting model diagnostics (posterior distribution plots, key parameters, shinystan), 3.) revisiting more detailed summaries (e.g., daily plots of CPUE, effort, catch) and re-generating
+
+```
+
 ```{r BSS_summary, echo=FALSE}
 
 # PLACEHOLDER - next steps 1.) incorporate/translate PE analysis script that is currently pasted in the file "DeleteMe - pe_model_summary_script.Rmd", 2.) wrap in 1 or more functions

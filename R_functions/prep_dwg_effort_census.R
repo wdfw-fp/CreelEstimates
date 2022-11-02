@@ -1,6 +1,6 @@
 #Aggregate census (tie in) effort counts, associating to closest-in-time index count.
 
-prep_effort_census <- function(eff, ...){
+prep_dwg_effort_census <- function(eff, ...){
   eff_cen <- dplyr::filter(eff, tie_in_indicator == 1)
   eff_ind <- dplyr::filter(eff, tie_in_indicator == 0)
   

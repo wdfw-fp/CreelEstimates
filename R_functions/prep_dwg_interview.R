@@ -4,7 +4,7 @@
 #section_num of fishing_loc is assigned as Section whether or not interview_loc present
 #when no fishing_loc, then use section_num of interview_loc
 
-prep_interview <- function(
+prep_dwg_interview <- function(
     dwg_interview, 
     dwg_catch,
     person_count_type, #string passed from params controlling angler_count vs total_group_count 

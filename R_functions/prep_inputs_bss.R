@@ -1,7 +1,4 @@
-#could pass single dwg_summ list rather than separate interview & effort_index & effort_census objects
-#pretty simple to revise if desired...
-#similarly, could pass list of priors while including current values as default argument value
-prep_bss_data_list <- function(
+prep_inputs_bss <- function(
     period,
     days,
     dwg_summarized,
