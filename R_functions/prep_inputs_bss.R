@@ -1,7 +1,7 @@
 prep_inputs_bss <- function(
     period,
-    days,
-    dwg_summarized,
+    days, #tibble with time strata and closure fields
+    dwg_summarized, #list with shared interview, index and census tibbles
     est_catch_group,
     tie_in_mat,
     priors,

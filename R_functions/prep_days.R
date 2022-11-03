@@ -45,15 +45,15 @@ prep_days <- function(
       tidyr::expand_grid(event_date = days$event_date, section = sections, open = TRUE)
       ,
       closures |> 
-        filter(between(event_date, date_begin, date_end)) |> 
+        dplyr::filter(dplyr::between(event_date, date_begin, date_end)) |> 
         dplyr::select(section, event_date) |> 
         dplyr::mutate(open = FALSE)
       ,
       by = c("section", "event_date")
       ) |> 
-      arrange(section, event_date) |> 
-      mutate(section = paste0("open_section_", section)) |> 
-      pivot_wider(names_from = section, values_from = open)
+      dplyr::arrange(section, event_date) |> 
+      dplyr::mutate(section = paste0("open_section_", section)) |> 
+      tidyr::pivot_wider(names_from = section, values_from = open)
     ,
     by = "event_date"
   )

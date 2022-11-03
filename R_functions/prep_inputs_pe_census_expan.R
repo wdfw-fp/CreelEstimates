@@ -13,6 +13,7 @@ prep_inputs_pe_census_expan <- function(
       values_to = "p_census"
     ) |> 
     dplyr::mutate(
+      p_census = replace_na(p_census, 1),
       census_indir = 1,
       cen_exp_meth = census_expansion
     ) |> 
