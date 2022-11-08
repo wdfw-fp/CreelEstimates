@@ -28,6 +28,7 @@ prep_inputs_bss <- function(
   
   #returned list object
   stan_list <- list(
+    est_cg = est_catch_group,
     D = nrow(days), # int; number of fishing days
     G = length(unique(interview_cg$angler_final_int)),  # int; final number of unique gear/angler types 
     S = as.integer(length(unique(dwg_summarized$effort_census$section_num))),  # int; final number of river sections 

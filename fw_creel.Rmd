@@ -17,7 +17,6 @@ params:
   period_pe: "week"
   period_bss: "day"
   days_wkend: !r c('Saturday', 'Sunday')
-  model_period: "Week"
   index_count_types: "Vehicle/Trailers Only"
   census_expansion: "Direct"
   min_fishing_time: 0.5
@@ -84,6 +83,12 @@ dwg <- fetch_dwg(params$fishery_name)
 #   mutate(event_date = as.Date(event_date, format = '%m/%d/%Y')) |> 
 #   write_csv("input_files/closures.csv")
 
+
+##!!if aggregating sections to coarser than provided by DWG
+##!!can add function resection() or similar
+##!!that takes a small LU tibble mapping 1,2,3,4... to 1,1,2,2... etc
+##!!as a join+mututate or rows_update
+
 dwg$days <- prep_days(
   date_begin = params$est_date_start, 
   date_end = params$est_date_end, 
@@ -114,9 +119,16 @@ dwg$effort |>
 ## Days
 
 ```{r gt_creel_days}
-
-# BROKEN - This is a summary table of creel days similar to dwg$days_total above (which is also broken)
-# creel$days_total |> pivot_wider(names_from = c(section, DayType), values_from = N_days) |> gt(rowname_col = "time_strata", caption = "Potential days of fishing by time strata, section and day type")
+dwg$days |> 
+  mutate(across(starts_with("open_"), ~if_else(., "open","closed"))) |> 
+  rename_with(.cols = starts_with("open_"), .fn = ~str_remove_all(., "open_")) |> 
+  gt::gt() |> 
+  gt::data_color(
+    columns = contains("section_"),
+    colors = scales::col_factor(
+      palette = c("#C3C7C3", "#78B574"),
+      domain = c("closed","open")) 
+  )
 ```
 
 ## Effort
@@ -169,52 +181,6 @@ dwg_summ$effort_census <- prep_dwg_effort_census(
 #Aggregates index effort counts over locations within count_seq & section
 dwg_summ$effort_index <- prep_dwg_effort_index(
   eff = dwg$effort |> filter(between(event_date, as.Date(params$est_date_start), as.Date(params$est_date_end))))
-```
-
-# BSS estimation
-
-```{r prep_inputs_bss}
-inputs_bss <- prep_inputs_bss(
-  period = params$period_bss,
-  days = dwg$days,
-  dwg_summarized = dwg_summ,
-  est_catch_group = unique(dwg_summ$interview$est_cg)[1],
-  #likely warrants revision? targeting n-gears-rows by n-sections-cols matrix of values
-  tie_in_mat = dwg$effort |> 
-    filter(tie_in_indicator == 1) |> 
-    distinct(section_num, p_census_bank, p_census_boat) |> 
-    pivot_longer(starts_with("p_census"), names_to = "ang", values_to = "val") |> 
-    arrange(section_num) |> 
-    pivot_wider(names_from = section_num, values_from = val) |> 
-    select(-ang) |> 
-    as.matrix(),
-  priors = c(
-      value_cauchyDF_sigma_eps_C = 0.5,
-      value_cauchyDF_sigma_eps_E = 0.5,
-      value_cauchyDF_sigma_r_E = 0.5,  
-      value_cauchyDF_sigma_r_C = 0.5,  
-      value_cauchyDF_sigma_mu_C = 0.5, 
-      value_cauchyDF_sigma_mu_E = 0.5, 
-      value_normal_sigma_omega_C_0 = 1,
-      value_normal_sigma_omega_E_0 = 3,
-      value_lognormal_sigma_b = 1,
-      value_normal_sigma_B1 = 5,  
-      value_normal_mu_mu_C = log(0.02),
-      value_normal_sigma_mu_C = 1.5,  
-      value_normal_mu_mu_E = log(5),
-      value_normal_sigma_mu_E = 2,  
-      value_betashape_phi_E_scaled = 1, 
-      value_betashape_phi_C_scaled = 1 
-    )
-)
-
-```
-
-```{r estimate_bss}
-bss_fit <- fit_bss(bss_inputs_list = inputs_bss
-  #...override other default args here...
-)
-
 ```
 
 # PE estimation 
@@ -278,36 +244,251 @@ inputs_pe$df <- prep_inputs_pe_df(
 ```
 
 ```{r estimate_pe}
-pe_estimates <- list() 
+estimates_pe <- list() 
 
-pe_estimates$effort <- est_pe_effort(
+estimates_pe$effort <- est_pe_effort(
   days = dwg$days,
   pe_inputs_list = inputs_pe
 )
 
-pe_estimates$catch <- est_pe_catch(
+estimates_pe$catch <- est_pe_catch(
   days = dwg$days,
   pe_inputs_list = inputs_pe
 )
  
-
-pe_estimates$catch |> 
-  group_by(est_cg) |> 
-  summarise(
-    est = sum(est),
-    .groups = "drop"
-  )
-
 
 # Next steps - 3.) update "inputs_pe$census_expan" object -- currenlty not using the indirect census expansion values from database due to naming issue in database (i.e., direct_census_bank should be indirect_census_boat) and ability/use of pivot_wider function to handle column header prefixes.
 
 ```
 
 
+# BSS estimation
+
+```{r prep_inputs_bss_single_est_cg}
+#placeholder pending choices about multiple BSS est_cg per script
+ecg <- unique(dwg_summ$interview$est_cg)[2]
+
+inputs_bss <- prep_inputs_bss(
+  est_catch_group = ecg,
+  period = params$period_bss,
+  days = dwg$days,
+  dwg_summarized = dwg_summ,
+  #likely warrants revision? targeting n-gears-rows by n-sections-cols matrix of values
+  tie_in_mat = dwg$effort |> 
+    filter(tie_in_indicator == 1) |> 
+    distinct(section_num, p_census_bank, p_census_boat) |> 
+    pivot_longer(starts_with("p_census"), names_to = "ang", values_to = "val") |> 
+    arrange(section_num) |> 
+    pivot_wider(names_from = section_num, values_from = val) |> 
+    select(-ang) |> 
+    as.matrix(),
+  priors = c(
+      value_cauchyDF_sigma_eps_C = 0.5,
+      value_cauchyDF_sigma_eps_E = 0.5,
+      value_cauchyDF_sigma_r_E = 0.5,  
+      value_cauchyDF_sigma_r_C = 0.5,  
+      value_cauchyDF_sigma_mu_C = 0.5, 
+      value_cauchyDF_sigma_mu_E = 0.5, 
+      value_normal_sigma_omega_C_0 = 1,
+      value_normal_sigma_omega_E_0 = 3,
+      value_lognormal_sigma_b = 1,
+      value_normal_sigma_B1 = 5,  
+      value_normal_mu_mu_C = log(0.02),
+      value_normal_sigma_mu_C = 1.5,  
+      value_normal_mu_mu_E = log(5),
+      value_normal_sigma_mu_E = 2,  
+      value_betashape_phi_E_scaled = 1, 
+      value_betashape_phi_C_scaled = 1 
+    )
+)
+
+```
+
+```{r estimate_bss_single_est_cg}
+#need to revisit to agree on approach to iterating multiple est_cg
+#this presumes an inputs_bss for a single est_cg
+#though note that est_cg can incorporate multiple fate, mark_status, stage, etc.
+estimates_bss <- fit_bss(
+  bss_inputs_list = inputs_bss,
+  n_iter = 200
+  #...override other default args here...
+)
+
+```
+
+
+```{r prep_inputs_bss_multiple_est_cg, eval=FALSE}
+inputs_bss_mult <- unique(dwg_summ$interview$est_cg)[2:3] |> 
+  set_names() |> 
+  map(
+    ~prep_inputs_bss(
+      est_catch_group = .x,
+      period = params$period_bss,
+      days = dwg$days,
+      dwg_summarized = dwg_summ,
+      #likely warrants revision? targeting n-gears-rows by n-sections-cols matrix of values
+      tie_in_mat = dwg$effort |> 
+        filter(tie_in_indicator == 1) |> 
+        distinct(section_num, p_census_bank, p_census_boat) |> 
+        pivot_longer(starts_with("p_census"), names_to = "ang", values_to = "val") |> 
+        arrange(section_num) |> 
+        pivot_wider(names_from = section_num, values_from = val) |> 
+        select(-ang) |> 
+        as.matrix(),
+      priors = c(
+        value_cauchyDF_sigma_eps_C = 0.5,
+        value_cauchyDF_sigma_eps_E = 0.5,
+        value_cauchyDF_sigma_r_E = 0.5,  
+        value_cauchyDF_sigma_r_C = 0.5,  
+        value_cauchyDF_sigma_mu_C = 0.5, 
+        value_cauchyDF_sigma_mu_E = 0.5, 
+        value_normal_sigma_omega_C_0 = 1,
+        value_normal_sigma_omega_E_0 = 3,
+        value_lognormal_sigma_b = 1,
+        value_normal_sigma_B1 = 5,  
+        value_normal_mu_mu_C = log(0.02),
+        value_normal_sigma_mu_C = 1.5,  
+        value_normal_mu_mu_E = log(5),
+        value_normal_sigma_mu_E = 2,  
+        value_betashape_phi_E_scaled = 1, 
+        value_betashape_phi_C_scaled = 1 
+      )
+    )
+  )
+
+#identical(inputs_bss, inputs_bss_mult$`Coho_Adult_AD|UM|UNK|NA_Kept`)
+
+```
+
+```{r estimate_bss_multiple_est_cg, eval=FALSE}
+
+estimates_bss_mult <- list()
+
+for(ecg in names(inputs_bss_mult)) {
+  gc(verbose = T)
+  try(
+    temp_fit <- fit_bss(
+      bss_inputs_list = inputs_bss_mult[[ecg]],
+      n_iter = 200
+    )
+
+    #do some thinning/summarization...
+    #...should be a function
+    keep_fit <- list()
+    keep_fit$overview <- temp_fit |> 
+      summary(pars = c("E_sum", "C_sum")) |> 
+      pluck("summary") |> 
+      as.data.frame() |> 
+      rownames_to_column("estimate") |> 
+      as_tibble() |> 
+      bind_cols(
+        estimates_bss |> 
+          rstan::get_sampler_params(inc_warmup = FALSE) |> #list of matrices rows-iterations by 6 measures
+          set_names(~paste0("n_div_",1:length(estimates_bss@stan_args))) |> 
+          purrr::map_dbl(~.x[, "divergent__"] |> sum()) |> #n-chains cols of n-divergent transitions per chain
+          sum() |> as_tibble_col(column_name = "n_div")
+      ) |> 
+      mutate(est_cg = ecg)
+    
+    #then keep only what's needed
+    estimates_bss_mult[[ecg]] <- keep_fit
+    rm(temp_fit)
+    gc()
+  )
+}
+
+
+```
+
+
 # Results
+
+```{r combo_overview}
+#per-est_cg summary of total effort hours and catch/encounters
+estimates_bss |> 
+  summary(pars = c("E_sum", "C_sum")) |> 
+  pluck("summary") |> 
+  as.data.frame() |> 
+  rownames_to_column("estimate") |> 
+  as_tibble() |> 
+  bind_cols(
+    estimates_bss |> 
+      rstan::get_sampler_params(inc_warmup = FALSE) |> #list of matrices rows-iterations by 6 measures
+      set_names(~paste0("n_div_",1:length(estimates_bss@stan_args))) |> 
+      purrr::map_dbl(~.x[, "divergent__"] |> sum()) |> #n-chains cols of n-divergent transitions per chain
+      sum() |> as_tibble_col(column_name = "n_div")
+  ) |> 
+  mutate(
+    est_cg = inputs_bss$est_cg
+  ) |> 
+  left_join(
+    bind_cols(
+      estimates_pe$catch |> 
+        group_by(est_cg) |>
+        #filter(est_cg == inputs_bss$est_cg) |> 
+        summarise(
+          C_sum = sum(est),
+          .groups = "drop"
+        ),
+      estimates_pe$effort |> 
+        #group_by(...) |> 
+        summarise(
+          E_sum = sum(est, na.rm=T),
+          .groups = "drop"
+        )
+    ) |> 
+      pivot_longer(
+        cols = -est_cg,
+        names_to = "estimate",
+        values_to = "PE"
+      )
+    ,
+    by = c("estimate", "est_cg")
+  ) |> 
+  select(est_cg, estimate, PE, everything()) |> 
+  gt(groupname_col = "est_cg") |>
+  fmt_number(-c(estimate, est_cg), decimals = 1) |> 
+  tab_style(
+    style = cell_fill(), locations = cells_body(columns = "PE")
+  ) |> 
+  tab_style(
+    style = cell_fill(), locations = cells_body(columns = "PE")
+  )
+
+```
+
 
 ```{r}
 
-# PLACEHOLDER - next steps 1.) save model output, save model warnings (divergent transition...), model run time, and very basic summary table (e.g., catch & effort by section, angler, and total), 2.) revisiting model diagnostics (posterior distribution plots, key parameters, shinystan), 3.) revisiting more detailed summaries (e.g., daily plots of CPUE, effort, catch) and re-generating
+estimates_bss |> 
+  tidybayes::spread_draws(C_sum) |> 
+  ggplot(aes(C_sum)) +
+  ggdist::stat_halfeye()
+
+estimates_bss |> 
+  tidybayes::spread_draws(E_sum) |> 
+  ggplot(aes(E_sum)) +
+  ggdist::stat_halfeye()
 
 ```
+
+```{r}
+#the E & C array dims are E[section, day, gear]?
+
+
+#tidybayes::spread_draws(stan_fit, C[s][d,g] | s)
+
+
+estimates_bss |> 
+  summary(pars = c("C")) |> 
+  pluck("summary") |> 
+  as.data.frame() |> 
+  rownames_to_column("estimate") |> 
+  as_tibble() |> 
+  mutate(indices = str_sub(estimate, 3, 20) |> str_remove("\\]")) |> 
+  separate(
+    col = indices,
+    into = c("section_num", "day_index", "angler_type_ind"))
+
+```
+

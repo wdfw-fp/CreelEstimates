@@ -4,7 +4,7 @@ fit_bss <- function(
     bss_inputs_list,
     n_chain = 4,  
     n_cores = 4,
-    n_iter = 200,
+    n_iter = 1000,
     n_warmup = n_iter/2,
     n_thin = 1,
     adapt_delta = 0.95,
