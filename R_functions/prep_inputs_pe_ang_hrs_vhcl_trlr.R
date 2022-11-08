@@ -145,13 +145,19 @@ prep_inputs_pe_ang_hrs_vhcl_trlr <- function(
         tidyr::pivot_wider(
           names_from = count_type,
           values_from = count
-          ) |> 
+          ) |>
+        dplyr::mutate( 
+          count_index = if_else(count_index < 0 , 0, count_index) 
+          # need derived negative count_index estimates of bank anglers to pass through subsequent filter, 
+          # if count_index doesn't pass filter then TI_expan is NA. Should only be an issue in very data limited situations
+          # if not addressed, then effort from index counts with no TI_expan value get dropped from final estimates 
+        ) |> 
         dplyr::filter(
           !is.na(count_census),
           !is.na(count_index),
           count_census >= 0,
           count_index >= 0
-        )      
+        )
     } else {
       census_TI_expan <- census_TI_expan |> mutate(angler_final = "bank")
     }
