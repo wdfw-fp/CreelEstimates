@@ -264,61 +264,10 @@ estimates_pe$catch <- est_pe_catch(
 
 # BSS estimation
 
-```{r prep_inputs_bss_single_est_cg}
-#placeholder pending choices about multiple BSS est_cg per script
-ecg <- unique(dwg_summ$interview$est_cg)[2]
-
-inputs_bss <- prep_inputs_bss(
-  est_catch_group = ecg,
-  period = params$period_bss,
-  days = dwg$days,
-  dwg_summarized = dwg_summ,
-  #likely warrants revision? targeting n-gears-rows by n-sections-cols matrix of values
-  tie_in_mat = dwg$effort |> 
-    filter(tie_in_indicator == 1) |> 
-    distinct(section_num, p_census_bank, p_census_boat) |> 
-    pivot_longer(starts_with("p_census"), names_to = "ang", values_to = "val") |> 
-    arrange(section_num) |> 
-    pivot_wider(names_from = section_num, values_from = val) |> 
-    select(-ang) |> 
-    as.matrix(),
-  priors = c(
-      value_cauchyDF_sigma_eps_C = 0.5,
-      value_cauchyDF_sigma_eps_E = 0.5,
-      value_cauchyDF_sigma_r_E = 0.5,  
-      value_cauchyDF_sigma_r_C = 0.5,  
-      value_cauchyDF_sigma_mu_C = 0.5, 
-      value_cauchyDF_sigma_mu_E = 0.5, 
-      value_normal_sigma_omega_C_0 = 1,
-      value_normal_sigma_omega_E_0 = 3,
-      value_lognormal_sigma_b = 1,
-      value_normal_sigma_B1 = 5,  
-      value_normal_mu_mu_C = log(0.02),
-      value_normal_sigma_mu_C = 1.5,  
-      value_normal_mu_mu_E = log(5),
-      value_normal_sigma_mu_E = 2,  
-      value_betashape_phi_E_scaled = 1, 
-      value_betashape_phi_C_scaled = 1 
-    )
-)
-
-```
-
-```{r estimate_bss_single_est_cg}
-#need to revisit to agree on approach to iterating multiple est_cg
-#this presumes an inputs_bss for a single est_cg
-#though note that est_cg can incorporate multiple fate, mark_status, stage, etc.
-estimates_bss <- fit_bss(
-  bss_inputs_list = inputs_bss,
-  n_iter = 200
-  #...override other default args here...
-)
-
-```
-
-
-```{r prep_inputs_bss_multiple_est_cg, eval=FALSE}
-inputs_bss_mult <- unique(dwg_summ$interview$est_cg)[2:3] |> 
+```{r prep_inputs_bss, eval=FALSE}
+#either a single element list for a single catch_group
+#or a list of bss-input-lists, one for each catch_group
+inputs_bss <- unique(dwg_summ$interview$est_cg)[2:3] |> 
   set_names() |> 
   map(
     ~prep_inputs_bss(
@@ -356,44 +305,44 @@ inputs_bss_mult <- unique(dwg_summ$interview$est_cg)[2:3] |>
     )
   )
 
-#identical(inputs_bss, inputs_bss_mult$`Coho_Adult_AD|UM|UNK|NA_Kept`)
-
 ```
 
-```{r estimate_bss_multiple_est_cg, eval=FALSE}
+```{r estimate_bss, eval=FALSE}
+#should work for either single or multiple catch_group 
+estimates_bss <- list()
 
-estimates_bss_mult <- list()
-
-for(ecg in names(inputs_bss_mult)) {
+for(ecg in names(inputs_bss)) {
   gc(verbose = T)
   try(
-    temp_fit <- fit_bss(
-      bss_inputs_list = inputs_bss_mult[[ecg]],
+    ecg_fit <- fit_bss(
+      bss_inputs_list = inputs_bss[[ecg]],
       n_iter = 200
-    )
+      )
 
-    #do some thinning/summarization...
-    #...should be a function
-    keep_fit <- list()
-    keep_fit$overview <- temp_fit |> 
-      summary(pars = c("E_sum", "C_sum")) |> 
-      pluck("summary") |> 
-      as.data.frame() |> 
-      rownames_to_column("estimate") |> 
-      as_tibble() |> 
-      bind_cols(
-        estimates_bss |> 
-          rstan::get_sampler_params(inc_warmup = FALSE) |> #list of matrices rows-iterations by 6 measures
-          set_names(~paste0("n_div_",1:length(estimates_bss@stan_args))) |> 
-          purrr::map_dbl(~.x[, "divergent__"] |> sum()) |> #n-chains cols of n-divergent transitions per chain
-          sum() |> as_tibble_col(column_name = "n_div")
-      ) |> 
-      mutate(est_cg = ecg)
+    ecg_keep <- list()
     
-    #then keep only what's needed
-    estimates_bss_mult[[ecg]] <- keep_fit
-    rm(temp_fit)
-    gc()
+    ecg_keep$overview <- get_bss_overview(
+      bss_fit = ecg_fit, ecg = ecg
+      )
+    
+    ecg_keep$catch_daily <- get_bss_catch_daily(
+      bss_fit = ecg_fit, ecg = ecg
+      )
+
+    ecg_keep$effort_daily <- get_bss_effort_daily(
+      bss_fit = ecg_fit, ecg = ecg
+      )
+    
+    # #can write wrapper on tidybayes::spread_draws or write our own
+    # #to repackage full posterior of key estimated quantities
+    # #such as daily catch or something else?
+    # ecg_keep$catch_daily_draws <- ecg_fit |> tidybayes::spread_draws(C[s][d,g]) #long, each index still a col 
+    # ecg_keep$catch_daily_draws <- ecg_fit |> tidybayes::spread_draws(C[s][d,g] | g) #a bit wider, bank/boat pivoted wide 
+
+    
+    estimates_bss[[ecg]] <- ecg_keep
+    #a little cleanup never hurts?
+    rm(ecg_fit, ecg_keep); gc()
   )
 }
 
@@ -405,33 +354,30 @@ for(ecg in names(inputs_bss_mult)) {
 
 ```{r combo_overview}
 #per-est_cg summary of total effort hours and catch/encounters
-estimates_bss |> 
-  summary(pars = c("E_sum", "C_sum")) |> 
-  pluck("summary") |> 
-  as.data.frame() |> 
-  rownames_to_column("estimate") |> 
-  as_tibble() |> 
-  bind_cols(
-    estimates_bss |> 
-      rstan::get_sampler_params(inc_warmup = FALSE) |> #list of matrices rows-iterations by 6 measures
-      set_names(~paste0("n_div_",1:length(estimates_bss@stan_args))) |> 
-      purrr::map_dbl(~.x[, "divergent__"] |> sum()) |> #n-chains cols of n-divergent transitions per chain
-      sum() |> as_tibble_col(column_name = "n_div")
-  ) |> 
-  mutate(
-    est_cg = inputs_bss$est_cg
-  ) |> 
+
+
+# #this first bit will change again when estimates_bss is already a list with the results of these calls...
+# map_df(estimates_bss, ~.x$overview)
+
+bind_rows(
+  get_bss_overview(
+    estimates_bss$`Coho_Adult_AD|UM|UNK|NA_Kept`,
+    'Coho_Adult_AD|UM|UNK|NA_Kept')
+  ,
+  get_bss_overview(
+    estimates_bss$`Coho_Adult_AD|UM|UNK|NA_Released`,
+    'Coho_Adult_AD|UM|UNK|NA_Released')
+) |> 
+
   left_join(
     bind_cols(
       estimates_pe$catch |> 
         group_by(est_cg) |>
-        #filter(est_cg == inputs_bss$est_cg) |> 
         summarise(
           C_sum = sum(est),
           .groups = "drop"
         ),
       estimates_pe$effort |> 
-        #group_by(...) |> 
         summarise(
           E_sum = sum(est, na.rm=T),
           .groups = "drop"
@@ -455,40 +401,15 @@ estimates_bss |>
     style = cell_fill(), locations = cells_body(columns = "PE")
   )
 
-```
-
-
-```{r}
-
-estimates_bss |> 
-  tidybayes::spread_draws(C_sum) |> 
-  ggplot(aes(C_sum)) +
-  ggdist::stat_halfeye()
-
-estimates_bss |> 
-  tidybayes::spread_draws(E_sum) |> 
-  ggplot(aes(E_sum)) +
-  ggdist::stat_halfeye()
-
-```
-
-```{r}
-#the E & C array dims are E[section, day, gear]?
-
-
-#tidybayes::spread_draws(stan_fit, C[s][d,g] | s)
-
-
-estimates_bss |> 
-  summary(pars = c("C")) |> 
-  pluck("summary") |> 
-  as.data.frame() |> 
-  rownames_to_column("estimate") |> 
-  as_tibble() |> 
-  mutate(indices = str_sub(estimate, 3, 20) |> str_remove("\\]")) |> 
-  separate(
-    col = indices,
-    into = c("section_num", "day_index", "angler_type_ind"))
+  
+##can delete whenever iterated select bss-fit elements done  
+# get_bss_catch_daily(
+#   estimates_bss$`Coho_Adult_AD|UM|UNK|NA_Kept`,
+#   'Coho_Adult_AD|UM|UNK|NA_Kept')
+# 
+# get_bss_effort_daily(
+#   estimates_bss$`Coho_Adult_AD|UM|UNK|NA_Kept`,
+#   'Coho_Adult_AD|UM|UNK|NA_Kept')
 
 ```
 
