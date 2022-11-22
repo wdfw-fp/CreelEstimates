@@ -1,17 +1,13 @@
 ---
-title: "Freshater Creel Estimates"
+title: "Freshwater Creel Estimates"
 date: "`r Sys.Date()`"
 params:
   fishery_name: "Skagit fall salmon 2022"
-  est_date_start: "2022-09-01"
-  est_date_end: "2022-10-02"
+  est_date_start: "2022-09-17"
+  est_date_end: "2022-10-01"
   est_catch_groups: !r data.frame(rbind(
-    c(species = 'Coho', life_stage = 'Adult', fin_mark = 'AD', fate = 'Kept'),
-    c(species = 'Coho', life_stage = 'Adult', fin_mark = 'AD|UM|UNK|NA', fate = 'Kept'),
-    c(species = 'Coho', life_stage = 'Adult', fin_mark = 'AD|UM|UNK|NA', fate = 'Released'),
-    c(species = 'Coho', life_stage = 'Adult', fin_mark = 'AD|UM|UNK|NA', fate = 'Kept|Released'),
-    c(species = 'Chinook', life_stage = 'Adult', fin_mark = 'UM|UNK|NA', fate = 'Kept'),
-    c(species = 'Whitefish', life_stage = 'NA', fin_mark = 'AD|UM|UNK|NA', fate = 'Kept|Released|NA')
+    c(species = 'Coho', life_stage = 'Adult', fin_mark = 'UM', fate = 'Kept'),
+    c(species = 'Chinook', life_stage = 'Adult|NA|UNK', fin_mark = 'UM|AD|UNK|NA', fate = 'Released')
     ))
   person_count_type: "group"
   period_pe: "week"
@@ -135,7 +131,8 @@ dwg$days |>
 
 ```{r gt_creel_effort}
 #NEEDS FINISHING
-dwg$effort |> 
+dwg$effort |>
+  filter(between(event_date, as.Date(params$est_date_start), as.Date(params$est_date_end))) |> 
   distinct(section_num, location, event_date, tie_in_indicator, count_sequence) |> 
   count(section_num, location, tie_in_indicator)
   # mutate(tie_in_indicator = case_when(
@@ -148,13 +145,22 @@ dwg$effort |>
 ## Interview
 
 ```{r gt_creel_interview}
-dwg$interview |> count(water_body, section_num, fishing_location) |> arrange(section_num) |> gt(caption = "Number of interviews by analysis section")
+dwg$interview |>  
+  filter(between(event_date, as.Date(params$est_date_start), as.Date(params$est_date_end))) |> 
+  count(water_body, section_num, fishing_location) |> 
+  arrange(section_num) |> 
+  gt(caption = "Number of interviews by analysis section")
 ```
 
 ## Catch
 
 ```{r gt_creel_catch}
-dwg$catch |> group_by(catch_group) |> summarise(fish_count = sum(fish_count), .groups = "drop") |> gt(caption = "Total reported encounters in interviews to date")
+dwg$catch |>
+  left_join(dwg$interview, by = "interview_id") |> 
+  filter(between(event_date, as.Date(params$est_date_start), as.Date(params$est_date_end))) |> 
+  group_by(catch_group) |> 
+  summarise(fish_count = sum(fish_count), .groups = "drop") |> 
+  gt(caption = "Total reported encounters in interviews to date for catch groups defined as individual combinations of species, life state, fin mark, and fate")
 ```
 
 # Shared data aggregation
@@ -243,7 +249,7 @@ inputs_pe$df <- prep_inputs_pe_df(
 
 ```
 
-```{r estimate_pe}
+```{r estimates_pe}
 estimates_pe <- list() 
 
 estimates_pe$effort <- est_pe_effort(
@@ -261,13 +267,51 @@ estimates_pe$catch <- est_pe_catch(
 
 ```
 
+## summary PE
+
+```{r PE_summary}
+
+# effort by section_num
+
+ estimates_pe$effort |>
+        group_by(section_num) |> 
+        summarise(
+          E_sum = sum(est, na.rm=T),
+          .groups = "drop"
+        ) |> 
+  pivot_wider(names_from = section_num, values_from = E_sum) |>
+  gt(caption = paste("Estimated effort (angler hours) by fishing section from", params$est_date_start, "to", params$est_date_end))
+
+estimates_pe$catch |> 
+        group_by(est_cg, section_num) |>
+        summarise(
+          C_sum = sum(est),
+          .groups = "drop"
+        ) |> 
+      pivot_longer(
+        cols = -c(est_cg, section_num),
+        names_to = "estimate",
+        values_to = "PE"
+      ) |> 
+  select(est_cg, section_num, estimate, PE, everything()) |> 
+  gt(groupname_col = "est_cg", caption = "Catch estimates for specified catch groups") |>
+  fmt_number(-c(estimate, est_cg, section_num), decimals = 1) |> 
+  tab_style(
+    style = cell_fill(), locations = cells_body(columns = "PE")
+  ) |> 
+  tab_style(
+    style = cell_fill(), locations = cells_body(columns = "PE")
+  )
+
+```
+
 
 # BSS estimation
 
 ```{r prep_inputs_bss, eval=FALSE}
 #either a single element list for a single catch_group
 #or a list of bss-input-lists, one for each catch_group
-inputs_bss <- unique(dwg_summ$interview$est_cg)[2:3] |> 
+inputs_bss <- unique(dwg_summ$interview$est_cg) |> 
   set_names() |> 
   map(
     ~prep_inputs_bss(
@@ -307,7 +351,7 @@ inputs_bss <- unique(dwg_summ$interview$est_cg)[2:3] |>
 
 ```
 
-```{r estimate_bss, eval=FALSE}
+```{r estimates_bss, eval=FALSE}
 #should work for either single or multiple catch_group 
 estimates_bss <- list()
 
@@ -316,7 +360,7 @@ for(ecg in names(inputs_bss)) {
   
   ecg_fit <- fit_bss(
     bss_inputs_list = inputs_bss[[ecg]],
-    n_iter = 200
+    n_iter = 100
   )
   
   ecg_keep <- list()
@@ -341,26 +385,31 @@ for(ecg in names(inputs_bss)) {
 
 ```
 
+## summary BSS
 
-# Results
+```{r BSS_summary, eval= FALSE}
 
-```{r combo_overview}
-#per-est_cg summary of total effort hours and catch/encounters
+# effort by section_num
+
+map_df(estimates_bss, ~.x$overview) |> 
+  gt(groupname_col = "est_cg") |>
+  fmt_number(-c(estimate, est_cg), decimals = 1) |> 
+  tab_style(
+    style = cell_fill(), locations = cells_body(columns = "50%")
+  ) |> 
+  tab_style(
+    style = cell_fill(), locations = cells_body(columns = "50%")
+  )
+
+```
 
 
-# #this first bit will change again when estimates_bss is already a list with the results of these calls...
-# map_df(estimates_bss, ~.x$overview)
+# PE/BSS combined summary
 
-bind_rows(
-  get_bss_overview(
-    estimates_bss$`Coho_Adult_AD|UM|UNK|NA_Kept`,
-    'Coho_Adult_AD|UM|UNK|NA_Kept')
-  ,
-  get_bss_overview(
-    estimates_bss$`Coho_Adult_AD|UM|UNK|NA_Released`,
-    'Coho_Adult_AD|UM|UNK|NA_Released')
-) |> 
+```{r combo_overview, eval=FALSE}
+#per-est_cg summary of total effort hours and catch/encounters, showing results of both PE and BSS estimation methods
 
+map_df(estimates_bss, ~.x$overview) |> 
   left_join(
     bind_cols(
       estimates_pe$catch |> 
@@ -391,17 +440,28 @@ bind_rows(
   ) |> 
   tab_style(
     style = cell_fill(), locations = cells_body(columns = "PE")
+  ) |> 
+  tab_style(
+    style = cell_fill(), locations = cells_body(columns = "50%")
+  ) |> 
+  tab_style(
+    style = cell_fill(), locations = cells_body(columns = "50%")
   )
 
-  
-##can delete whenever iterated select bss-fit elements done  
-# get_bss_catch_daily(
-#   estimates_bss$`Coho_Adult_AD|UM|UNK|NA_Kept`,
-#   'Coho_Adult_AD|UM|UNK|NA_Kept')
-# 
-# get_bss_effort_daily(
-#   estimates_bss$`Coho_Adult_AD|UM|UNK|NA_Kept`,
-#   'Coho_Adult_AD|UM|UNK|NA_Kept')
+```
+
+# Save results
+```{r write_out_results}
+
+#write out a workbook with results from model runs 
+
+if(nchar(params$dir_output) > 1) {
+  writexl::write_xlsx(
+  c(estimates_pe[rev(names(estimates_pe))], set_names(dwg, paste0("dwg_", names(dwg)))),
+  path = file.path(params$dir_output, paste0(params$fishery_name, params$est_date_start, params$est_date_end, ".xlsx"))
+  )
+}
 
 ```
+
 
