@@ -2,16 +2,12 @@
 title: "Freshwater Creel Estimates"
 date: "`r Sys.Date()`"
 params:
-  fishery_name: "Skagit fall salmon 2022"
-  est_date_start: "2022-09-01"
-  est_date_end: "2022-11-30"
+  fishery_name: "Skagit fall salmon 2021"
+  est_date_start: "2021-09-01"
+  est_date_end: "2021-09-30"
   est_catch_groups: !r data.frame(rbind(
     c(species = 'Coho', life_stage = 'Adult', fin_mark = 'UM', fate = 'Kept'),
-    c(species = 'Coho', life_stage = 'Adult', fin_mark = 'UM', fate = 'Released'),
-    c(species = 'Coho', life_stage = 'Adult', fin_mark = 'AD', fate = 'Kept'),
-    c(species = 'Coho', life_stage = 'Adult', fin_mark = 'AD', fate = 'Released'),
-    c(species = 'Chinook', life_stage = 'Adult|NA|UNK', fin_mark = 'UM|AD|UNK|NA', fate = 'Released'),
-    c(species = 'Chum', life_stage = 'Adult|NA', fin_mark = 'UM|NA|UNK', fate = 'Released')
+    c(species = 'Coho', life_stage = 'Adult', fin_mark = 'UM', fate = 'Released')
     ))
   person_count_type: "group"
   period_pe: "week"
@@ -456,16 +452,31 @@ map_df(estimates_bss, ~.x$overview) |>
 
 # Save results
 ```{r write_out_results}
-
+bss_overview <- estimates_bss$summary_by_catchgroup
 #write out a workbook with results from model runs 
 
+# data fetched from dwg and summarized data used for PE and BSS (dwg_summ)
 if(nchar(params$dir_output) > 1) {
   writexl::write_xlsx(
-  c(estimates_pe[rev(names(estimates_pe))], set_names(dwg, paste0("dwg_", names(dwg)))),
-  path = file.path(params$dir_output, paste0(params$fishery_name, params$est_date_start, params$est_date_end, ".xlsx"))
+  c(set_names(dwg, paste0("dwg_", names(dwg))), set_names(dwg_summ, paste0("dwg_summ", names(dwg_summ)))),
+  path = file.path(params$dir_output, paste0("dwg_fetch_summary_", params$fishery_name, params$est_date_start, params$est_date_end, ".xlsx"))
   )
 }
 
+# PE output
+if(nchar(params$dir_output) > 1) {
+  writexl::write_xlsx(
+  c(estimates_pe[rev(names(estimates_pe))]),
+  path = file.path(params$dir_output, paste0("pe_output_", params$fishery_name, params$est_date_start, params$est_date_end, ".xlsx"))
+  )
+}
+
+# overview of BSS output
+if(nchar(params$dir_output) > 1) {
+  writexl::write_xlsx(bss_overview,
+  path = file.path(params$dir_output, paste0("bss_overview_", params$fishery_name, params$est_date_start, params$est_date_end, ".xlsx"))
+  )
+}
 ```
 
 
