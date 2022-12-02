@@ -3,11 +3,15 @@ title: "Freshwater Creel Estimates"
 date: "`r Sys.Date()`"
 params:
   fishery_name: "Skagit fall salmon 2022"
-  est_date_start: "2022-09-17"
-  est_date_end: "2022-10-01"
+  est_date_start: "2022-09-01"
+  est_date_end: "2022-11-30"
   est_catch_groups: !r data.frame(rbind(
     c(species = 'Coho', life_stage = 'Adult', fin_mark = 'UM', fate = 'Kept'),
-    c(species = 'Chinook', life_stage = 'Adult|NA|UNK', fin_mark = 'UM|AD|UNK|NA', fate = 'Released')
+    c(species = 'Coho', life_stage = 'Adult', fin_mark = 'UM', fate = 'Released'),
+    c(species = 'Coho', life_stage = 'Adult', fin_mark = 'AD', fate = 'Kept'),
+    c(species = 'Coho', life_stage = 'Adult', fin_mark = 'AD', fate = 'Released'),
+    c(species = 'Chinook', life_stage = 'Adult|NA|UNK', fin_mark = 'UM|AD|UNK|NA', fate = 'Released'),
+    c(species = 'Chum', life_stage = 'Adult|NA', fin_mark = 'UM|NA|UNK', fate = 'Released')
     ))
   person_count_type: "group"
   period_pe: "week"
