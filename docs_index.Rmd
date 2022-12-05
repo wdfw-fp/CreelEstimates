@@ -1,0 +1,27 @@
+---
+title: "Placeholder Documentation Landing Page"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Note these is a temporary initial structure. These or other headings can be filled out here or within a few separate linked "docs_thing1.Rmd" and "docs_otherThing.Rmd" files that are linked as "file_name.html" and rendered (with the "docs_" prefix removed) and placed in the `docs` root directory.
+
+# Background
+
+## What is freshwater creel
+
+## What are the assumptions and requirements of this approach
+
+### Sample design
+
+### Field protocol
+
+### Data management
+
+### Analysis needs
+
+# How are these scripts used
