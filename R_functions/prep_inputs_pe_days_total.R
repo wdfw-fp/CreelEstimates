@@ -7,6 +7,6 @@ prep_inputs_pe_days_total <- function(days, ...){
       values_to = "is_open") |>
     dplyr::filter(is_open) |>
     dplyr::mutate(section_num = as.numeric(gsub("^.*_", "", section_temp))) |>
-    count(period, DayType, section_num, name = "N_days_open")  
+    count(period, day_type, section_num, name = "N_days_open")  
 
 }

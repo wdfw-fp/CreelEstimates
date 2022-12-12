@@ -3,7 +3,7 @@ prep_days <- function(
     date_begin, date_end,
     weekends = c("Saturday", "Sunday"),
     holidays, #date/char vector of YYYY-MM-DD dates to categorize as "weekend" strata
-    Lat, Long,
+    lat, long,
     period_pe,
     sections, #numeric vector of all possible sections to estimate
     closures, #tibble of fishery_name, section number and date of closures
@@ -15,28 +15,28 @@ prep_days <- function(
   
   days <- tibble::tibble(
     event_date = seq.Date(date_begin, date_end, by = "day"),
-    Day = weekdays(event_date),
-    DayType = if_else(Day %in% weekends | event_date %in% holidays, "Weekend", "Weekday"),
-    DayType_num = as.integer(c("Weekend" = 1, "Weekday" = 0)[DayType]),  #if_else(str_detect(DayType, "end"), 1, 0),
-    DayL = suncalc::getSunlightTimes(
+    day = weekdays(event_date),
+    day_type = if_else(day %in% weekends | event_date %in% holidays, "weekend", "weekday"),
+    day_type_num = as.integer(c("weekend" = 1, "weekday" = 0)[day_type]),  #if_else(str_detect(day_type, "end"), 1, 0),
+    day_length = suncalc::getSunlightTimes(
       date = event_date,
       tz = "America/Los_Angeles",
-      lat = Lat, lon = Long,
+      lat = lat, lon = long,
       keep=c("sunrise", "sunset")
     ) |>
-      mutate(DayL = as.numeric((sunset + 3600) - (sunrise - 3600))) |>
-      pluck("DayL"),
+      mutate(day_length = as.numeric((sunset + 3600) - (sunrise - 3600))) |>
+      pluck("day_length"),
     #Monday to Sunday weeks, see ?strptime
-    Week = as.numeric(format(event_date, "%W")),
-    Month = as.numeric(format(event_date, "%m")),
+    week = as.numeric(format(event_date, "%W")),
+    month = as.numeric(format(event_date, "%m")),
     period = case_when(
-      period_pe == "week" ~ Week,
-      period_pe == "month" ~ Month,
+      period_pe == "week" ~ week,
+      period_pe == "month" ~ month,
       period_pe == "duration" ~ double(1)
     ),
     day_index = as.integer(seq_along(event_date)),
-    week_index = as.integer(factor(Week, levels = unique(Week))),
-    month_index = as.integer(factor(Month, levels = unique(Month)))
+    week_index = as.integer(factor(week, levels = unique(week))),
+    month_index = as.integer(factor(month, levels = unique(month)))
     )
   
   days <- left_join(

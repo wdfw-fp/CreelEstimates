@@ -90,8 +90,8 @@ dwg$days <- prep_days(
   date_end = params$est_date_end, 
   weekends = params$days_wkend,
   holidays = read_lines("input_files/dates_holidays_2015_2030.txt"),
-  Lat = mean(dwg$ll$centroid_lat), #can/should consider smarter options
-  Long = mean(dwg$ll$centroid_lon),#can/should consider smarter options 
+  lat = mean(dwg$ll$centroid_lat), #can/should consider smarter options
+  long = mean(dwg$ll$centroid_lon),#can/should consider smarter options 
   period_pe = params$period_pe,
   sections = unique(dwg$effort$section_num),
   closures = readr::read_csv("input_files/closures.csv", show_col_types = FALSE) |> 
@@ -197,7 +197,7 @@ inputs_pe <- list()
 #derive a table of potentially section-anglerType-specific values to modify census expansions
 inputs_pe$census_expan <- prep_inputs_pe_census_expan(eff = dwg$effort, census_expansion = params$census_expansion)
 
-# Calculate total days the fishery was open per strata (strata = period, DayType, and section_num)
+# Calculate total days the fishery was open per strata (strata = period, day_type, and section_num)
 inputs_pe$days_total <- prep_inputs_pe_days_total(days = dwg$days)
 
 # depending on the types of index counts, reach the calc: ang_hrs_daily_mean_TI_expan = angler_hours_daily_mean * TI_expan_final
@@ -451,7 +451,7 @@ map_df(estimates_bss, ~.x$overview) |>
 ```
 
 # Save results
-```{r write_out_results}
+```{r write_out_results, eval = FALSE}
 bss_overview <- estimates_bss$summary_by_catchgroup
 #write out a workbook with results from model runs 
 

@@ -11,7 +11,7 @@ prep_inputs_pe_df <- function(
     ,
     by = "event_date"
     ) |> 
-    dplyr::count(section_num, period, DayType, angler_final, name = "n_days_samp") |> 
+    dplyr::count(section_num, period, day_type, angler_final, name = "n_days_samp") |> 
     dplyr::group_by(section_num, angler_final) |>
     dplyr::mutate(
       df = (min(n_days_samp - 1) + sum(n_days_samp))/2

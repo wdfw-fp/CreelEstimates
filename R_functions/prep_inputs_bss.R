@@ -47,7 +47,7 @@ prep_inputs_bss <- function(
       tolower(period) == 'duration' ~ rep(as.integer(1), nrow(days))
     ),
         
-    w = days$DayType_num, # int vec; 0/1 denoting Weekday/end for model offset
+    w = days$day_type_num, # int vec; 0/1 denoting Weekday/end for model offset
     L = days$DayL,  # num vec, daylength (model offset; assumption)
     # num mat; open/closed by section; 0 defined as 1E-6 for model
     O = days |> 

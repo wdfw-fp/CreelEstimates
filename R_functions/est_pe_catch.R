@@ -7,7 +7,7 @@ est_pe_catch <- function(
   est_catch <- dplyr::left_join(
     #dates expanded to sections * angler_final * opendays
     days |>
-      dplyr::select(period, DayType, event_date, starts_with("open_section")) |>
+      dplyr::select(period, day_type, event_date, starts_with("open_section")) |>
       tidyr::pivot_longer(
         cols = starts_with("open_section"), 
         names_to = "section_num", 
@@ -26,7 +26,7 @@ est_pe_catch <- function(
     ,
     by = c("section_num", "event_date", "angler_final")
   ) |> 
-    dplyr::group_by(section_num, period, DayType, angler_final, est_cg) |>
+    dplyr::group_by(section_num, period, day_type, angler_final, est_cg) |>
     dplyr::summarize(
       n_obs = sum(!is.na(catch_estimate)), 
       dplyr::across(
@@ -42,7 +42,7 @@ est_pe_catch <- function(
     dplyr::right_join(
       pe_inputs_list$days_total
       ,
-      by = c("section_num", "period", "DayType")
+      by = c("section_num", "period", "day_type")
     ) |> 
     #!!not sure this is correct - could/should recalc df for within-week/month?
     dplyr::left_join(

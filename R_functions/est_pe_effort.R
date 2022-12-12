@@ -1,9 +1,9 @@
-#calculate mean and variance for section_num-period-dayType-angler_final
+#calculate mean and variance for section_num-period-day_type-angler_final
 #this is the finest stratification above individual days 
-#sample size is inherently small for a DayType within week stratification
+#sample size is inherently small for a day_type within week stratification
 # -the var() and sd() functions return NA when passed a length-1 vector (single obs)
 # -variance has limited meaning even when n=3, e.g. if sampling Fri & Sat & Sun
-#BUT sample design itself (and first principles) stratify on DayType
+#BUT sample design itself (and first principles) stratify on day_type
 #such that pooling over weekend/weekday is counter to data collection protocol/design
 #could pool over weeks (and perhaps angler_final) if a better variance is desired over the fishery duration
 
@@ -16,7 +16,7 @@ est_pe_effort <- function(
   est_effort <- dplyr::left_join(
     #dates expanded to sections * angler_final * opendays
     days |>
-      dplyr::select(period, DayType, event_date, starts_with("open_section")) |>
+      dplyr::select(period, day_type, event_date, starts_with("open_section")) |>
       tidyr::pivot_longer(
         cols = starts_with("open_section"), 
         names_to = "section_num", 
@@ -36,7 +36,7 @@ est_pe_effort <- function(
     ,
     by = c("section_num", "event_date", "angler_final")
   ) |>
-    dplyr::group_by(section_num, period, DayType, angler_final) |>
+    dplyr::group_by(section_num, period, day_type, angler_final) |>
     dplyr::summarize(
       n_obs = sum(!is.na(ang_hrs_daily_mean_TI_expan)), 
       dplyr::across(
@@ -52,7 +52,7 @@ est_pe_effort <- function(
     dplyr::right_join(
       pe_inputs_list$days_total
       ,
-      by = c("section_num", "period", "DayType")
+      by = c("section_num", "period", "day_type")
       ) |> 
     #!!not sure this is correct - could/should recalc df for within-week/month?
     dplyr::left_join(

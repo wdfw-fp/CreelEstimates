@@ -9,7 +9,7 @@ prep_inputs_pe_ang_hrs_vhcl_trlr <- function(
   eff_ind <- dplyr::left_join(
     dwg_summarized$effort_index
     , 
-    days |> dplyr::select(event_date, DayType, period, DayL)
+    days |> dplyr::select(event_date, day_type, period, day_length)
     ,
     by=c("event_date")
     ) |>  
@@ -25,12 +25,12 @@ prep_inputs_pe_ang_hrs_vhcl_trlr <- function(
     interview_ang_per_vehic #coerced above to total/boat
     ,
     eff_ind |> #already in total/boat
-      dplyr::group_by(section_num, DayType, event_date, DayL, angler_final) |>
+      dplyr::group_by(section_num, day_type, event_date, day_length, angler_final) |>
       dplyr::summarise(count_index_mean = mean(count_index), .groups = "drop")
     ,
     by = c("angler_final")
     ) |>
-    dplyr::group_by(section_num, DayType, angler_final) |> 
+    dplyr::group_by(section_num, day_type, angler_final) |> 
     dplyr::mutate(
       count_index_mean = replace_na(count_index_mean, 0), 
       ang_per_vhcl_trlr = if_else(
@@ -39,8 +39,8 @@ prep_inputs_pe_ang_hrs_vhcl_trlr <- function(
         ang_per_vhcl_trlr)
     ) |> 
     dplyr::ungroup() |> 
-    mutate(angler_hours_daily_mean = ang_per_vhcl_trlr * count_index_mean * DayL) |>
-    select(-DayL, -ang_per_vhcl_trlr, -count_index_mean) |> 
+    mutate(angler_hours_daily_mean = ang_per_vhcl_trlr * count_index_mean * day_length) |>
+    select(-day_length, -ang_per_vhcl_trlr, -count_index_mean) |> 
     tidyr::drop_na(angler_hours_daily_mean) |> 
     arrange(section_num, event_date)
   
@@ -95,7 +95,7 @@ prep_inputs_pe_ang_hrs_vhcl_trlr <- function(
       #index counts via interviews for angler-per-vehic; angler_final already total & boat
       #this is very similar to above pe_estimates$angler_hours_daily_mean
       #but all count_seqs rather than summarized to daily mean
-      #as above, applies mean ang-per-vehic within section_num-daytype-angtype
+      #as above, applies mean ang-per-vehic within section_num-day_type-angtype
       #where interview missing an ang-type or no interviews on that date
       #prevents loss of use of census info b/c of a single day missing interviews...
       dplyr::full_join(
@@ -105,7 +105,7 @@ prep_inputs_pe_ang_hrs_vhcl_trlr <- function(
         ,
         by = c("angler_final")
         ) |>
-        dplyr::group_by(section_num, DayType, angler_final) |> 
+        dplyr::group_by(section_num, day_type, angler_final) |> 
         dplyr::mutate(
           ang_per_vhcl_trlr = if_else(
             is.na(ang_per_vhcl_trlr),
