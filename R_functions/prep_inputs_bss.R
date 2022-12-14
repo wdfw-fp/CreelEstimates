@@ -48,7 +48,7 @@ prep_inputs_bss <- function(
     ),
         
     w = days$day_type_num, # int vec; 0/1 denoting Weekday/end for model offset
-    L = days$DayL,  # num vec, daylength (model offset; assumption)
+    L = days$day_length,  # num vec, daylength (model offset; assumption)
     # num mat; open/closed by section; 0 defined as 1E-6 for model
     O = days |> 
       select(contains("section_")) |>
