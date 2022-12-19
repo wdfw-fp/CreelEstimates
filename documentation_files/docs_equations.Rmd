@@ -1,0 +1,157 @@
+---
+title: "Equations for CreelEstimates"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+# Point Estimate equations
+
+The following equations document the process to generate angler effort and catch estimates for stratum $k$, a variable used to represent estimate strata for time-period, day-type, and section $s$ when these strata are not specified in an equation. Angler-type stratum $g$ are specified to help clarify the conversion of counts of non-angler objects (e.g., vehicles, boat trailers) to angler count estimates. Angler trips $i$ are a unit of data collection corresponding to a completed interview of angler type $g$, categorized as either as a bank angler or boat angler.
+
+
+#### **Equations** 
+
+
+##### **Direct expansion estimator**
+Angler effort and catch estimates are calculated using a direct expansion estimator:
+$$
+\hat{X} = \bar{x}*{N}
+$$
+where the population estimate $\hat{X}$ is calculated by multiplying an observed sample mean $\bar{x}$ from sample size $n$ by the population size $N$.
+
+#### **Angler effort**
+
+##### ***scratch notes angler effort***
+**Index effort counts** is a multilayered beast. To keep track of each stage to derive angler effort I've proposed some parsed definitions:
+
+***Mean daily index counts*** - scheduled counts of things (vehicles, trailers) used to index angler abundance in the study area. We tend to call these effort counts, but effort is the end-goal after expanding, not what's being directly counted. Splitting too many hairs?? \
+***Mean daily index angler count estimates*** - the mean daily index counts of vehicles/trailers converted to angler count estimates using the ratio of angler per vehicle or angler per trailer\
+***Mean daily index effort estimates*** - the mean daily estimate of effort in angler hours, derived using the day length expansion, where mean daily index angler count estimates are multiplied by the number of available fishing hours in the day to calculate the estimated number of hours fished 
+
+***Need to cross reference these to BSS method to see were language matches / diverges*** 
+
+##### **Ratio of angler per vehicle / angler per trailer**
+
+Indirect index effort counts are converted to estimated angler counts using an angler per vehicle or angler per trailer ratio: 
+$$
+\bar{u}_q = \frac {\sum_{i = 1}^{t}{{p_{i}}}} {\sum_{i = 1}^{t}{{y_{q,i}}}}
+$$
+where $\bar{u}_q$ is defined as the season-long sum of the person count $p$ per angler trip $i$ for $t$ number of angler trips divided by the season long sum of the count of vehicles and trailers $y$ for index count type $q$ per angler trip $i$ for $t$ number of angler trips, representing the total number of angler trips interviewed during the monitoring period. 
+
+##### **Mean daily index counts**  
+ 
+Index counts are aggregated as a daily mean of the sum of index counts:
+
+$$
+\bar{w}_{d,q,k} = 1/n \sum_{h = 1}^{n}{{w_{h,d,q,k}}}
+$$
+where $\bar{w}_{d,q}$ is defined as the sample mean of individual index counts $w$ for the scheduled number of counts $h$ on day $d$ for index count type $q$ in stratum $k$. 
+
+##### **Mean daily index angler count estimates (boat anglers)** 
+
+The mean daily index angler count estimate $\bar{o}_{d,g_{boat},k}$ is calculated with the formula:
+$$
+{\bar{o}_{d,g_{boat},k}} =  {\bar{w}_{d,q_{trailer},k}}  {\bar{u}_{q_{trailer}}}
+$$
+where the ratio of angler per trailer $\bar{u}_{q_{trailer}}$ is multiplied by the mean daily index count of trailers $\bar{w}_{d,q_{trailer},k}$ for day $d$, index count type $q$, and stratum $k$. 
+
+##### **Mean daily index angler count estimates (total anglers)** 
+
+The mean daily index angler count estimate representing the total number of anglers $\bar{o}_{d,g_{total},k}$, aggregating bank and boat anglers, is calculated with the formula:
+$$
+{\bar{o}_{d,g_{total},k}} =  {\bar{w}_{d,q_{vehicle},k}}  {\bar{u}_{q_{vehicle}}}
+$$
+where the ratio of angler per vehicle $\bar{u}_{q_{vehicle}}$ is multiplied by the mean daily index count of vehicles $\bar{w}_{d,q_{vehicle},k}$. 
+
+
+##### **Mean daily index angler count estimates (bank anglers)** 
+
+The mean daily index angler count estimate representing the estimated number of bank anglers $\bar{o}_{d,g_{bank},k}$, is calculated with the formula:
+
+$$
+\bar{o}_{d,g_{bank},k} = \bar{o}_{d,g_{total},k} - \bar{o}_{d,g_{boat},k}
+$$
+where the estimated number of bank anglers is derived by subtracting the estimated number of boat anglers $\bar{o}_{d,g_{boat},k}$ from the estimated total number of anglers, aggregating bank and boat anglers, $\bar{o}_{d,g_{total},k}$. 
+
+##### **Mean daily index effort estimate**
+
+The mean daily index effort estimate is calculated using the day-length expansion:
+
+$$
+\hat{e}_{d,g,k} = \bar{o}_{d,g,k}T
+$$
+
+where the daily effort estimate in angler-hours $\hat{e}_{d,g,k}$ for day $d$, angler-type $g$, and stratum $k$ is calculated by multiplying the mean daily index angler count $\bar{o}_{d,g,k}$ by the number of available legal fishing hours in the day $T$. 
+
+
+##### **Stratum mean daily index effort estimate**
+
+The stratum mean daily index effort count estimate is calculated as the sample mean:
+
+$$
+\bar{e}_{g,k} = 1/n \sum_{d = 1}^{n}{{\hat{e}_{d,g,k}}}
+$$
+
+where $\bar{e}_{g,k}$ is the mean daily effort estimate in angler-hours for $n$ number of surveyed days by angler-type $g$ and stratum $k$. 
+
+##### **Effort bias term estimate**
+
+The effort bias term estimate $\bar{b}_{g,s}$, a value used to quantify potential bias in stratum mean daily index effort estimates \bar{e}_{g,k}, is calculated using the formula:
+
+$$
+\hat{o}_{d,s,h_{index},g_{boat}} = \hat{w}_{d,s,h_{index},q_{trailer}} * \bar{u}_{q_{trailer}}
+$$
+$$
+\hat{o}_{d,s,h_{index},g_{total}} = \hat{w}_{d,s,h_{index},q_{vehicle}} * \bar{u}_{q_{vehicle}}
+$$
+$$
+\hat{o}_{d,s,h_{index},g_{bank}} = \hat{o}_{d,s,h_{index},g_{total}} - \hat{o}_{d,s,h_{index},g_{boat}}
+$$
+
+where $\hat{o}$ is the angler count estimate per index effort count event $h_{index}$, angler-type $g$, section $s$, and day $d$, $\bar{w}$ is the index effort count for index count type $q$, and $\bar{u_q}$ is the ratio of angler per vehicle / angler per trailer. Index count derived angler count estimates are paired with census survey derived angler counts using the formula:
+
+$$
+\bar{b}_{g,s} = \frac {\sum_{h_{census} = 1}^{n}  \hat{o}_{h_{census},s,g,m_{census}}} {\sum_{h_{census} = 1}^{n} \hat{o}_{h_{census},d,s,g,m_{index}} }
+$$
+
+
+
+where $\bar{b}_{g,s}$ is a ratio calculated as the the season-long sum of the angler count estimate $\hat{o}$ per census effort count event $h_{census}$ per section $s$, angler-type $g$ and survey type $m_{census}$ divided by the season-long sum of the simultaneous angler count estimate $\hat{o}$ for survey type $m_{index}$.
+
+
+##### **Stratum mean daily index effort estimate with bias term correction**
+
+The estimated effort bias term ratio is applied to mean daily effort estimates:
+
+$$
+\bar{e}_{{g,k}_{exp}} = \bar{e}_{g,k} * \bar{b}_{g,s}
+$$
+where $\bar{e}_{{g,k}_{exp}}$ is the bias-term corrected mean daily index effort value derived by multiplying the mean daily effort estimate $\bar{e}_{g,k}$ for angler-type $g$ and stratum $k$ by the effort bias term ratio $\bar{b}_{g,s}$ for angler-type $g$ and section $s$. 
+
+
+##### **Stratum total effort estimate** 
+
+The stratum total estimate of effort is calculated using the direct expansion estimator:
+
+$$
+\hat{E}_{g,k} = \bar{e}_{{g,k}_{exp}} * N_{k}
+$$
+where the estimate of the population total of angler effort $\hat{E}_{g,k}$ is the product of the stratum mean daily index effort count estimate $\bar{e}_{g,k}$ and the total number of days $N$ in stratum $k$. 
+ 
+
+#### **Catch rate**
+
+##### **Ratio-of-means catch rate estimator**
+$$
+\hat{R}_{k,d} = \frac {\sum_{i = 1}^{t_d}{{c_{d,i}}}} {\sum_{i = 1}^{t_d}{{h_{d,i}}}}
+$$
+
+
+
+
+
