@@ -11,7 +11,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 # Point Estimate equations
 
-The following equations document the process to generate angler effort and catch estimates for stratum $k$, a variable used to represent estimate strata for time-period, day-type, and section $s$ when these strata are not specified in an equation. Angler-type stratum $g$ are specified to help clarify the conversion of counts of non-angler objects (e.g., vehicles, boat trailers) to angler count estimates. Angler trips $i$ are a unit of data collection corresponding to a completed interview of angler type $g$, categorized as either as a bank angler or boat angler.
+The following equations document the process to generate angler effort and catch estimates with the Point Estimate method using creel survey data collected using a stratified, probabilistic study design. Strata used to aggregate estimates are represented by the variable $k$, which represents angler-type, day-type, section, and time-period when these strata are not explicitly specified in an equation. Angler-type stratum $g$ are specified in most equations to help clarify the conversion of counts of non-angler objects (e.g., vehicles, boat trailers; index count type $q$) to angler count estimates by angler-type (e.g., bank angler, boat angler; angler-type $g$.) Angler trips $i$ are a unit of data collection corresponding to a completed interview. 
 
 
 #### **Equations** 
@@ -147,11 +147,11 @@ where the estimate of the population total of angler effort $\hat{E}_{g,k}$ is t
 #### **Catch rate**
 
 ##### **Ratio-of-means catch rate estimator**
-$$
-\hat{R}_{k,d} = \frac {\sum_{i = 1}^{t_d}{{c_{d,i}}}} {\sum_{i = 1}^{t_d}{{h_{d,i}}}}
-$$
+Catch data is analyzed using the strata applied to effort estimates, with time-period, day-type, section, and angler-type represented by the variable $k$ when not otherwise notated. An additional variable for fish species catch group $j$ is used to generate a distinct catch rate over $k$ strata for $j$ number of catch groups with the formula: 
 
-
+$$
+\hat{R}_{d,k,j} = \frac {\sum_{i = 1}^{t_d}{{c_{i,d,k,j}}}} {\sum_{i = 1}^{t_d}{{l_{i,d,k,j}}}}
+$$
 
 
 
