@@ -2,12 +2,14 @@
 title: "Freshwater Creel Estimates"
 date: "`r Sys.Date()`"
 params:
-  fishery_name: "Skagit fall salmon 2021"
-  est_date_start: "2021-09-01"
-  est_date_end: "2021-09-30"
+  fishery_name: "Nisqually salmon 2022"
+  est_date_start: "2022-07-01"
+  est_date_end: "2022-11-15"
   est_catch_groups: !r data.frame(rbind(
+    c(species = 'Chinook', life_stage = 'Adult', fin_mark = 'UM', fate = 'Released'),
+    c(species = 'Chinook', life_stage = 'Adult', fin_mark = 'AD', fate = 'Kept'),
     c(species = 'Coho', life_stage = 'Adult', fin_mark = 'UM', fate = 'Kept'),
-    c(species = 'Coho', life_stage = 'Adult', fin_mark = 'UM', fate = 'Released')
+    c(species = 'Coho', life_stage = 'Adult', fin_mark = 'AD', fate = 'Kept')
     ))
   person_count_type: "group"
   period_pe: "week"
@@ -16,7 +18,6 @@ params:
   index_count_types: "Vehicle/Trailers Only"
   census_expansion: "Direct"
   min_fishing_time: 0.5
-  dir_output: "model_output"
 output:
   html_document:
     fig_caption: yes
@@ -189,7 +190,7 @@ dwg_summ$effort_index <- prep_dwg_effort_index(
   eff = dwg$effort |> filter(between(event_date, as.Date(params$est_date_start), as.Date(params$est_date_end))))
 ```
 
-# PE estimation 
+# PE estimation
 
 ```{r prep_inputs_pe}
 inputs_pe <- list()
@@ -305,7 +306,6 @@ estimates_pe$catch |>
 
 ```
 
-
 # BSS estimation
 
 ```{r prep_inputs_bss, eval=FALSE}
@@ -403,7 +403,6 @@ map_df(estimates_bss, ~.x$overview) |>
 
 ```
 
-
 # PE/BSS combined summary
 
 ```{r combo_overview, eval=FALSE}
@@ -451,6 +450,7 @@ map_df(estimates_bss, ~.x$overview) |>
 ```
 
 # Save results
+
 ```{r write_out_results, eval = FALSE}
 bss_overview <- estimates_bss$summary_by_catchgroup
 #write out a workbook with results from model runs 
@@ -478,5 +478,3 @@ if(nchar(params$dir_output) > 1) {
   )
 }
 ```
-
-
