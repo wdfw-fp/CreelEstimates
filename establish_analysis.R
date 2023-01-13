@@ -8,10 +8,10 @@
 library(here)
 
 # parameters used to specify the analysis 
-project_name <- "District 13"
-fishery_name <- "Nooksack spring Chinook 2022"
-est_date_start <- "2022-05-28"
-est_date_end <- "2022-07-10"
+project_name <- "District 11"
+fishery_name <- "Nisqually salmon 2022"
+est_date_start <- "2022-07-01"
+est_date_end <- "2022-11-15"
 output_location_filepath <- "local"
 output_teams_name <- "DFW-Team FP FW Creel Monitoring Program - General"
 
