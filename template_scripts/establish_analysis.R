@@ -38,12 +38,12 @@ ifelse(!dir.exists(here::here("project_scripts", project_name, analysis_name)),
 
 ## copies fw_creel.Rmd template into specified project folder and renames to match specified analysis
 
-file.copy(from = file.path(here::here("fw_creel.Rmd", sep = "/")),
+file.copy(from = file.path(here::here("template_scripts", "fw_creel.Rmd", sep = "/")),
           to = file.path(here("project_scripts", project_name, analysis_name, analysis_script_name)))
 
 # copies render_analysis.R script to specified project folder and renames to match specified analysis
 
-file.copy(from = file.path(here::here("render_analysis.R", sep = "/")),
+file.copy(from = file.path(here::here("template_scripts", "render_analysis.R", sep = "/")),
           to = file.path(here::here("project_scripts", project_name, analysis_name, render_script_name)))
 
 # !! under development / futher consideration 
@@ -58,4 +58,4 @@ params_list <- list(
   output_teams_name = output_teams_name
 )
 
-saveRDS(params_list, file = here::here("params_list.rds"))
+saveRDS(params_list, file = here::here("input_files","params_list.rds"))

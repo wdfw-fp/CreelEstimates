@@ -42,4 +42,4 @@ vignettes/*.pdf
 /project_outputs
 
 # RDS file with parameters supplied to analysis-specific render.analysis.R script 
-params_list.rds
+/input_files/params_list.rds
