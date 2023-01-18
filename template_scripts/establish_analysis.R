@@ -8,10 +8,10 @@
 library(here)
 
 # parameters used to specify the analysis 
-project_name <- "District 11"
-fishery_name <- "Nisqually salmon 2022"
-est_date_start <- "2022-07-01"
-est_date_end <- "2022-11-15"
+project_name <- "District 14"
+fishery_name <- "Skagit fall salmon 2022" #needs to match what is in database
+est_date_start <- "2022-09-01"
+est_date_end <- "2022-11-30"
 output_location_filepath <- "local"
 output_teams_name <- "DFW-Team FP FW Creel Monitoring Program - General"
 
@@ -25,26 +25,22 @@ render_script_name <-paste0("render_analysis_", analysis_name, ".R")
 # create folder for project_name and script
 
 ## create a folder for the project, if it doesn't already exist
-
 ifelse(!dir.exists(here::here("project_scripts", project_name)),
        {dir.create(here::here("project_scripts", project_name)); "Output sub-folder created"},
        "Output sub-folder exists already")
 
 ##create a folder for the analysis
-
-ifelse(!dir.exists(here::here("project_scripts", project_name, analysis_name)),
-       {dir.create(here::here("project_scripts", project_name, analysis_name)); "Output sub-folder created"},
+ifelse(!dir.exists(here::here("project_scripts", project_name, fishery_name)),
+       {dir.create(here::here("project_scripts", project_name, fishery_name)); "Output sub-folder created"},
        "Output sub-folder exists already")
 
 ## copies fw_creel.Rmd template into specified project folder and renames to match specified analysis
-
-file.copy(from = file.path(here::here("template_scripts", "fw_creel.Rmd", sep = "/")),
-          to = file.path(here("project_scripts", project_name, analysis_name, analysis_script_name)))
+file.copy(from = here::here("template_scripts", "fw_creel.Rmd"),
+          to = here("project_scripts", project_name, fishery_name, analysis_script_name))
 
 # copies render_analysis.R script to specified project folder and renames to match specified analysis
-
-file.copy(from = file.path(here::here("template_scripts", "render_analysis.R", sep = "/")),
-          to = file.path(here::here("project_scripts", project_name, analysis_name, render_script_name)))
+file.copy(from = here::here("template_scripts", "render_analysis.R"),
+          to = here::here("project_scripts", project_name, fishery_name, render_script_name))
 
 # !! under development / futher consideration 
 # write out analysis parameters to rds file used to auto-fill project specific render_analysis.R script 
