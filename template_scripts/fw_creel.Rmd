@@ -56,8 +56,8 @@ purrr::walk(list.files(paste(here(), "R_functions", sep = "/"), full.names = T),
 
 # create the project_outputs folder 
 ifelse(!dir.exists(paste(here::here(), "project_outputs", sep = "/")),
-       {dir.create(paste(here::here(), "project_outputs", sep = "/")); "Output sub-folder created"},
-       "Output sub-folder exists already")
+       {dir.create(paste(here::here(), "project_outputs", sep = "/")); "project_outputs sub-folder created"},
+       "project_outputs sub-folder exists already")
 
 local_path <- here() # grabs file path to root directory where CreelEstimates is stored on local computer
 wd_output <- if_else(params$output_location_filepath == "local", paste0(local_path, "/project_outputs"), paste0("T:/", params$output_teams_name, "/project_outputs")) # uses params$output_location_filepath to route outputs to either a local storage location (project_outputs) or network drive location (Teams folder)
@@ -67,14 +67,14 @@ wd_output <- if_else(params$output_location_filepath == "local", paste0(local_pa
 # character string analysis used to name the folder containing outputs 
 
 ifelse(!dir.exists(paste(wd_output, params$project_name, sep = "/")),
-       {dir.create(paste(wd_output, params$project_name, sep = "/")); "Output sub-folder created"},
-       "Output sub-folder exists already")
+       {dir.create(paste(wd_output, params$project_name, sep = "/")); "project_outputs/project_name sub-folder created"},
+       "project_outputs/project_name sub-folder exists already")
 
 analysis_name <- paste(params$fishery_name, params$est_date_start, params$est_date_end, sep = "_")
 
 ifelse(!dir.exists(paste(wd_output, params$project_name, fishery_name, sep = "/")),
-       {dir.create(paste(wd_output, params$project_name, fishery_name, sep = "/")); "Output sub-folder created"},
-       "Output sub-folder exists already")
+       {dir.create(paste(wd_output, params$project_name, fishery_name, sep = "/")); "project_outputs/project_name/fishery_name analysis sub-folder created"},
+       "project_outputs/project_name/fishery_name analysis sub-folder exists already")
 
 
 ```

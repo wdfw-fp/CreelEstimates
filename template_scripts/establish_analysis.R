@@ -26,13 +26,13 @@ render_script_name <-paste0("render_analysis_", analysis_name, ".R")
 
 ## create a folder for the project, if it doesn't already exist
 ifelse(!dir.exists(here::here("project_scripts", project_name)),
-       {dir.create(here::here("project_scripts", project_name)); "Output sub-folder created"},
-       "Output sub-folder exists already")
+       {dir.create(here::here("project_scripts", project_name)); "project_name sub-folder created"},
+       "project_name sub-folder exists already")
 
 ##create a folder for the analysis
 ifelse(!dir.exists(here::here("project_scripts", project_name, fishery_name)),
-       {dir.create(here::here("project_scripts", project_name, fishery_name)); "Output sub-folder created"},
-       "Output sub-folder exists already")
+       {dir.create(here::here("project_scripts", project_name, fishery_name)); "project_name/fishery_name analysis sub-folder created"},
+       "project_name/fishery_name analysis sub-folder exists already")
 
 ## copies fw_creel.Rmd template into specified project folder and renames to match specified analysis
 file.copy(from = here::here("template_scripts", "fw_creel.Rmd"),
