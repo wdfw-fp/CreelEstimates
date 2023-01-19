@@ -53,6 +53,12 @@ rstan_options(auto_write = TRUE)
 purrr::walk(list.files(paste(here(), "R_functions", sep = "/"), full.names = T), source)
 
 # set up file path for analysis output
+
+# create the project_outputs folder 
+ifelse(!dir.exists(paste(here::here(), "project_outputs", sep = "/")),
+       {dir.create(paste(here::here(), "project_outputs", sep = "/")); "Output sub-folder created"},
+       "Output sub-folder exists already")
+
 local_path <- here() # grabs file path to root directory where CreelEstimates is stored on local computer
 wd_output <- if_else(params$output_location_filepath == "local", paste0(local_path, "/project_outputs"), paste0("T:/", params$output_teams_name, "/project_outputs")) # uses params$output_location_filepath to route outputs to either a local storage location (project_outputs) or network drive location (Teams folder)
 
@@ -66,8 +72,8 @@ ifelse(!dir.exists(paste(wd_output, params$project_name, sep = "/")),
 
 analysis_name <- paste(params$fishery_name, params$est_date_start, params$est_date_end, sep = "_")
 
-ifelse(!dir.exists(paste(wd_output, params$project_name, analysis_name, sep = "/")),
-       {dir.create(paste(wd_output, params$project_name, analysis_name, sep = "/")); "Output sub-folder created"},
+ifelse(!dir.exists(paste(wd_output, params$project_name, fishery_name, sep = "/")),
+       {dir.create(paste(wd_output, params$project_name, fishery_name, sep = "/")); "Output sub-folder created"},
        "Output sub-folder exists already")
 
 
@@ -485,7 +491,7 @@ map_df(estimates_bss, ~.x$overview) |>
 if(nchar(params$output_location_filepath) > 1) {
   writexl::write_xlsx(
   c(set_names(dwg, paste0("dwg_", names(dwg))), set_names(dwg_summ, paste0("dwg_summ", names(dwg_summ)))),
-  path = file.path(paste(wd_output, params$project_name, paste(params$fishery_name, params$est_date_start, params$est_date_end, sep = "_"), sep = "/"), paste0("dwg_fetch_summary_", params$fishery_name, params$est_date_start, params$est_date_end, ".xlsx"))
+  path = file.path(wd_output, params$project_name, params$fishery_name, paste0("fetch_dwg_", params$fishery_name, params$est_date_start, params$est_date_end, ".xlsx"))
   )
 }
 
@@ -493,14 +499,14 @@ if(nchar(params$output_location_filepath) > 1) {
 if(nchar(params$output_location_filepath) > 1) {
   writexl::write_xlsx(
   c(estimates_pe[rev(names(estimates_pe))]),
-  path = file.path(wd_output, params$project_name, paste(params$fishery_name, params$est_date_start, params$est_date_end, sep = "_"), paste0("pe_output_", params$fishery_name, params$est_date_start, params$est_date_end, ".xlsx"))
+  path = file.path(wd_output, params$project_name, params$fishery_name, paste0("pe_output_", params$fishery_name, params$est_date_start, params$est_date_end, ".xlsx"))
   )
 }
 
 # overview of BSS output
 # if(nchar(params$output_location_filepath) > 1) {
 #   writexl::write_xlsx(bss_overview,
-#   path = file.path(wd_output, params$project_name, paste(params$fishery_name, params$est_date_start, params$est_date_end, sep = "_"), paste0("bss_overview_", params$fishery_name, params$est_date_start, params$est_date_end, ".xlsx"))
+#   path = file.path(wd_output, params$project_name, params$fishery_name, paste0("bss_overview_", params$fishery_name, params$est_date_start, params$est_date_end, ".xlsx"))
 #   )
 # }
 ```
