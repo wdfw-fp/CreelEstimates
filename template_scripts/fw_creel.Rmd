@@ -2,13 +2,12 @@
 title: "Freshwater Creel Estimates"
 date: "`r Sys.Date()`"
 params:
-  project_name: "District 11"
-  fishery_name: "Nisqually salmon 2022"
-  est_date_start: "2022-07-01"
-  est_date_end: "2022-11-15"
+  project_name: "District 14"
+  fishery_name: "Skagit fall salmon 2022"
+  est_date_start: "2022-09-01"
+  est_date_end: "2022-11-30"
   est_catch_groups: !r data.frame(rbind(
     c(species = 'Chinook', life_stage = 'Adult', fin_mark = 'UM', fate = 'Released'),
-    c(species = 'Chinook', life_stage = 'Adult', fin_mark = 'AD', fate = 'Kept'),
     c(species = 'Coho', life_stage = 'Adult', fin_mark = 'UM', fate = 'Kept'),
     c(species = 'Coho', life_stage = 'Adult', fin_mark = 'AD', fate = 'Kept')
     ))
