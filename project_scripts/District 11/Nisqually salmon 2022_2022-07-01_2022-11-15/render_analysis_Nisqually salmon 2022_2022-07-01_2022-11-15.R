@@ -2,7 +2,7 @@ library(rmarkdown)
 library(here)
 library(tidyverse)
 
-analysis_params <- readRDS(here::here("params_list.rds"))
+analysis_params <- readRDS(here::here("input_files", "params_list.rds"))
 analysis_name <- paste(analysis_params$fishery_name, analysis_params$est_date_start, analysis_params$est_date_end, sep = "_")
 
 input_file <- paste0("fw_creel_", analysis_name, ".Rmd")

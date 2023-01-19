@@ -19,7 +19,7 @@ params:
   index_count_types: "Vehicle/Trailers Only"
   census_expansion: "Direct"
   min_fishing_time: 0.5
-  output_location_filepath: "teams"
+  output_location_filepath: "local"
   output_teams_name: "DFW-Team FP FW Creel Monitoring Program - General"
 output:
   html_document:
