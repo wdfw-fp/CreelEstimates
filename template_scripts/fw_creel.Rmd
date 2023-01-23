@@ -72,8 +72,8 @@ ifelse(!dir.exists(paste(wd_output, params$project_name, sep = "/")),
 
 analysis_name <- paste(params$fishery_name, params$est_date_start, params$est_date_end, sep = "_")
 
-ifelse(!dir.exists(paste(wd_output, params$project_name, fishery_name, sep = "/")),
-       {dir.create(paste(wd_output, params$project_name, fishery_name, sep = "/")); "project_outputs/project_name/fishery_name analysis sub-folder created"},
+ifelse(!dir.exists(paste(wd_output, params$project_name, params$fishery_name, sep = "/")),
+       {dir.create(paste(wd_output, params$project_name, params$fishery_name, sep = "/")); "project_outputs/project_name/fishery_name analysis sub-folder created"},
        "project_outputs/project_name/fishery_name analysis sub-folder exists already")
 
 
