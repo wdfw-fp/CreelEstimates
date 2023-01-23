@@ -1,6 +1,6 @@
 #thin wrapper on stan()
 fit_bss <- function(
-    model_file = "stan_models/BSS_creel_model_02_2021-01-22.stan",
+    model_file = here::here("stan_models/BSS_creel_model_02_2021-01-22.stan"),
     bss_inputs_list,
     n_chain = 4,  
     n_cores = 4,
