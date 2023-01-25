@@ -14,6 +14,7 @@ prep_inputs_pe_daily_cpue_catch_est <- function(
   ) |> 
     dplyr::group_by(section_num, period, day_type, event_date, angler_final, est_cg) |>
     dplyr::summarise(
+      n_obs = n(),
       total_catch = sum(fish_count),
       total_hours = sum(fishing_time_total),
       cpue_rom_daily = total_catch / total_hours,
