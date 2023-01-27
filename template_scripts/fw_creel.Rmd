@@ -80,9 +80,7 @@ library("rstan")
 rstan_options(auto_write = TRUE)
 
 purrr::walk(list.files(here("R_functions"), full.names = T), source)
-
 ```
-
 
 # `r paste(params$fishery_name)`
 
@@ -95,30 +93,10 @@ gt(tibble(param = names(params), value = as.character(params)))
 ```{r dwg_fetch, echo=FALSE}
 dwg <- fetch_dwg(params$fishery_name)
 
-# #!! TEMPORARY pending database table of same format...
-# #!! will require extending fetch_dwg() when available
-# #!! can reuse for other fishery existing _closure.csv files to add to main shared "closures.csv"
-# lu_input$closures |> 
-#   pivot_longer(names_to = "section", values_to = "open", cols =  -event_date) |> 
-#   mutate(
-#     fishery_name = params$fishery_name,
-#     section = as.numeric(str_remove(section, "open_section_")),
-#     closed = !open) |> 
-#   filter(closed) |> 
-#   select(fishery_name, section, event_date) |> 
-#   arrange(event_date, section) |> 
-#   write_csv("input_files/closures.csv")
-
 # #to fix up Excel bunged date format
 # read_csv("input_files/closures.csv", show_col_types = FALSE) |> 
 #   mutate(event_date = as.Date(event_date, format = '%m/%d/%Y')) |> 
 #   write_csv("input_files/closures.csv")
-
-
-##!!if aggregating sections to coarser than provided by DWG
-##!!can add function resection() or similar
-##!!that takes a small LU tibble mapping 1,2,3,4... to 1,1,2,2... etc
-##!!as a join+mututate or rows_update
 
 dwg$days <- prep_days(
   date_begin = params$est_date_start, 
@@ -165,26 +143,46 @@ dwg$days |>
 ## Effort
 
 ```{r gt_creel_effort}
-#NEEDS FINISHING
 dwg$effort |>
   filter(between(event_date, as.Date(params$est_date_start), as.Date(params$est_date_end))) |> 
   distinct(section_num, location, event_date, tie_in_indicator, count_sequence) |> 
-  count(section_num, location, tie_in_indicator)
-  # mutate(tie_in_indicator = case_when(
-  #   tie_in_indicator == 1 ~ "census",
-  #   tie_in_indicator == 0 ~ "index"
-  # )) |> 
-  # pivot_wider(names_from = tie_in_indicator, values_from = n)
+  count(section_num, location, tie_in_indicator) |> 
+  mutate(tie_in_indicator = case_when(
+    tie_in_indicator == 1 ~ "census",
+    tie_in_indicator == 0 ~ "index"
+  )) |>
+  arrange(section_num, tie_in_indicator, location) |> 
+  gt(groupname_col = "section_num", rowname_col = "location") |> 
+  tab_style(
+    style = list(cell_fill("grey70"), cell_text(weight = "bold")),
+    locations = cells_body(rows = tie_in_indicator == "census")
+  )
 ```
 
 ## Interview
 
 ```{r gt_creel_interview}
+# dwg$interview |>  
+#   filter(between(event_date, as.Date(params$est_date_start), as.Date(params$est_date_end))) |> 
+#   count(section_num, fishing_location) |> 
+#   arrange(section_num) |> 
+#   gt(groupname_col = "section_num", caption = "Number of interviews by analysis section")
+
 dwg$interview |>  
   filter(between(event_date, as.Date(params$est_date_start), as.Date(params$est_date_end))) |> 
-  count(water_body, section_num, fishing_location) |> 
-  arrange(section_num) |> 
-  gt(caption = "Number of interviews by analysis section")
+  count(section_num, event_date) |> 
+  pivot_wider(names_from = section_num, values_from = n) |> 
+  arrange(event_date) |> 
+  gt(rowname_col = "event_date") |> 
+  sub_missing() |> 
+  data_color(
+    columns = where(is.numeric),
+    colors = scales::col_quantile(
+      palette = c("white", "orange"), 
+      reverse = T, na.color = "grey",
+      domain = NULL #c(0, )
+    )
+  )
 ```
 
 ## Catch
