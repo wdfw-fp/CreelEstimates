@@ -30,54 +30,59 @@ output:
     code_folding: hide
 ---
 
-```{css, include=FALSE}
-  .chart-shim {
-    overflow: auto;
-    }
+```{r setup, include=FALSE}
+#running the 'setup' chunk loads the read-only `params` list
+knitr::opts_chunk$set(warning = FALSE, message = FALSE, fig.width = 10, fig.height = 8)
+library("here") #defines root at working dir of .Rproj
 ```
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(warning = FALSE, message = FALSE, fig.width = 10, fig.height = 8)
+```{r first_time_run, eval=FALSE}
+# set up file paths
+## top level for scripts and outputs
+if (!dir.exists(here("fishery_analyses"))) {
+  dir.create(here("fishery_analyses")); "fishery_analyses folder created"
+}
+## project level
+if (!dir.exists(here("fishery_analyses", params$project_name))) {
+  dir.create(here("fishery_analyses", params$project_name))
+  paste(here("fishery_analyses", params$project_name), "folder created")
+}
+## fishery-specific
+if (!dir.exists(here("fishery_analyses", params$project_name, params$fishery_name))) {
+  dir.create(here("fishery_analyses", params$project_name, params$fishery_name))
+  paste(here("fishery_analyses", params$project_name, params$fishery_name), "folder created")
+}
 
+#save the master template with new params arguments for the fishery
+rstudioapi::documentSave(rstudioapi::getActiveDocumentContext()$id)
+#make an appropriately renamed copy
+file.copy(
+  here("template_scripts/fw_creel.Rmd"),
+  here("fishery_analyses", params$project_name, params$fishery_name, 
+       paste0("fw_creel_", params$fishery_name, ".Rmd"))
+)
+#open the new copy
+rstudioapi::documentOpen(
+  here("fishery_analyses", params$project_name, params$fishery_name, 
+       paste0("fw_creel_", params$fishery_name, ".Rmd"))
+)
+
+```
+
+```{r packages_and_functions}
 library("suncalc")
 library("tidyverse")
 library("patchwork")
 library("gt")
-library("here")
 theme_set(theme_light())
 
 library("rstan")
 rstan_options(auto_write = TRUE)
 
-# purrr::walk(list.files("R_functions/", full.names = T), source)
-purrr::walk(list.files(paste(here(), "R_functions", sep = "/"), full.names = T), source)
-
-# set up file path for analysis output
-
-# create the project_outputs folder 
-ifelse(!dir.exists(paste(here::here(), "project_outputs", sep = "/")),
-       {dir.create(paste(here::here(), "project_outputs", sep = "/")); "project_outputs sub-folder created"},
-       "project_outputs sub-folder exists already")
-
-local_path <- here() # grabs file path to root directory where CreelEstimates is stored on local computer
-wd_output <- if_else(params$output_location_filepath == "local", paste0(local_path, "/project_outputs"), paste0("T:/", params$output_teams_name, "/project_outputs")) # uses params$output_location_filepath to route outputs to either a local storage location (project_outputs) or network drive location (Teams folder)
-
-#### Teams sync and update seems to be super slow
-
-# character string analysis used to name the folder containing outputs 
-
-ifelse(!dir.exists(paste(wd_output, params$project_name, sep = "/")),
-       {dir.create(paste(wd_output, params$project_name, sep = "/")); "project_outputs/project_name sub-folder created"},
-       "project_outputs/project_name sub-folder exists already")
-
-analysis_name <- paste(params$fishery_name, params$est_date_start, params$est_date_end, sep = "_")
-
-ifelse(!dir.exists(paste(wd_output, params$project_name, params$fishery_name, sep = "/")),
-       {dir.create(paste(wd_output, params$project_name, params$fishery_name, sep = "/")); "project_outputs/project_name/fishery_name analysis sub-folder created"},
-       "project_outputs/project_name/fishery_name analysis sub-folder exists already")
-
+purrr::walk(list.files(here("R_functions"), full.names = T), source)
 
 ```
+
 
 # `r paste(params$fishery_name)`
 

@@ -39,6 +39,7 @@ vignettes/*.pdf
 .Renviron
 
 # local directory of output files
+/fishery_analyses
 /project_outputs
 /project_scripts
 
