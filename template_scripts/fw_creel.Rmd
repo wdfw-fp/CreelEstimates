@@ -36,7 +36,7 @@ knitr::opts_chunk$set(warning = FALSE, message = FALSE, fig.width = 10, fig.heig
 library("here") #defines root at working dir of .Rproj
 ```
 
-```{r first_time_run, eval=FALSE}
+```{r first_time_run, eval=FALSE, include=FALSE}
 # set up file paths
 ## top level for scripts and outputs
 if (!dir.exists(here("fishery_analyses"))) {
