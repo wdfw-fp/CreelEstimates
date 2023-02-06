@@ -3,13 +3,11 @@ title: "Freshwater Creel Estimates"
 date: "`r Sys.Date()`"
 params:
   project_name: "District 14"
-  fishery_name: "Skagit fall salmon 2022"
-  est_date_start: "2022-09-01"
-  est_date_end: "2022-11-30"
+  fishery_name: "Skagit summer sockeye 2022"
+  est_date_start: "2022-06-19"
+  est_date_end: "2022-07-29"
   est_catch_groups: !r data.frame(rbind(
-    c(species = 'Chinook', life_stage = 'Adult', fin_mark = 'UM', fate = 'Released'),
-    c(species = 'Coho', life_stage = 'Adult', fin_mark = 'UM', fate = 'Kept'),
-    c(species = 'Coho', life_stage = 'Adult', fin_mark = 'AD', fate = 'Kept')
+    c(species = 'Sockeye', life_stage = 'Adult|Jack|UNK|NA', fin_mark = 'UM|AD|UNK|NA', fate = 'Kept')
     ))
   person_count_type: "group"
   period_pe: "week"
@@ -281,6 +279,28 @@ inputs_pe$df <- prep_inputs_pe_df(
 )
 
 ```
+
+
+```{r census_index_plot}
+
+# test <- plot_paired_census_index(
+#   days = dwg$days,
+#   dwg_summarized = dwg_summ,
+#   interview_ang_per_vehic = inputs_pe$interview_ang_per_vhcl_trlr,
+#   census_expan = inputs_pe$census_expan
+# )
+
+things <- plot_paired_census_index(
+  days = dwg$days,
+  dwg_summarized = dwg_summ,
+  interview_ang_per_vehic = inputs_pe$interview_ang_per_vhcl_trlr,
+  census_expan = inputs_pe$census_expan
+)
+
+things[[1]]
+things[[2]]
+```
+
 
 ```{r estimates_pe}
 estimates_pe <- list() 
