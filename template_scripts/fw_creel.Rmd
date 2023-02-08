@@ -3,11 +3,11 @@ title: "Freshwater Creel Estimates"
 date: "`r Sys.Date()`"
 params:
   project_name: "District 14"
-  fishery_name: "Skagit summer sockeye 2022"
-  est_date_start: "2022-06-19"
-  est_date_end: "2022-07-29"
+  fishery_name: "Skagit fall salmon 2022"
+  est_date_start: "2022-09-01"
+  est_date_end: "2022-10-31"
   est_catch_groups: !r data.frame(rbind(
-    c(species = 'Sockeye', life_stage = 'Adult|Jack|UNK|NA', fin_mark = 'UM|AD|UNK|NA', fate = 'Kept')
+    c(species = 'Coho', life_stage = 'Adult', fin_mark = 'AD|UM', fate = 'Kept')
     ))
   person_count_type: "group"
   period_pe: "week"
@@ -220,6 +220,13 @@ dwg_summ$effort_index <- prep_dwg_effort_index(
   eff = dwg$effort |> filter(between(event_date, as.Date(params$est_date_start), as.Date(params$est_date_end))))
 ```
 
+## Index effort counts
+
+```{r plot_index_effort_counts, fig.cap= "Index effort counts for each count sequence on surveyed days within the monitoring period."}
+# plot of index effort counts faceted by section and count_type per count sequence and day 
+plot_inputs_pe_index_effort_counts(effort_index = dwg_summ$effort_index)
+```
+
 # PE estimation
 
 ```{r prep_inputs_pe}
@@ -253,10 +260,19 @@ if(str_detect(params$index_count_types, "Bank|Boat")) {
   #could skip retaining as list element and just pass as inline call in arg to next function
   inputs_pe$interview_ang_per_vhcl_trlr <- prep_inputs_pe_int_ang_per_vhcl_trlr(dwg_summarized = dwg_summ)
   
+  # returns season-long total of counts for paired census and index counts
+  inputs_pe$paired_census_index_counts <- prep_inputs_pe_paired_census_index_counts(
+  days = dwg$days,
+  dwg_summarized = dwg_summ,
+  interview_ang_per_vehic = inputs_pe$interview_ang_per_vhcl_trlr,
+  census_expan = inputs_pe$census_expan)
+  
+  # returns census-corrected daily mean angler hours 
   inputs_pe$ang_hrs_daily_mean <- prep_inputs_pe_ang_hrs_vhcl_trlr(
     days = dwg$days, 
     dwg_summarized = dwg_summ,
     interview_ang_per_vehic = inputs_pe$interview_ang_per_vhcl_trlr,
+    paired_census_index_counts = inputs_pe$paired_census_index_counts,
     census_expan = inputs_pe$census_expan
     )
   
@@ -280,25 +296,20 @@ inputs_pe$df <- prep_inputs_pe_df(
 
 ```
 
+## Paired census and index angler effort count surveys
 
-```{r census_index_plot}
+```{r view_paired_census_index_counts, fig.cap= "Scatterplot displaying the effort bias-term ratio (TI_expan_final) for each section and angler type (angler_final), representing the total count from census surveys divided by the total count from index surveys. A 1:1 relationship is shown by the dashed line." }
 
-# test <- plot_paired_census_index(
-#   days = dwg$days,
-#   dwg_summarized = dwg_summ,
-#   interview_ang_per_vehic = inputs_pe$interview_ang_per_vhcl_trlr,
-#   census_expan = inputs_pe$census_expan
-# )
+# table view of census / index surveys and resulting bias term ratio 
+inputs_pe$paired_census_index_counts |> 
+  select(section_num, angler_final, count_census, count_index, TI_expan_final) |> 
+  gt(caption = "The season-long sum of paired census and index angler effort counts and corresponding bias-term ratio (TI_expan_final), indicating the magnitude and direction (postive or negative) of bias in index counts relative to census counts") |> 
+  fmt_number(count_index, decimals = 0) |> 
+  fmt_number(TI_expan_final, decimals = 2)
 
-things <- plot_paired_census_index(
-  days = dwg$days,
-  dwg_summarized = dwg_summ,
-  interview_ang_per_vehic = inputs_pe$interview_ang_per_vhcl_trlr,
-  census_expan = inputs_pe$census_expan
-)
+# scatterplot of total census counts vs. total index counts by angler type and section 
+plot_inputs_pe_census_vs_index(census_TI_expan = inputs_pe$paired_census_index_counts)
 
-things[[1]]
-things[[2]]
 ```
 
 
@@ -320,9 +331,10 @@ estimates_pe$catch <- est_pe_catch(
 
 ```
 
-## summary PE
+## Summary PE
 
-```{r PE_summary}
+### Effort estimates
+```{r PE_effort_summary}
 
 # effort by section_num
 
@@ -335,6 +347,18 @@ estimates_pe$catch <- est_pe_catch(
   pivot_wider(names_from = section_num, values_from = E_sum) |>
   gt(caption = paste("Estimated effort (angler hours) by fishing section from", params$est_date_start, "to", params$est_date_end))
 
+```
+
+```{r plot_pe_effort_estimates, fig.cap= "Estimated effort (angler-hours) grouped by time strata, section and angler type (angler_final)."}
+# barplot of effort estimates by time stratum, section, and angler type
+plot_est_pe_effort(estimates_pe_effort = estimates_pe$effort)
+
+```
+
+
+### Catch estimates
+
+```{r PE_catch_summary}
 estimates_pe$catch |> 
         group_by(est_cg, section_num) |>
         summarise(
@@ -347,7 +371,7 @@ estimates_pe$catch |>
         values_to = "PE"
       ) |> 
   select(est_cg, section_num, estimate, PE, everything()) |> 
-  gt(groupname_col = "est_cg", caption = "Catch estimates for specified catch groups") |>
+  gt(groupname_col = "est_cg", caption = "Total estimates of catch during the monitoring period for each fish catch group.") |>
   fmt_number(-c(estimate, est_cg, section_num), decimals = 1) |> 
   tab_style(
     style = cell_fill(), locations = cells_body(columns = "PE")
@@ -355,8 +379,14 @@ estimates_pe$catch |>
   tab_style(
     style = cell_fill(), locations = cells_body(columns = "PE")
   )
+```
+
+```{r plot_pe_catch_estimates, fig.cap= "Catch estimates for each fish catch group, grouped by time strata, section, and angler type (angler_final)."}
+# barplot of catch estimates by catch group, time stratum, section, and angler type
+plot_est_pe_catch(estimates_pe_catch = estimates_pe$catch)
 
 ```
+
 
 # BSS estimation
 
