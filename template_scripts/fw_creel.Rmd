@@ -5,9 +5,11 @@ params:
   project_name: "District 14"
   fishery_name: "Skagit fall salmon 2022"
   est_date_start: "2022-09-01"
-  est_date_end: "2022-10-31"
+  est_date_end: "2022-11-30"
   est_catch_groups: !r data.frame(rbind(
-    c(species = 'Coho', life_stage = 'Adult', fin_mark = 'AD|UM', fate = 'Kept')
+    c(species = 'Coho', life_stage = 'Adult', fin_mark = 'AD|UM', fate = 'Kept'),
+    c(species = 'Chinook', life_stage = 'Adult', fin_mark = 'AD|UM', fate = 'Released'),
+    c(species = 'Bull Trout', life_stage = 'Adult', fin_mark = 'AD|UM', fate = 'Released')
     ))
   person_count_type: "group"
   period_pe: "week"
@@ -136,6 +138,16 @@ dwg$days |>
       palette = c("#C3C7C3", "#78B574"),
       domain = c("closed","open")) 
   )
+
+# reference for period (time_strata)
+
+dwg$days |> 
+    group_by(period) |> 
+    summarise(
+      min_event_date = min(event_date),
+      max_event_date = max(event_date)) |> 
+  gt::gt(caption = "Reference table containing the first and last date within each time stratum period in the monitoring period.")
+
 ```
 
 ## Effort
@@ -218,6 +230,7 @@ dwg_summ$effort_census <- prep_dwg_effort_census(
 #Aggregates index effort counts over locations within count_seq & section
 dwg_summ$effort_index <- prep_dwg_effort_index(
   eff = dwg$effort |> filter(between(event_date, as.Date(params$est_date_start), as.Date(params$est_date_end))))
+
 ```
 
 ## Index effort counts
@@ -359,6 +372,7 @@ plot_est_pe_effort(estimates_pe_effort = estimates_pe$effort)
 ### Catch estimates
 
 ```{r PE_catch_summary}
+
 estimates_pe$catch |> 
         group_by(est_cg, section_num) |>
         summarise(
@@ -381,10 +395,31 @@ estimates_pe$catch |>
   )
 ```
 
+```{r fig.cap= "Estimated catch per unit effort (fish / hour) grouped by catch group, time strata, section, and angler type."}
+plot_inputs_pe_cpue_period(
+    days = dwg$days,
+    dwg_summarized = dwg_summ,
+    daily_cpue_catch_est = inputs_pe$daily_cpue_catch_est
+)
+
+```
+
+
 ```{r plot_pe_catch_estimates, fig.cap= "Catch estimates for each fish catch group, grouped by time strata, section, and angler type (angler_final)."}
 # barplot of catch estimates by catch group, time stratum, section, and angler type
-plot_est_pe_catch(estimates_pe_catch = estimates_pe$catch)
+# plot_est_pe_catch(
+#   estimates_pe_catch = estimates_pe$catch,
+#   est_catch_group = "Chinook_Adult_AD|UM_Released")
 
+pe_catch_est_plots <- unique(estimates_pe$catch$est_cg) |> 
+  set_names() |> 
+  map(
+    ~plot_est_pe_catch(
+      estimates_pe_catch = estimates_pe$catch,
+      est_catch_group = .x)
+  )
+      
+pe_catch_est_plots
 ```
 
 
