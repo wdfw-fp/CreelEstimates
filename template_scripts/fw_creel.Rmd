@@ -8,8 +8,7 @@ params:
   est_date_end: "2022-11-30"
   est_catch_groups: !r data.frame(rbind(
     c(species = 'Coho', life_stage = 'Adult', fin_mark = 'AD|UM', fate = 'Kept'),
-    c(species = 'Chinook', life_stage = 'Adult', fin_mark = 'AD|UM', fate = 'Released'),
-    c(species = 'Bull Trout', life_stage = 'Adult', fin_mark = 'AD|UM', fate = 'Released')
+    c(species = 'Chinook', life_stage = 'Adult', fin_mark = 'AD|UM', fate = 'Released')
     ))
   person_count_type: "group"
   period_pe: "week"
@@ -139,6 +138,11 @@ dwg$days |>
       domain = c("closed","open")) 
   )
 
+```
+
+## Period-Dates reference
+```{r gt_period_dates_reference}
+
 # reference for period (time_strata)
 
 dwg$days |> 
@@ -208,7 +212,7 @@ dwg$catch |>
 
 # Shared data aggregation
 
-```{r prep_dwg_summ_shared_summary_objects, echo=FALSE}
+```{r prep_dwg_summ_shared_summary_objects, echo=FALSE, results = 'hide'}
 dwg_summ <- list() #intermediate objects wrangled from creel list elements
 
 #get count_type levels from interview to ensure alignment...?
@@ -242,7 +246,7 @@ plot_inputs_pe_index_effort_counts(effort_index = dwg_summ$effort_index)
 
 # PE estimation
 
-```{r prep_inputs_pe}
+```{r prep_inputs_pe, results = 'hide'}
 inputs_pe <- list()
 
 #derive a table of potentially section-anglerType-specific values to modify census expansions
@@ -367,7 +371,25 @@ estimates_pe$catch <- est_pe_catch(
 plot_est_pe_effort(estimates_pe_effort = estimates_pe$effort)
 
 ```
+### Catch rate (CPUE) estimates
 
+```{r pe_cpue_period_plots, results = 'hide'}
+
+pe_cpue_period_plots <- unique(inputs_pe$daily_cpue_catch_est$est_cg) |> 
+  set_names() |> 
+  map(
+    ~plot_inputs_pe_cpue_period(
+      days = dwg$days,
+      dwg_summarized = dwg_summ,
+      daily_cpue_catch_est = inputs_pe$daily_cpue_catch_est,
+      est_catch_group = .x)
+  )
+      
+pe_cpue_period_plots
+
+```
+
+Estimated catch per unit effort (fish/hour) grouped by catch group, period, section, angler type, and day-type. 
 
 ### Catch estimates
 
@@ -395,21 +417,9 @@ estimates_pe$catch |>
   )
 ```
 
-```{r fig.cap= "Estimated catch per unit effort (fish / hour) grouped by catch group, time strata, section, and angler type."}
-plot_inputs_pe_cpue_period(
-    days = dwg$days,
-    dwg_summarized = dwg_summ,
-    daily_cpue_catch_est = inputs_pe$daily_cpue_catch_est
-)
 
-```
-
-
-```{r plot_pe_catch_estimates, fig.cap= "Catch estimates for each fish catch group, grouped by time strata, section, and angler type (angler_final)."}
+```{r plot_pe_catch_estimates, results = 'hide'}
 # barplot of catch estimates by catch group, time stratum, section, and angler type
-# plot_est_pe_catch(
-#   estimates_pe_catch = estimates_pe$catch,
-#   est_catch_group = "Chinook_Adult_AD|UM_Released")
 
 pe_catch_est_plots <- unique(estimates_pe$catch$est_cg) |> 
   set_names() |> 
@@ -422,6 +432,7 @@ pe_catch_est_plots <- unique(estimates_pe$catch$est_cg) |>
 pe_catch_est_plots
 ```
 
+Estimated catch grouped by catch group, period, section, angler type,and day type. 
 
 # BSS estimation
 
