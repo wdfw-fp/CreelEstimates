@@ -3,15 +3,17 @@ title: "Freshwater Creel Estimates"
 date: "`r Sys.Date()`"
 params:
   project_name: "District 14"
-  fishery_name: "Skagit spring Chinook 2022 upper"
-  est_date_start: "2022-06-01"
-  est_date_end: "2022-07-15"
+  fishery_name: "Skagit spring Chinook 2021 upper"
+  est_date_start: "2021-06-01"
+  est_date_end: "2021-07-15"
   est_catch_groups: !r data.frame(rbind(
     c(species = 'Chinook', life_stage = 'Adult', fin_mark = 'UM', fate = 'Released'),
     c(species = 'Chinook', life_stage = 'Jack', fin_mark = 'UM', fate = 'Released'),
     c(species = 'Chinook', life_stage = 'Adult', fin_mark = 'AD', fate = 'Kept'),
     c(species = 'Chinook', life_stage = 'Jack', fin_mark = 'AD', fate = 'Kept'),
-    c(species = 'Steelhead', life_stage = 'Adult', fin_mark = 'UM', fate = 'Released')
+    c(species = 'Steelhead', life_stage = 'Adult', fin_mark = 'UM', fate = 'Released'),
+    c(species = 'Bull Trout|Dolly Varden', life_stage = 'Adult|UNK|NA', fin_mark = 'UM|NA|UNK', fate = 'Released'),
+    c(species = 'Bull Trout|Dolly Varden', life_stage = 'Adult|UNK|NA', fin_mark = 'UM|NA|UNK', fate = 'Kept')
     ))
   person_count_type: "group"
   period_pe: "week"
@@ -593,7 +595,7 @@ map_df(estimates_bss, ~.x$overview) |>
 if(nchar(params$output_location_filepath) > 1) {
   writexl::write_xlsx(
   c(set_names(dwg, paste0("dwg_", names(dwg))), set_names(dwg_summ, paste0("dwg_summ", names(dwg_summ)))),
-  path = file.path(here("fishery_analyses", params$project_name, params$fishery_name), paste0("fetch_dwg_", params$fishery_name, params$est_date_start, params$est_date_end, ".xlsx"))
+  path = file.path(here("fishery_analyses", params$project_name, params$fishery_name), paste0("fetch_dwg_", params$fishery_name, ".xlsx"))
   )
 }
 
@@ -601,14 +603,14 @@ if(nchar(params$output_location_filepath) > 1) {
 if(nchar(params$output_location_filepath) > 1) {
   writexl::write_xlsx(
   c(estimates_pe[rev(names(estimates_pe))]),
-  path = file.path(here("fishery_analyses", params$project_name, params$fishery_name), paste0("pe_output_", params$fishery_name, params$est_date_start, params$est_date_end, ".xlsx"))
+  path = file.path(here("fishery_analyses", params$project_name, params$fishery_name), paste0("pe_output_", params$fishery_name, ".xlsx"))
   )
 }
 
 # overview of BSS output
 # if(nchar(params$output_location_filepath) > 1) {
 #   writexl::write_xlsx(bss_overview,
-#   path = file.path(where("fishery_analyses", params$project_name, params$fishery_name), paste0("bss_overview_", params$fishery_name, params$est_date_start, params$est_date_end, ".xlsx"))
+#   path = file.path(where("fishery_analyses", params$project_name, params$fishery_name), paste0("bss_overview_", params$fishery_name, ".xlsx"))
 #   )
 # }
 ```
