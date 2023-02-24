@@ -41,7 +41,7 @@ prep_inputs_pe_ang_hrs_vhcl_trlr <- function(
     ) |> 
     dplyr::ungroup() |> 
     mutate(angler_hours_daily_mean = ang_per_vhcl_trlr * count_index_mean * day_length) |>
-    select(-day_length, -ang_per_vhcl_trlr, -count_index_mean) |> 
+    dplyr::select(-day_length, -ang_per_vhcl_trlr, -count_index_mean) |> 
     tidyr::drop_na(angler_hours_daily_mean) |> 
     arrange(section_num, event_date)
   
@@ -187,7 +187,7 @@ prep_inputs_pe_ang_hrs_vhcl_trlr <- function(
   #     
   # }
   
-    
+  }  
 #####    
   census_TI_expan <- inputs_pe$paired_census_index_counts
   
@@ -203,6 +203,6 @@ prep_inputs_pe_ang_hrs_vhcl_trlr <- function(
     mutate(
       ang_hrs_daily_mean_TI_expan = angler_hours_daily_mean * TI_expan_final
       )
-  }
+  
   return(angler_hours_daily_mean)
 }
