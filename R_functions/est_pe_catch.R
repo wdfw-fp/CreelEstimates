@@ -61,7 +61,14 @@ est_pe_catch <- function(
       ),
       l95 = est - qt(1-(0.05/2),df)*(var^0.5),
       u95 = est + qt(1-(0.05/2),df)*(var^0.5)
-    ) |> 
+    ) |>
+    # add fishery_name and water_body fields to output object 
+    dplyr::left_join(
+      dwg$effort |> 
+        filter(location_type == "Section") |> 
+        distinct(fishery_name, water_body, section_num),
+      by = "section_num") |> 
+    dplyr::relocate(fishery_name, water_body) |> 
     tidyr::drop_na(est_cg)
     
   return(est_catch)

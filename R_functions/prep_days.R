@@ -29,6 +29,7 @@ prep_days <- function(
     #Monday to Sunday weeks, see ?strptime
     week = as.numeric(format(event_date, "%W")),
     month = as.numeric(format(event_date, "%m")),
+    year = as.numeric(format(event_date, "%Y")),
     period = case_when(
       period_pe == "week" ~ week,
       period_pe == "month" ~ month,
@@ -42,18 +43,22 @@ prep_days <- function(
   days <- left_join(
     days,
     dplyr::rows_update(
-      tidyr::expand_grid(event_date = days$event_date, section = sections, open = TRUE)
+      tidyr::expand_grid(event_date = days$event_date, section_num = sections, open = TRUE)
       ,
-      closures |> 
+      closures |>
+        mutate(
+          event_date = as.Date(event_date, format="%Y-%m-%d"),
+          section_num = as.double(section_num)
+          ) |> 
         dplyr::filter(dplyr::between(event_date, date_begin, date_end)) |> 
-        dplyr::select(section, event_date) |> 
+        dplyr::select(section_num, event_date) |> 
         dplyr::mutate(open = FALSE)
       ,
-      by = c("section", "event_date")
+      by = c("section_num", "event_date")
       ) |> 
-      dplyr::arrange(section, event_date) |> 
-      dplyr::mutate(section = paste0("open_section_", section)) |> 
-      tidyr::pivot_wider(names_from = section, values_from = open)
+      dplyr::arrange(section_num, event_date) |> 
+      dplyr::mutate(section_num = paste0("open_section_", section_num)) |> 
+      tidyr::pivot_wider(names_from = section_num, values_from = open)
     ,
     by = "event_date"
   )

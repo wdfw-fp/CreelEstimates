@@ -111,8 +111,10 @@ dwg$days <- prep_days(
   long = mean(dwg$ll$centroid_lon),#can/should consider smarter options 
   period_pe = params$period_pe,
   sections = unique(dwg$effort$section_num),
-  closures = readr::read_csv(paste(here(),"input_files/closures.csv", sep = "/"), show_col_types = FALSE) |> 
-    dplyr::filter(fishery_name == params$fishery_name)
+  closures = dwg$closures
+  # ,
+  # closures = readr::read_csv(paste(here(),"input_files/closures.csv", sep = "/"), show_col_types = FALSE) |> 
+    # dplyr::filter(fishery_name == params$fishery_name)
   )
 ```
 

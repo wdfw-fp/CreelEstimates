@@ -5,7 +5,8 @@ fetch_dwg <- function(fishery_name, ...){
     effort = "https://data.wa.gov/resource/h9a6-g38s.csv",
     interview = "https://data.wa.gov/resource/rpax-ahqm.csv",
     catch = "https://data.wa.gov/resource/6y4e-8ftk.csv",
-    water_bodies = "https://data.wa.gov/resource/nbd2-vdmz.csv"
+    water_bodies = "https://data.wa.gov/resource/nbd2-vdmz.csv",
+    closures = "https://data.wa.gov/resource/6zm6-iep6.csv"
     #,gear = "https://data.wa.gov/resource/d2ks-afhz.csv" #currently unused?
   )
   
@@ -51,10 +52,20 @@ fetch_dwg <- function(fishery_name, ...){
   ) |> 
     utils::URLencode() |>
     readr::read_csv(show_col_types = F) |>
-    dplyr::select(interview_id, catch_id, species, run, life_stage, fin_mark, fate, fish_count) |> 
+    dplyr::select(interview_id, catch_id, species, run, life_stage, fin_mark, sex, fork_length_cm, fate, fish_count) |> 
     dplyr::mutate(
       catch_group = paste(species, life_stage, fin_mark, fate, sep = "_") # fish catch groups to estimate catch of 
     )
+  
+  dwg$closures <- paste0(
+    dwg_base$closures,
+    "?$where=fishery_name='",
+    fishery_name,
+    "'&$limit=100000"
+  ) |> 
+    utils::URLencode() |>
+    readr::read_csv(show_col_types = F) |>
+    dplyr::select(fishery_name, section_num, event_date)
   
   return(dwg)
 }
