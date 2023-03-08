@@ -16,6 +16,7 @@ plot_est_pe_catch <- function(
   estimates_pe$catch |>
     filter(est_cg == est_catch_group) |>
     ggplot(aes(period, est, fill = interaction(day_type, angler_final))) +
+    labs(fill = "Angler and day type groups") +
     geom_col(position = position_stack(), color = "black") +
     scale_color_brewer(palette = "Blues", aesthetics = c("fill")) +
     labs(title = est_catch_group, fill = "Angler and day type groups") +

@@ -56,10 +56,10 @@ plot_inputs_pe_cpue_period <- function(
   cpue_period |> 
     ggplot(aes(period, cpue_rom_period, fill = interaction(day_type, angler_final))) +
     # geom_jitter(aes(color = interaction(day_type, angler_final)), size = 3) +
-    geom_point(aes(fill = interaction(day_type, angler_final)), color = "black", pch = 21, size = 3) +
+    geom_point(aes(fill = interaction(day_type, angler_final)), color = "black", pch = 21, size = 3.25) +
+    labs(title = est_catch_group, fill = "Angler and day type groups") +
     # scale_x_date("", date_breaks = "7 days", date_labels =  "%m-%d") + scale_y_continuous("") + # if using dates for x-axis
     scale_color_brewer(palette = "Blues", aesthetics = c("fill")) +
-    labs(title = est_catch_group, color = "Angler and day type groups") +
     # geom_text(aes(label = n_obs), nudge_y = 0.02, color = "black", check_overlap = TRUE, size = 2.5) + #option to see sample size
     facet_wrap(~section_num, scales = "fixed", ncol = 2, labeller = label_wrap_gen(multi_line = F))
   
