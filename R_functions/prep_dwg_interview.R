@@ -18,8 +18,14 @@ prep_dwg_interview <- function(
   
   #coerce missing values to actual strings to allow params$est_catch_groups to include NAs alongside non-NA
   #to allow 'run' specification in params, add 'run' within across()
-  dwg_catch <- dwg_catch |> mutate(across(c(species, life_stage, fin_mark, fate), ~replace_na(., "NA")))
+  dwg_catch <- dwg_catch |> mutate(across(c(species, life_stage, fin_mark, fate), ~replace_na(as.character(.), "NA")))
     
+  if(person_count_type == "group"){
+    dwg_interview$person_count_final <- dwg_interview$total_group_count
+  } else {
+    dwg_interview$person_count_final <- dwg_interview$angler_count
+  }
+  
   interviews <- dwg_interview |> 
     filter(is.na(angler_type) | str_detect(angler_type, "ank|oat")) |> 
     dplyr::mutate(
@@ -48,14 +54,13 @@ prep_dwg_interview <- function(
         interview_time,
         fishing_end_time),
       fishing_time = round(as.numeric(end_time_final - fishing_start_time) / 3600, 5),
-      
-      person_count_final = case_when(
-        person_count_type == "group" ~ total_group_count,
-        person_count_type == "angler" ~ angler_count
-      ),
-      
+      # ,
+      # 
+      # person_count_final = case_when(
+      #   person_count_type == "group" ~ total_group_count,
+      #   person_count_type == "angler" ~ angler_count # EB this fails when using the "angler" person_count_type option
+      # ),
       vehicle_count = if_else(vehicle_count > person_count_final, person_count_final, vehicle_count),
-        
       fishing_time_total = fishing_time * person_count_final
     ) |>
     dplyr::filter(fishing_time >= min_fishing_time) |> 
@@ -95,7 +100,11 @@ prep_dwg_interview <- function(
       mutate(est_cg = paste0(unlist(est_catch_groups[.x,]), collapse = "_")) 
     ) |> 
     left_join(catches, by = c("est_cg", "interview_id")) |> 
-    mutate(fish_count = replace_na(fish_count, 0))
+    mutate(fish_count = replace_na(fish_count, 0)) |> 
+    mutate(
+      fishery_name = params$fishery_name # add back fishery_name
+    ) |> 
+    relocate(fishery_name)
   
   return(
     #list(interviews = interviews, catches = catches, int_cat = int_cat)

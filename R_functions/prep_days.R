@@ -61,7 +61,11 @@ prep_days <- function(
       tidyr::pivot_wider(names_from = section_num, values_from = open)
     ,
     by = "event_date"
-  )
+  ) |> 
+    mutate(
+      fishery_name = params$fishery_name
+    ) |> 
+    relocate(fishery_name)
   
   return(days)
 }
