@@ -7,25 +7,20 @@ prep_days <- function(
     period_pe,
     sections, #numeric vector of all possible sections to estimate
     closures, #tibble of fishery_name, section number and date of closures
+    day_length,
     ...){
   
   date_begin <- as.Date(date_begin, format="%Y-%m-%d")
   date_end <- as.Date(date_end, format="%Y-%m-%d")
   holidays <- as.Date(holidays, format="%Y-%m-%d")
   
+  # create tibble with dates and time period strata 
+  
   days <- tibble::tibble(
     event_date = seq.Date(date_begin, date_end, by = "day"),
     day = weekdays(event_date),
     day_type = if_else(day %in% weekends | event_date %in% holidays, "weekend", "weekday"),
     day_type_num = as.integer(c("weekend" = 1, "weekday" = 0)[day_type]),  #if_else(str_detect(day_type, "end"), 1, 0),
-    day_length = suncalc::getSunlightTimes(
-      date = event_date,
-      tz = "America/Los_Angeles",
-      lat = lat, lon = long,
-      keep=c("sunrise", "sunset")
-    ) |>
-      mutate(day_length = as.numeric((sunset + 3600) - (sunrise - 3600))) |>
-      pluck("day_length"),
     #Monday to Sunday weeks, see ?strptime
     week = as.numeric(format(event_date, "%W")),
     month = as.numeric(format(event_date, "%m")),
@@ -39,6 +34,36 @@ prep_days <- function(
     week_index = as.integer(factor(week, levels = unique(week))),
     month_index = as.integer(factor(month, levels = unique(month)))
     )
+
+  # get daylight hours from suncalc package, calculate dayl ength expansion fields, and select final day_length field 
+  # based on params$day_length_expansion
+  
+  day_length_values <- suncalc::getSunlightTimes(
+  date = days$event_date,
+  tz = "America/Los_Angeles",
+  lat = lat, lon = long,
+  keep=c("sunrise", "sunset", "dawn", "dusk")
+) |> 
+  select(event_date = date, sunrise, sunset, dawn, dusk) |> 
+  mutate(
+    day_length_dawn_dusk = as.numeric((dusk) - (dawn)),
+    day_length_sunrise_sunset = as.numeric((sunset) - (sunrise)),
+    day_length_night_closure = as.numeric((sunset + 3600) - (sunrise - 3600))
+  ) |> 
+  mutate(
+    day_length = case_when(
+      day_length == "dawn/dusk" ~ day_length_dawn_dusk,
+      day_length == "sunrise/sunset" ~ day_length_sunrise_sunset,
+      day_length == "night closure" ~ day_length_night_closure
+    )
+  ) |> 
+  select(event_date, day_length)
+
+  # join day_length to days tibble
+  
+  days <- days |> left_join(day_length_values, by = "event_date")
+
+  # expanding join to incorporate closure dates 
   
   days <- left_join(
     days,

@@ -3,17 +3,11 @@ title: "Freshwater Creel Estimates"
 date: "`r Sys.Date()`"
 params:
   project_name: "District 14"
-  fishery_name: "Skagit spring Chinook 2021 upper"
-  est_date_start: "2021-06-01"
-  est_date_end: "2021-07-15"
+  fishery_name: "Skagit winter steelhead 2023"
+  est_date_start: "2023-03-25"
+  est_date_end: "2023-04-03"
   est_catch_groups: !r data.frame(rbind(
-    c(species = 'Chinook', life_stage = 'Adult', fin_mark = 'UM', fate = 'Released'),
-    c(species = 'Chinook', life_stage = 'Jack', fin_mark = 'UM', fate = 'Released'),
-    c(species = 'Chinook', life_stage = 'Adult', fin_mark = 'AD', fate = 'Kept'),
-    c(species = 'Chinook', life_stage = 'Jack', fin_mark = 'AD', fate = 'Kept'),
-    c(species = 'Steelhead', life_stage = 'Adult', fin_mark = 'UM', fate = 'Released'),
-    c(species = 'Bull Trout|Dolly Varden', life_stage = 'Adult|UNK|NA', fin_mark = 'UM|NA|UNK', fate = 'Released'),
-    c(species = 'Bull Trout|Dolly Varden', life_stage = 'Adult|UNK|NA', fin_mark = 'UM|NA|UNK', fate = 'Kept')
+    c(species = 'Steelhead', life_stage = 'NA', fin_mark = 'UM', fate = 'Released')
     ))
   person_count_type: "group"
   period_pe: "week"
@@ -21,6 +15,7 @@ params:
   days_wkend: !r c('Saturday', 'Sunday')
   index_count_types: "Vehicle/Trailers Only"
   census_expansion: "Direct"
+  day_length_expansion: "dawn/dusk"
   min_fishing_time: 0.5
   output_location_filepath: "local"
   output_teams_name: "DFW-Team FP FW Creel Monitoring Program - General"
@@ -97,11 +92,6 @@ gt(tibble(param = names(params), value = as.character(params)))
 ```{r dwg_fetch, echo=FALSE}
 dwg <- fetch_dwg(params$fishery_name)
 
-# #to fix up Excel bunged date format
-# read_csv("input_files/closures.csv", show_col_types = FALSE) |> 
-#   mutate(event_date = as.Date(event_date, format = '%m/%d/%Y')) |> 
-#   write_csv("input_files/closures.csv")
-
 dwg$days <- prep_days(
   date_begin = params$est_date_start, 
   date_end = params$est_date_end, 
@@ -111,10 +101,8 @@ dwg$days <- prep_days(
   long = mean(dwg$ll$centroid_lon),#can/should consider smarter options 
   period_pe = params$period_pe,
   sections = unique(dwg$effort$section_num),
-  closures = dwg$closures
-  # ,
-  # closures = readr::read_csv(paste(here(),"input_files/closures.csv", sep = "/"), show_col_types = FALSE) |> 
-    # dplyr::filter(fishery_name == params$fishery_name)
+  closures = dwg$closures,
+  day_length = params$day_length_expansion
   )
 ```
 
@@ -583,6 +571,7 @@ map_df(estimates_bss, ~.x$overview) |>
   )
 
 ```
+
 
 # Save results
 
