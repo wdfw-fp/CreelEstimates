@@ -45,6 +45,10 @@ prep_dwg_effort_census <- function(eff, ...){
     tidyr::drop_na(angler_final) |> 
     dplyr::group_by(section_num, event_date, tie_in_indicator, count_sequence, angler_final, angler_final_int) |>
     dplyr::summarize(count_census = sum(count_quantity), .groups = "drop") |>
-    dplyr::arrange(section_num, event_date, count_sequence)
+    dplyr::arrange(section_num, event_date, count_sequence) |> 
+    mutate(
+      fishery_name = params$fishery_name # add back fishery_name
+    ) |> 
+    relocate(fishery_name)
   
 }

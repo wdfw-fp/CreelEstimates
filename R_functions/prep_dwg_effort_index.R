@@ -9,6 +9,10 @@ prep_dwg_effort_index <- function(eff, ...){
     ) |>
     dplyr::group_by(section_num, event_date, count_sequence, count_type) |>
     dplyr::summarise(count_index = sum(count_quantity), .groups = "drop") |> 
-    dplyr::arrange(section_num, event_date, count_sequence)
+    dplyr::arrange(section_num, event_date, count_sequence) |> 
+    mutate(
+      fishery_name = params$fishery_name # add back fishery_name
+    ) |> 
+    relocate(fishery_name)
   
 }
