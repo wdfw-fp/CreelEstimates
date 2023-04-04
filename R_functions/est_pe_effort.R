@@ -9,7 +9,8 @@
 
 est_pe_effort <- function(
     days,
-    pe_inputs_list, 
+    pe_inputs_list,
+    sections,
     ...
 ){
   
@@ -68,6 +69,8 @@ est_pe_effort <- function(
     #!! acts to reduce the first 2 terms' computed "variance", and is asymptotic to 0 for complete sampling
     #!! such that case logic prevents 0 total_effort_var at n_obs==N_days_open 
     dplyr::mutate(
+      project_name = params$project_name, # add back metadata to estimates 
+      fishery_name = params$fishery_name, # add back metadata to estimates 
       ang_hrs_var = replace_na(ang_hrs_var, 0),
       est = N_days_open * ang_hrs_mean,
       var = if_else(
@@ -77,7 +80,18 @@ est_pe_effort <- function(
       ),
       l95 = est - qt(1-(0.05/2),df)*(var^0.5),
       u95 = est + qt(1-(0.05/2),df)*(var^0.5)
-    )
-  
+    ) |>
+    left_join( # add back matching date information for stratum estimates
+      days |>
+                select(event_date, period, year) |> 
+                group_by(period) |> 
+                summarise(
+                  min_event_date = min(event_date),
+                  max_event_date = max(event_date)),
+      by = "period"
+    ) |> 
+    relocate(project_name, fishery_name) |> 
+    relocate(c(min_event_date, max_event_date), .before = period)
+    
   return(est_effort)
 }

@@ -51,10 +51,34 @@ plot_inputs_pe_cpue_period <- function(
       total_hours = sum(fishing_time_total),
       cpue_rom_period = total_catch / total_hours,
       .groups = "drop"
+    ) |>
+    left_join( # add back matching date information for stratum estimates
+      dwg$days |>
+        select(event_date, period, year) |> 
+        group_by(period) |> 
+        summarise(
+          min_event_date = min(event_date),
+          max_event_date = max(event_date)),
+      by = "period"
     )
   
+  # x axis uses period
+  
+  # cpue_period |> 
+  #   ggplot(aes(period, cpue_rom_period, fill = interaction(day_type, angler_final))) +
+  #   # geom_jitter(aes(color = interaction(day_type, angler_final)), size = 3) +
+  #   geom_point(aes(fill = interaction(day_type, angler_final)), color = "black", pch = 21, size = 3.25) +
+  #   labs(title = est_catch_group, fill = "Angler and day type groups") +
+  #   # scale_x_date("", date_breaks = "7 days", date_labels =  "%m-%d") + scale_y_continuous("") + # if using dates for x-axis
+  #   scale_color_brewer(palette = "Blues", aesthetics = c("fill")) +
+  #   # geom_text(aes(label = n_obs), nudge_y = 0.02, color = "black", check_overlap = TRUE, size = 2.5) + #option to see sample size
+  #   facet_wrap(~section_num, scales = "fixed", ncol = 2, labeller = label_wrap_gen(multi_line = F))
+  
+  
+  # x axis uses min_event_date
+  
   cpue_period |> 
-    ggplot(aes(period, cpue_rom_period, fill = interaction(day_type, angler_final))) +
+    ggplot(aes(min_event_date, cpue_rom_period, fill = interaction(day_type, angler_final))) +
     # geom_jitter(aes(color = interaction(day_type, angler_final)), size = 3) +
     geom_point(aes(fill = interaction(day_type, angler_final)), color = "black", pch = 21, size = 3.25) +
     labs(title = est_catch_group, fill = "Angler and day type groups") +
