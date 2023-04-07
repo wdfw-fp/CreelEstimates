@@ -52,7 +52,7 @@ prep_inputs_bss <- function(
     # num mat; open/closed by section; 0 defined as 1E-6 for model
     O = days |> 
       select(contains("section_")) |>
-      mutate(across(everything(), ~if_else(., 1, 0.00001))) |> 
+      mutate(across(everything(), ~if_else(., 1, 0.000001))) |> 
       as.matrix(),
     
     # Vehicle index effort counts 

@@ -5,9 +5,10 @@ params:
   project_name: "District 14"
   fishery_name: "Skagit winter steelhead 2023"
   est_date_start: "2023-03-25"
-  est_date_end: "2023-04-03"
+  est_date_end: "2023-04-05"
   est_catch_groups: !r data.frame(rbind(
-    c(species = 'Steelhead', life_stage = 'NA', fin_mark = 'UM', fate = 'Released')
+    c(species = 'Steelhead', life_stage = 'Adult', fin_mark = 'UM', fate = 'Released'),
+    c(species = 'Bull Trout|Dolly Varden', life_stage = 'Adult|UNK|NA', fin_mark = 'UM|NA|UNK', fate = 'Released')
     ))
   person_count_type: "group"
   period_pe: "week"
@@ -15,10 +16,9 @@ params:
   days_wkend: !r c('Saturday', 'Sunday')
   index_count_types: "Vehicle/Trailers Only"
   census_expansion: "Direct"
-  day_length_expansion: "dawn/dusk"
+  day_length_expansion: "night closure"
   min_fishing_time: 0.5
   output_location_filepath: "local"
-  output_teams_name: "DFW-Team FP FW Creel Monitoring Program - General"
 output:
   html_document:
     fig_caption: yes
@@ -87,6 +87,26 @@ purrr::walk(list.files(here("R_functions"), full.names = T), source)
 gt(tibble(param = names(params), value = as.character(params)))
 ```
 
+# Set day length times if using manual option 
+
+```{r day_length_inputs, echo = FALSE}
+
+day_length_inputs <- list()
+
+if(params$day_length_expansion == "manual"){
+# Step #1: Select general strategy for [earliest] start and [latest] end time
+    day_length_inputs$start_time<-c("manual") # enter either "sunrise" or "manual" 
+    day_length_inputs$end_time<-c("sunset")    # enter either "sunset"  or "manual" 
+  # Step #2A: If necessary, specify an offset (in hours) to the start and end times
+    # (e.g., if legal fishing occurs 1 hr. prior to sunrise & sunset, enter 1 below for both); enter 0 if no offset needed
+    day_length_inputs$start_adj<-c(1) # Specify an offset for the start time (in hours);    
+    day_length_inputs$end_adj<-c(1)   # Specify an offset for the end time (in hours);  
+  # Step #2B: If "manual" entered for "ui_start_time" or "ui_end_time", enter the earliest start and/or latest end time for a creel survey event
+    day_length_inputs$start_manual<-c("06:00:00") # Specify manual start time (format "HH:MM:SS", e.g., 6 AM = "06:00:00")
+    day_length_inputs$end_manual<-  c() # Specify manual end time (format "HH:MM:SS")  
+}
+```
+
 # Fetch raw data
 
 ```{r dwg_fetch, echo=FALSE}
@@ -102,7 +122,8 @@ dwg$days <- prep_days(
   period_pe = params$period_pe,
   sections = unique(dwg$effort$section_num),
   closures = dwg$closures,
-  day_length = params$day_length_expansion
+  day_length = params$day_length_expansion,
+  day_length_inputs = day_length_inputs
   )
 ```
 
@@ -483,28 +504,31 @@ for(ecg in names(inputs_bss)) {
   
   ecg_fit <- fit_bss(
     bss_inputs_list = inputs_bss[[ecg]],
-    n_iter = 100
+    n_iter = 2000
   )
   
   ecg_keep <- list()
   
   ecg_keep$overview <- get_bss_overview(bss_fit = ecg_fit, ecg = ecg)
   
+  ecg_keep$cpue_daily <- get_bss_cpue_daily(bss_fit = ecg_fit, ecg = ecg)
+  
   ecg_keep$catch_daily <- get_bss_catch_daily(bss_fit = ecg_fit, ecg = ecg)
   
   ecg_keep$effort_daily <- get_bss_effort_daily(bss_fit = ecg_fit, ecg = ecg)
+  
+  ecg_keep$draws <- extract(ecg_fit)
   
   # #can write wrapper on tidybayes::spread_draws or write our own
   # #to repackage full posterior of key estimated quantities
   # #such as daily catch or something else?
   # ecg_keep$catch_daily_draws <- ecg_fit |> tidybayes::spread_draws(C[s][d,g]) #long, each index still a col 
   # ecg_keep$catch_daily_draws <- ecg_fit |> tidybayes::spread_draws(C[s][d,g] | g) #a bit wider, bank/boat pivoted wide 
-  
+
   estimates_bss[[ecg]] <- ecg_keep
-  #a little cleanup never hurts?
+    
   rm(ecg_fit, ecg_keep); gc()
 }
-
 
 ```
 
@@ -525,6 +549,89 @@ map_df(estimates_bss, ~.x$overview) |>
   )
 
 ```
+
+## plot probability density function of effort and catch 
+
+```{r}
+
+season_results <- map_df(estimates_bss, ~.x$draws$C_sum) |> 
+  mutate(iter = row_number()) |> 
+  pivot_longer(cols = -(iter), names_to = "est_cg", values_to = "C_sum")
+
+map_df(estimates_bss, ~.x$draws$C_sum) |> 
+  mutate(iter = row_number()) |> 
+  pivot_longer(cols = -(iter), names_to = "est_cg", values_to = "C_sum") |> 
+  ggplot(aes(x=C_sum,fill=C_sum)) +
+  facet_wrap(~ est_cg, ncol=1,scales = 'free') +
+  theme_bw() +
+  geom_density() +
+  ylab(NULL) +
+  geom_vline(
+    season_results |> 
+      group_by(est_cg) |> 
+      summarise(C_sum = quantile(C_sum, c(0.025, 0.5, 0.975)), q = c(0.025, 0.5, 0.975)), mapping=aes(xintercept=C_sum,group=est_cg),linetype="dashed") +
+theme(legend.title = element_blank())
+    
+```
+
+
+
+## plot daily catch BSS
+
+```{r}
+
+map_df(estimates_bss, ~.x$catch_daily) |> 
+    ggplot(aes(x = event_date, y = `50%`, fill = angler_final, color = angler_final)) +
+    geom_ribbon(aes(ymin = `2.5%`, ymax = `97.5%`), alpha = 0.2, color = "transparent") +
+    geom_line(lwd = 1) +
+    ylab("Median (50%) catch") +
+    xlab("Date") +
+    labs(color = "Angler type", fill = "Angler type") +
+    scale_x_date() +
+    theme_bw() +
+    facet_wrap(~section_num + est_cg)
+
+```
+
+
+## plot daily effort BSS
+
+```{r}
+
+estimates_bss[[1]]$effort_daily |> 
+    ggplot(aes(x = event_date, y = `50%`, fill = angler_final, color = angler_final)) +
+    geom_ribbon(aes(ymin = `2.5%`, ymax = `97.5%`), alpha = 0.2, color = "transparent") +
+    geom_line(lwd = 1) +
+    ylab("Median (50%) effort (angler hours)") +
+    xlab("Date") +
+    labs(color = "Angler type", fill = "Angler type") +
+    scale_x_date() +
+    theme_bw() +
+    facet_wrap(~section_num, nrow = estimates_bss[[1]]$effort_daily$section_num |> n_distinct())
+
+
+```
+
+
+## plot daily CPUE BSS
+
+```{r}
+
+map_df(estimates_bss, ~.x$cpue_daily) |> 
+    ggplot(aes(x = event_date, y = `50%`, fill = angler_final, color = angler_final)) +
+    geom_ribbon(aes(ymin = `2.5%`, ymax = `97.5%`), alpha = 0.2, color = "transparent") +
+    geom_line(lwd = 1) +
+    ylab("Median (50%) catch per unit effort(fish/hour") +
+    xlab("Date") +
+    labs(color = "Angler type", fill = "Angler type") +
+    scale_x_date() +
+    theme_bw() +
+    facet_wrap(~section_num + est_cg)
+
+```
+
+
+
 
 # PE/BSS combined summary
 
