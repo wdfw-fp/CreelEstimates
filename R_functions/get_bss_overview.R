@@ -12,5 +12,6 @@ get_bss_overview <- function(bss_fit, ecg, ...){
         purrr::map_dbl(~.x[, "divergent__"] |> sum()) |> #n-chains cols of n-divergent transitions per chain
         sum() |> as_tibble_col(column_name = "n_div")
     ) |> 
-    mutate(est_cg = ecg)
+    mutate(est_cg = ecg) |> 
+    relocate(estimate, est_cg)
 }
