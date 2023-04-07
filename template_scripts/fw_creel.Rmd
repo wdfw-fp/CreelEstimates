@@ -552,7 +552,7 @@ map_df(estimates_bss, ~.x$overview) |>
 
 ## plot probability density function of effort and catch 
 
-```{r}
+```{r, eval=FALSE}
 
 season_results <- map_df(estimates_bss, ~.x$draws$C_sum) |> 
   mutate(iter = row_number()) |> 
@@ -578,7 +578,7 @@ theme(legend.title = element_blank())
 
 ## plot daily catch BSS
 
-```{r}
+```{r, eval=FALSE}
 
 map_df(estimates_bss, ~.x$catch_daily) |> 
     ggplot(aes(x = event_date, y = `50%`, fill = angler_final, color = angler_final)) +
@@ -596,7 +596,7 @@ map_df(estimates_bss, ~.x$catch_daily) |>
 
 ## plot daily effort BSS
 
-```{r}
+```{r,  eval=FALSE}
 
 estimates_bss[[1]]$effort_daily |> 
     ggplot(aes(x = event_date, y = `50%`, fill = angler_final, color = angler_final)) +
@@ -615,7 +615,7 @@ estimates_bss[[1]]$effort_daily |>
 
 ## plot daily CPUE BSS
 
-```{r}
+```{r, eval=FALSE}
 
 map_df(estimates_bss, ~.x$cpue_daily) |> 
     ggplot(aes(x = event_date, y = `50%`, fill = angler_final, color = angler_final)) +
