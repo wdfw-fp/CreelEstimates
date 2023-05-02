@@ -3,12 +3,14 @@ title: "Freshwater Creel Estimates"
 date: "`r Sys.Date()`"
 params:
   project_name: "District 14"
-  fishery_name: "Skagit winter steelhead 2023"
-  est_date_start: "2023-03-25"
-  est_date_end: "2023-04-05"
+  fishery_name: "Skagit fall salmon 2022"
+  est_date_start: "2022-09-01"
+  est_date_end: "2022-11-30"
   est_catch_groups: !r data.frame(rbind(
-    c(species = 'Steelhead', life_stage = 'Adult', fin_mark = 'UM', fate = 'Released'),
-    c(species = 'Bull Trout|Dolly Varden', life_stage = 'Adult|UNK|NA', fin_mark = 'UM|NA|UNK', fate = 'Released')
+    c(species = 'Chinook', life_stage = 'Adult', fin_mark = 'UM', fate = 'Released'),
+    c(species = 'Chinook', life_stage = 'Adult', fin_mark = 'AD', fate = 'Kept'),
+    c(species = 'Chinook', life_stage = 'Adult', fin_mark = 'AD|UM', fate = 'Released|Kept'),
+    c(species = 'Coho', life_stage = 'Adult', fin_mark = 'UM', fate = 'Kept')
     ))
   person_count_type: "group"
   period_pe: "week"
@@ -384,7 +386,8 @@ estimates_pe$catch <- est_pe_catch(
 
 ```{r plot_pe_effort_estimates, fig.cap= "Estimated effort (angler-hours) grouped by time strata, section and angler type (angler_final)."}
 # barplot of effort estimates by time stratum, section, and angler type
-plot_est_pe_effort(estimates_pe_effort = estimates_pe$effort)
+plot_est_pe_effort(estimates_pe_effort = estimates_pe$effort,
+                   period_pe = params$period_pe)
 
 ```
 ### Catch rate (CPUE) estimates
@@ -398,7 +401,8 @@ pe_cpue_period_plots <- unique(inputs_pe$daily_cpue_catch_est$est_cg) |>
       days = dwg$days,
       dwg_summarized = dwg_summ,
       daily_cpue_catch_est = inputs_pe$daily_cpue_catch_est,
-      est_catch_group = .x)
+      est_catch_group = .x,
+      period_pe = params$period_pe)
   )
       
 pe_cpue_period_plots
@@ -442,7 +446,8 @@ pe_catch_est_plots <- unique(estimates_pe$catch$est_cg) |>
   map(
     ~plot_est_pe_catch(
       estimates_pe_catch = estimates_pe$catch,
-      est_catch_group = .x)
+      est_catch_group = .x,
+      period_pe = params$period_pe)
   )
       
 pe_catch_est_plots
@@ -621,7 +626,7 @@ map_df(estimates_bss, ~.x$cpue_daily) |>
     ggplot(aes(x = event_date, y = `50%`, fill = angler_final, color = angler_final)) +
     geom_ribbon(aes(ymin = `2.5%`, ymax = `97.5%`), alpha = 0.2, color = "transparent") +
     geom_line(lwd = 1) +
-    ylab("Median (50%) catch per unit effort(fish/hour") +
+    ylab("Median (50%) catch per unit effort (fish/hour") +
     xlab("Date") +
     labs(color = "Angler type", fill = "Angler type") +
     scale_x_date() +
