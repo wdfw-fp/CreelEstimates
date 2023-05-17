@@ -41,8 +41,7 @@ fetch_dwg <- function(fishery_name, ...){
     utils::URLencode() |>
     readr::read_csv(show_col_types = F) |>
     dplyr::select(
-      -created_datetime, -modified_datetime,
-      -state_residence, -zip_code)
+      -created_datetime, -modified_datetime)
   
   dwg$catch <- paste0(
     dwg_base$catch,
