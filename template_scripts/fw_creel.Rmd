@@ -3,9 +3,9 @@ title: "Freshwater Creel Estimates"
 date: "`r Sys.Date()`"
 params:
   project_name: "District 14"
-  fishery_name: "Skagit fall salmon 2022"
-  est_date_start: "2022-09-01"
-  est_date_end: "2022-11-30"
+  fishery_name: "Skagit fall salmon 2021"
+  est_date_start: "2021-09-01"
+  est_date_end: "2021-11-30"
   est_catch_groups: !r data.frame(rbind(
     c(species = 'Chinook', life_stage = 'Adult', fin_mark = 'UM', fate = 'Released'),
     c(species = 'Chinook', life_stage = 'Adult', fin_mark = 'AD', fate = 'Kept'),
@@ -54,6 +54,13 @@ if (!dir.exists(here("fishery_analyses", params$project_name, params$fishery_nam
   paste(here("fishery_analyses", params$project_name, params$fishery_name), "folder created")
 }
 
+# evaluate if analysis .Rmd already exists, if not then generate new file 
+if (file.exists(here("fishery_analyses", params$project_name, params$fishery_name, 
+       paste0("fw_creel_", params$fishery_name, ".Rmd")))) {
+  
+  print("Analysis .Rmd file already exists")
+  
+} else {
 #save the master template with new params arguments for the fishery
 rstudioapi::documentSave(rstudioapi::getActiveDocumentContext()$id)
 #make an appropriately renamed copy
@@ -67,6 +74,7 @@ rstudioapi::documentOpen(
   here("fishery_analyses", params$project_name, params$fishery_name, 
        paste0("fw_creel_", params$fishery_name, ".Rmd"))
 )
+}
 
 ```
 
