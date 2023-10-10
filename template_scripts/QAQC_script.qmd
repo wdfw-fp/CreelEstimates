@@ -18,23 +18,23 @@ format:
     toc: true
     number-sections: false
     page-layout: article
-    embeded-resources: false # set to 'true' if sharing HTML output
-    css: styles.css
+    embeded-resources: true # set to 'true' if sharing HTML output
 ---
+
 Overview
 
-This Quarto document is a tool for WDFW freshwater creel project staff and scientists to perform quality assurance and quality control checks on angler catch and effort data. It may be used in-season during the review of recently collected data or as a companion document to the fw_creel.Rmd analysis.
+This Quarto document is a tool for WDFW freshwater creel project staff and scientists to perform quality assurance and quality control (QAQC) checks on angler catch and effort data. It may be used in-season during the review of recently collected data or as a companion document to the fw_creel.Rmd analysis.
 
 Tables offer "Preview" and "Full Table" tabs. Previews display the first five rows, number of any ellipsed rows, and the last row of the table. Full tables display all rows.
 
 Instructions
 
-
 ```{r setup}
 # options(width = 160)
 
 #load packages and install if necessary
-pacman::p_load(tidyverse, here, gt)
+pacman::p_load(tidyverse, here, gt, DataExplorer,
+               install = TRUE)
 
 #load top level functions
 purrr::walk(list.files(here("R_functions"), pattern = "\\.R$", full.names = TRUE), source)
@@ -42,10 +42,9 @@ purrr::walk(list.files(here("R_functions"), pattern = "\\.R$", full.names = TRUE
 #load QAQC functions
 purrr::walk(list.files(here("R_functions/QAQC"), full.names = TRUE), source)
 
-```
+#establish fishery-specific sub-folders as necessary. Copies templates into new folders.
+# establish_dir(params) # !!! off during development
 
-```{r file_structure}
-establish_dir(params)
 ```
 
 ```{r fetch_data}
@@ -53,6 +52,266 @@ establish_dir(params)
 dwg <- fetch_dwg(params$fishery_name)
 
 #add FishApps creel_event_id URLs
+dwg$effort <- dwg$effort %>%
+  mutate(fishapps_event_link = paste0("https://apps.wdfw-fish.us/creel/creel_event/", creel_event_id))
+
 dwg$interview <- dwg$interview %>% 
   mutate(fishapps_event_link = paste0("https://apps.wdfw-fish.us/creel/creel_event/", creel_event_id))
+
+##for catch, add creel_event_id by interview_id and filter to rows with catch_id
+dwg$catch <- dwg$interview %>% 
+  select(creel_event_id, interview_id) %>%
+  left_join(dwg$catch, by = "interview_id") %>% 
+  filter(!is.na(catch_id)) %>% 
+  mutate(fishapps_event_link = paste0("https://apps.wdfw-fish.us/creel/creel_event/", creel_event_id))
+
+```
+
+# Overview
+
+Data Structure
+
+Could use DataExplorer::introduce() on each dataframe within the list. Then gather those outputs as rows which identify their respective dataset and pipe into an overview gt() table.
+
+## Sampling Dates Alignment with Schedule
+
+How do the sampling dates differ from the randomly generated schedule pre-season. There may be reasons to deviate from the dates/times in the schedule, but this plot should help identify any unexpected deviations.
+
+-   1:1 line scatter plot?
+
+## Angler ZIP Code Distribution
+
+-   Zip code map with option to export?
+
+```{r map_check}
+#check if data has ZIP code values/column. If so, plot. If not, hide.
+```
+
+## Missing values
+
+::: callout-warning
+The following plots show missing values within the data.
+:::
+
+```{r}
+missing_config <- list(
+     panel.background = element_rect(fill = "white", colour = NA),
+     panel.border = element_blank(),
+     panel.grid.major = element_blank(),
+     panel.grid.minor = element_blank(),
+     axis.line = element_line(color = "black"),
+     legend.key = element_blank(),
+     strip.background = element_rect(fill = "white", colour = "black", linewidth = rel(2))
+)
+
+#Effort
+DataExplorer::plot_missing(dwg$effort, missing_only = TRUE,
+                           theme_config = missing_config,
+                           title = "Columns in Effort Data with Missing Values")
+#Interviews
+DataExplorer::plot_missing(dwg$interview, missing_only = TRUE,
+                           theme_config = missing_config,
+                           title = "Columns in Interview Data with Missing Values")
+#Catch
+DataExplorer::plot_missing(dwg$catch, missing_only = TRUE,
+                           theme_config = missing_config,
+                           title = "Columns in Catch Data with Missing Values")
+
+#customizing plot_missing further
+#https://stackoverflow.com/questions/55941265/how-to-change-colors-and-band-labels-in-data-explorers-plot-missing-function
+```
+
+## Environmental Conditions
+
+-   Streamflow graphs?
+
+-   Local weather summary for fishery-to-date?
+
+# Events
+
+Not currently accessed using our fetch_dwg() function, although it could be adapted to download data from event table too.
+
+-   Questionable catch: wild steelhead, PS wild chinook
+
+-   Not verified
+
+-   N/A Survey End Time
+
+# Effort
+
+```{r effort_index_count_plots}
+#index effort counts per shift by surveyor
+fig_index_counts <- dwg$effort %>% 
+  filter(survey_type == "Index") %>% 
+  group_by(event_date, surveyor_num) %>% 
+  reframe(count = count_sequence, sum = sum(count_sequence))
+
+fig_index_counts %>%
+  ggplot(aes(x = event_date, y = count, fill = factor(surveyor_num))) +
+  geom_bar(stat = "identity", position = "dodge") +
+  facet_wrap(vars(surveyor_num))
+
+fig_index_counts %>%
+  ggplot(aes(x = event_date, y = sum, color = factor(surveyor_num))) +
+  geom_line()
+```
+
+-   count of \# index sites counted per section
+
+-   effort trend line by section
+
+------------------------------------------------------------------------
+
+-   Effort Count Sequence
+
+-   Effort End Time \> Start Time
+
+# Interviews
+
+```{r}
+
+
+foo <- dwg$interview %>% select(angler_count, interview_number, total_group_count,
+                                pole_count, vehicle_count, trailer_count, surveyor_num)
+
+DataExplorer::plot_histogram(foo, ncol = 2, ggtheme = theme_minimal())
+```
+
+## Incomplete Trip Status with Fishing End Time
+
+Table of interviews with a recorded 'fishing_end_time' but have a 'trip_status" as incomplete. All interviews with a 'fishing_end_time' are assumed to be completed trips
+
+```{r trip status check}
+#select data
+foo <- dwg$interview %>%
+  filter(trip_status == "Incomplete" & !is.na(fishing_end_time))
+
+#generate table if QAQC check fails, print message otherwise
+if(nrow(foo) >= 1) {
+  foo <- dwg$interview %>%
+    filter(trip_status == "Incomplete" & !is.na(fishing_end_time)) %>%
+    select(event_date, water_body, project_name, interview_number, trip_status,
+           fishing_start_time, fishing_end_time, creel_event_id, fishapps_event_link, interview_number) %>%
+    mutate(QAQC_check = "FAIL") %>%
+    relocate(QAQC_check, interview_number) %>%
+    gt_preview() %>%
+      fmt(columns = 'fishapps_event_link', fns = make_hyperlink)
+
+  foo <- flag_qaqc(foo, "QAQC_check")
+  foo
+  
+} else {
+  cat("There are no interviews with a 'fishing_end_time' value and an Incomplete 'trip_status'")
+}
+```
+
+## Missing Trip Status
+
+The table below contains interviews without a value for the column 'trip_status'. All interviews are expected to either have 'trip_status' of either "Complete" or "Incomplete".
+
+::: panel-tabset
+## Preview
+
+```{r no_trip_status_preview}
+#check if any trip_status values are blank
+foo <- dwg$interview %>%
+  filter(trip_status == "Incomplete")
+
+# int_QC2 <- any(is.na(dwg$interview$trip_status))
+
+#show table or print message
+# if(int_QC2) {
+if (nrow(foo) >= 1) {
+  foo <- dwg$interview %>%
+    # filter(is.na(trip_status)) %>%
+    filter(trip_status == "Incomplete") %>%
+    select(event_date, water_body, project_name, interview_number,trip_status, 
+           fishing_start_time, fishing_end_time, interview_time, fishapps_event_link) %>% 
+    mutate(QAQC_check = "FAIL") %>% relocate(QAQC_check) %>%
+    gt_preview() %>% 
+      fmt(columns = 'fishapps_event_link', fns = make_hyperlink)
+  
+  foo <- flag_qaqc(foo, "QAQC_check")
+  foo
+  
+} else {
+  cat("There are no interviews with missing 'trip_status' values.")
+}
+```
+
+## Full Table
+
+```{r no_trip_status_full}
+#check if any trip_status values are blank
+foo <- dwg$interview %>%
+  filter(trip_status == "Incomplete")
+
+# int_QC2 <- any(is.na(dwg$interview$trip_status))
+
+#show table or print message
+# if(int_QC2) {
+if (nrow(foo) >= 1) {
+  foo <- dwg$interview %>%
+    # filter(is.na(trip_status)) %>%
+    filter(trip_status == "Incomplete") %>%
+    select(event_date, water_body, project_name, interview_number,trip_status, 
+           fishing_start_time, fishing_end_time, interview_time, fishapps_event_link) %>% 
+    mutate(QAQC_check = "FAIL") %>% relocate(QAQC_check) %>%
+    gt()
+    # fmt(columns = 'fishapps_event_link', fns = make_hyperlink) %>% 
+
+  
+  foo <- flag_qaqc(foo, "QAQC_check")
+  foo
+  
+} else {
+  cat("There are no interviews with missing 'trip_status' values.")
+}
+```
+:::
+
+-   Fishing End Time \> Interview Time
+
+-   Fishing Star Time \> Fishing End Time
+
+-   Trailer Count \> Vehicle Count
+
+-   Angler Count \> Group Count
+
+-   Vehicle count \> Group Count
+
+-   N/A Previously Interviewed
+
+-   N/A Fishing Location
+
+-   N/A Fishery Name
+
+# Catch
+
+Bar plots of each column within the catch table.
+
+```{r catch_bar_plot1}
+#Bar plots
+DataExplorer::plot_bar(dwg$catch, ncol = 1, maxcat = 15)
+
+```
+
+Bar plots of each column within the catch table, grouped by "**fin_mark**". The horizontal axis represents a proportion.
+
+```{r catch_bar_plot2}
+#Bar plots
+DataExplorer::plot_bar(dwg$catch, ncol = 1, maxcat = 15, by = "fin_mark") 
+```
+
+Bar plots of each column within the catch table, grouped by "**fate**". The horizontal axis represents a proportion.
+
+```{r catch_bar_plot3}
+#Bar plots
+DataExplorer::plot_bar(dwg$catch, ncol = 1, maxcat = 15, by = "fate") 
+```
+
+Histogram of fish_count.
+
+```{r}
+DataExplorer::plot_histogram(dwg$catch$fish_count)
 ```
