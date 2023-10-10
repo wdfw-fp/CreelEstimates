@@ -1,0 +1,58 @@
+---
+# -------------------------------- #
+# USER INPUTS - CHECK EACH SESSION #
+params:
+  project_name: "District 14"
+  fishery_name: "Skagit fall salmon 2021"
+  est_date_start: "2021-09-01"
+  est_date_end: "2021-11-30"
+# -------------------------------- #
+title: "Freshwater Creel Data QAQC Dashboard"
+date: last-modified
+execute:
+  echo: false
+  warning: false
+format: 
+  html:
+    theme: litera
+    toc: true
+    number-sections: false
+    page-layout: article
+    embeded-resources: false # set to 'true' if sharing HTML output
+    css: styles.css
+---
+Overview
+
+This Quarto document is a tool for WDFW freshwater creel project staff and scientists to perform quality assurance and quality control checks on angler catch and effort data. It may be used in-season during the review of recently collected data or as a companion document to the fw_creel.Rmd analysis.
+
+Tables offer "Preview" and "Full Table" tabs. Previews display the first five rows, number of any ellipsed rows, and the last row of the table. Full tables display all rows.
+
+Instructions
+
+
+```{r setup}
+# options(width = 160)
+
+#load packages and install if necessary
+pacman::p_load(tidyverse, here, gt)
+
+#load top level functions
+purrr::walk(list.files(here("R_functions"), pattern = "\\.R$", full.names = TRUE), source)
+
+#load QAQC functions
+purrr::walk(list.files(here("R_functions/QAQC"), full.names = TRUE), source)
+
+```
+
+```{r file_structure}
+establish_dir(params)
+```
+
+```{r fetch_data}
+#import data using fishery_name param
+dwg <- fetch_dwg(params$fishery_name)
+
+#add FishApps creel_event_id URLs
+dwg$interview <- dwg$interview %>% 
+  mutate(fishapps_event_link = paste0("https://apps.wdfw-fish.us/creel/creel_event/", creel_event_id))
+```
