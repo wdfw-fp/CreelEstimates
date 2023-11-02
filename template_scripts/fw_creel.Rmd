@@ -21,6 +21,9 @@ params:
   day_length_expansion: "night closure"
   min_fishing_time: 0.5
   output_location_filepath: "local"
+  model_type: "PE"
+  data_grade: "provisional"
+  export: FALSE
 output:
   html_document:
     fig_caption: yes
@@ -90,6 +93,12 @@ rstan_options(auto_write = TRUE)
 
 purrr::walk(list.files(here("R_functions"), full.names = T), source)
 ```
+
+```{r generate_analysis_id}
+#Establishes a unique 'analysis_id' for each session and populates an 'analysis_lut".
+generate_analysis_uuid(params)
+```
+
 
 # `r paste(params$fishery_name)`
 
@@ -724,4 +733,8 @@ if(nchar(params$output_location_filepath) > 1) {
 #   path = file.path(where("fishery_analyses", params$project_name, params$fishery_name), paste0("bss_overview_", params$fishery_name, ".xlsx"))
 #   )
 # }
+
+
+# export_estimates(params, estimates_pe, estimates_bss)
+
 ```
