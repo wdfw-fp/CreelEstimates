@@ -2,10 +2,10 @@
 # -------------------------------- #
 # USER INPUTS - CHECK EACH SESSION #
 params:
-  project_name: "District 14"
-  fishery_name: "Skagit fall salmon 2021"
-  est_date_start: "2021-09-01"
-  est_date_end: "2021-11-30"
+  project_name: "District 16"
+  fishery_name: "Skagit fall salmon 2022"
+  est_date_start: "2023-09-01"
+  est_date_end: "2023-11-30"
 # -------------------------------- #
 title: "Freshwater Creel Data QAQC Dashboard"
 date: last-modified
@@ -33,7 +33,7 @@ Instructions
 # options(width = 160)
 
 #load packages and install if necessary
-pacman::p_load(tidyverse, here, gt, DataExplorer,
+pacman::p_load(tidyverse, here, gt, DataExplorer, data.table,
                install = TRUE)
 
 #load top level functions
@@ -43,7 +43,7 @@ purrr::walk(list.files(here("R_functions"), pattern = "\\.R$", full.names = TRUE
 purrr::walk(list.files(here("R_functions/QAQC"), full.names = TRUE), source)
 
 #establish fishery-specific sub-folders as necessary. Copies templates into new folders.
-# establish_dir(params) # !!! off during development
+establish_dir(params) # !!! off during development
 
 ```
 
@@ -79,14 +79,6 @@ How do the sampling dates differ from the randomly generated schedule pre-season
 
 -   1:1 line scatter plot?
 
-## Angler ZIP Code Distribution
-
--   Zip code map with option to export?
-
-```{r map_check}
-#check if data has ZIP code values/column. If so, plot. If not, hide.
-```
-
 ## Missing values
 
 ::: callout-warning
@@ -105,15 +97,15 @@ missing_config <- list(
 )
 
 #Effort
-DataExplorer::plot_missing(dwg$effort, missing_only = TRUE,
+plot_freq_missing(dwg$effort, missing_only = TRUE,
                            theme_config = missing_config,
                            title = "Columns in Effort Data with Missing Values")
 #Interviews
-DataExplorer::plot_missing(dwg$interview, missing_only = TRUE,
+plot_freq_missing(dwg$interview, missing_only = TRUE,
                            theme_config = missing_config,
                            title = "Columns in Interview Data with Missing Values")
 #Catch
-DataExplorer::plot_missing(dwg$catch, missing_only = TRUE,
+plot_freq_missing(dwg$catch, missing_only = TRUE,
                            theme_config = missing_config,
                            title = "Columns in Catch Data with Missing Values")
 
