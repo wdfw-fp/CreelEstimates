@@ -21,7 +21,6 @@ params:
   day_length_expansion: "night closure"
   min_fishing_time: 0.5
   output_location_filepath: "local"
-  model_type: "PE"
   data_grade: "provisional"
   export: FALSE
 output:
@@ -735,6 +734,6 @@ if(nchar(params$output_location_filepath) > 1) {
 # }
 
 
-# export_estimates(params, estimates_pe, estimates_bss)
+export_estimates(params, estimates_pe, estimates_bss)
 
 ```

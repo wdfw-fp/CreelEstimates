@@ -4,31 +4,15 @@
 #add roxygen2-style description comments
 
 export_estimates <- function(params, estimates_pe, estimates_bss) {
-  # Input validation
-  if(!is.list(estimates_pe & estimates_bss)) {
-    stop("Inputs 'estimates_pe' and 'estimates_bss' must be a list.")
-  }
-  # ------------------------------------------------------------------------#
-  # Extract parameters
-  model_type <- params$model_type
-  data_grade <- params$data_grade
-  export_data <- params$export_data
+  #Initialize objects for storing processed data
+  transformed_pe_data <- as.list(NULL)
+  transformed_bss_data <- as.list(NULL)
   
-  # Initialize final output
-  creel_estimates <- as.list(NULL)
-  
-  # Process estimates to common format
-  if(model_type == "PE") {
-    
+  #Internal function to process estimates_pe if supplied
+  process_pe <- function(estimates_pe) {
     ####################################################################################################### #
     # PE wrangling ####
     ####################################################################################################### #
-
-    # Pre-processing 
-  
-    # Initialize intermediate object for PE processing steps
-    # Place to store tables used to produce formatted output
-    transformed_pe_data <- as.list(NULL)
     
     # Incorporate model_type-specific outputs
     #PE
@@ -39,13 +23,13 @@ export_estimates <- function(params, estimates_pe, estimates_bss) {
     #PE effort
     transformed_pe_data$pe_effort <- transformed_pe_data$pe_effort %>%
       mutate(analysis_id = analysis_id,
-             model_type = params$model_type) %>%
+             model_type = "PE") %>%
       relocate(analysis_id)
     
     #PE catch
     transformed_pe_data$pe_catch <- transformed_pe_data$pe_catch %>%
       mutate(analysis_id = analysis_id,
-             model_type = params$model_type) %>%
+             model_type = "PE") %>%
       relocate(analysis_id)
     ############################ Stratified table ##################################
     
@@ -128,14 +112,15 @@ export_estimates <- function(params, estimates_pe, estimates_bss) {
     
     # Join catch and effort intermediate tables
     # creel_estimates$pe_total <- bind_rows(transformed_pe_data$pe_summarized_catch, transformed_pe_data$pe_summarized_effort)
-    
-  } else if(model_type == "BSS") {
-    
+    # assign("transformed_pe_data", transformed_pe_data, envir = .GlobalEnv)
+    return(transformed_pe_data)
+  }
+  
+  #Internal function to process estimates_bss if supplied  
+  process_bss <- function(estimates_bss) {
     ####################################################################################################### #
     # BSS wrangling ####
     ####################################################################################################### #
-    
-    transformed_bss_data <- as.list(NULL)
     
     ############################ Stratified table ##################################
     # 1 - process the daily, strata-specific BSS estimates
@@ -155,8 +140,8 @@ export_estimates <- function(params, estimates_pe, estimates_bss) {
     analysis_id <- analysis_id
     project_name <- params$project_name
     fishery_name <- params$fishery_name
-    min_event_date <- ""
-    max_event_date <- ""
+    min_event_date <- params$est_date_start
+    max_event_date <- params$est_date_end
     model_type <- "BSS"
     
     # perform the data wrangling 
@@ -172,13 +157,8 @@ export_estimates <- function(params, estimates_pe, estimates_bss) {
         max_event_date = max_event_date,
         model_type = model_type,
       ) %>% 
-      relocate(analysis_id,
-               project_name,
-               fishery_name,
-               min_event_date,
-               max_event_date,
-               model_type,
-               est_cg)
+      relocate(analysis_id, project_name, fishery_name, min_event_date,
+               max_event_date, model_type, est_cg)
     
     ############################# Rolled up table ##################################    
     # 2 - process the "overview" results from the BSS
@@ -207,7 +187,6 @@ export_estimates <- function(params, estimates_pe, estimates_bss) {
                max_event_date, model_type, est_cg)
     
     #divide bss into catch and effort tables to match PE
-    
     transformed_bss_data$bss_stratum_catch <- transformed_bss_data$bss_stratum %>% 
       filter(estimate %in% c("C_daily","CPUE_daily"))
     
@@ -221,45 +200,121 @@ export_estimates <- function(params, estimates_pe, estimates_bss) {
     transformed_bss_data$bss_summarized_effort <- transformed_bss_data$bss_summarized %>% 
       filter(estimate %in% "E_sum")
     
- ##identify differences between column names and consolidate
-    colnames(transformed_bss_data$bss_stratum_catch)
-    colnames(transformed_pe_data$pe_stratum_catch)
-    colnames(transformed_bss_data$bss_stratum_effort)
-    colnames(transformed_pe_data$pe_stratum_effort)
+    # assign("transformed_bss_data", transformed_bss_data, envir = .GlobalEnv)
+    return(transformed_bss_data)
+  }
     
-    colnames(transformed_bss_data$bss_summarized_catch)
-    colnames(transformed_pe_data$pe_summarized_catch)
-    colnames(transformed_bss_data$bss_summarized_effort)  
-    colnames(transformed_pe_data$pe_summarized_effort)   
-  } else {
-    stop("Invalid 'model_type'. Must be either 'PE' or 'BSS'. ")
+  # Process PE estimates to common format with internal function
+  if (!is.null(estimates_pe)) {
+    
+    transformed_pe_data <- process_pe(estimates_pe)
+  } 
+
+  # Process BSS estimates to common format with internal function
+  if (!is.null(estimates_bss)) {
+    
+    transformed_bss_data <- process_bss(estimates_bss)
+  } 
+  
+  #Error handling
+  if (is.null(estimates_pe) && is.null(estimates_bss)) {
+    stop("At least one of 'estimates_pe' or 'estimates_bss' must be supplied.")
   }
   
   # ------------------------------------------------------------------------#
-  # Add data_grade column
+  # Extract parameters
+  data_grade <- params$data_grade
+  export_data <- params$export
+  
+  # Initialize final output
+  creel_estimates <- as.list(NULL)
+  
+  #Map data_grade column to every table
   data_grade_lower <- tolower(params$data_grade) #accept capitalization
   
   if (data_grade_lower == "approved") {
-    transformed_data$data_grade <- "Approved"
-    transformed_bss_data$data_grade <-"Approved"
+
+    transformed_bss_data <- map(transformed_bss_data,
+                                ~{.$data_grade <- rep("Approved", nrow(.)); .})
+    transformed_pe_data <- map(transformed_pe_data,
+                               ~{.$data_grade <- rep("Approved", nrow(.)); .})
     
   } else if (data_grade_lower == "provisional") {
-    transformed_data$data_grade <- "Provisional"
-    transformed_bss_data$data_grade <-"Provisional"
+
+    transformed_bss_data <- map(transformed_bss_data,
+                               ~{.$data_grade <- rep("Provisional", nrow(.)); .})
+    transformed_pe_data <- map(transformed_pe_data,
+                               ~{.$data_grade <- rep("Provisional", nrow(.)); .})
     
   } else {
     stop("Invalid value for data_grade. Use 'approved' or 'provisional'.")
   }
+  # ------------------------------------------------------------------------#
+  #Combine PE and BSS before exporting
+  ##Get data frames to match and bind rows to creel_estimates
   
+  #table 1, stratum_catch
+  transformed_bss_data$bss_stratum_catch <- transformed_bss_data$bss_stratum_catch %>% 
+    rename(period = "week", estimate_category = "estimate") %>% 
+    select(-c("month", "estimate_index", "day_index")) %>% 
+    mutate(day_type = "",
+           event_date = as.Date(event_date)) #matching date format pre-bind
+
+  
+  transformed_pe_data$pe_stratum_catch <- transformed_pe_data$pe_stratum_catch %>% 
+    mutate(event_date = as.Date(NA))
+  
+  ##add to results
+  creel_estimates$stratum_catch <- rbind(transformed_pe_data$pe_stratum_catch,
+                                         transformed_bss_data$bss_stratum_catch)
+  
+  #table 2, stratum_effort
+  transformed_bss_data$bss_stratum_effort <- transformed_bss_data$bss_stratum_effort %>% 
+    rename(period = "week", estimate_category = "estimate") %>% 
+    select(-c("month", "estimate_index", "day_index")) %>% 
+    mutate(day_type = "",
+           event_date = as.Date(event_date)) #matching date format pre-bind
+  
+  transformed_pe_data$pe_stratum_effort <- transformed_pe_data$pe_stratum_effort %>% 
+    mutate(est_cg = NA,
+           event_date = as.Date(NA))
+  
+  ##add to results
+  creel_estimates$stratum_effort <- rbind(transformed_pe_data$pe_stratum_effort,
+                                          transformed_bss_data$bss_stratum_effort)
+  
+  #table 3, summarized_catch
+  transformed_bss_data$bss_summarized_catch <- transformed_bss_data$bss_summarized_catch %>% 
+    rename(estimate_category = "estimate") 
+  
+  transformed_pe_data$pe_summarized_catch <- transformed_pe_data$pe_summarized_catch
+  
+  ##add to results
+  creel_estimates$summarized_catch <- rbind(transformed_pe_data$pe_summarized_catch,
+                                            transformed_bss_data$bss_summarized_catch)
+  
+  #table 4, summarized_effort
+  transformed_bss_data$bss_summarized_effort <- transformed_bss_data$bss_summarized_effort %>% 
+    rename(estimate_category = "estimate") 
+    
+  transformed_pe_data$pe_summarized_effort <- transformed_pe_data$pe_summarized_effort %>% 
+    mutate(est_cg = NA)
+  
+  ##add to results
+  creel_estimates$summarized_effort <- rbind(transformed_pe_data$pe_summarized_effort,
+                                             transformed_bss_data$bss_summarized_effort)
+
   # ------------------------------------------------------------------------#
   # Connect to database and conditionally export
-  if(export) {
+  if(export_data) {
     
     # FOR DEMO WRITE TO CSV FILES
-    # write.csv(stratum_catch)
-    # write.csv(stratum_effort)
-    # write.csv(summarized_catch)
-    # write.csv(summarized_effort)
+    write.csv(creel_estimates$stratum_catch, file = paste0(params$fishery_name, " creel estimates_stratum catch.csv"), row.names = F)
+    write.csv(creel_estimates$stratum_effort, file = paste0(params$fishery_name, " creel estimates_stratum effort.csv"), row.names = F)
+    write.csv(creel_estimates$summarized_catch, file = paste0(params$fishery_name, " creel estimates_summarized catch.csv"), row.names = F)
+    write.csv(creel_estimates$summarized_catch, file = paste0(params$fishery_name, " creel estimates_summarized catch.csv"), row.names = F)
+    
+    write.csv(analysis_lut, file = "creel analysis_lut.csv", row.names = F)
     
     # #Establish connection
     # con <- DBI::dbConnect(RPostgres::Postgres(),
@@ -306,8 +361,8 @@ export_estimates <- function(params, estimates_pe, estimates_bss) {
     # #Disconnect from database
     # dbDisconnect(con)
     
-    
+    cat("Data sucessfully exported.")
   } else {
-    warning("Data not exported to database.")
+    cat("Data not exported to database.")
   }
 }
