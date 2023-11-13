@@ -2,9 +2,9 @@
 # -------------------------------- #
 # USER INPUTS - CHECK EACH SESSION #
 params:
-  project_name: "District 16"
-  fishery_name: "Skagit fall salmon 2022"
-  est_date_start: "2023-09-01"
+  project_name: "District 14"
+  fishery_name: "Skagit fall salmon 2023"
+  est_date_start: "2023-08-14"
   est_date_end: "2023-11-30"
 # -------------------------------- #
 title: "Freshwater Creel Data QAQC Dashboard"
@@ -19,31 +19,243 @@ format:
     number-sections: false
     page-layout: article
     embeded-resources: true # set to 'true' if sharing HTML output
+    grid:
+      sidebar-width: 200px
+      body-width: 1200px
+      margin-width: 400px
+      gutter-width: 1.5rem
 ---
 
-Overview
+::: callout-important
+This document is a draft version and should not be relied upon for final decision-making.
+:::
 
-This Quarto document is a tool for WDFW freshwater creel project staff and scientists to perform quality assurance and quality control (QAQC) checks on angler catch and effort data. It may be used in-season during the review of recently collected data or as a companion document to the fw_creel.Rmd analysis.
+This Quarto document is a tool for WDFW freshwater creel project staff and managers to perform quality assurance and quality control (QAQC) checks on angler catch and effort data. It may be used in-season during the review of recently collected data or as a companion document to the fw_creel.Rmd analysis.
 
 Tables offer "Preview" and "Full Table" tabs. Previews display the first five rows, number of any ellipsed rows, and the last row of the table. Full tables display all rows.
 
 Instructions
 
 ```{r setup}
-# options(width = 160)
+knitr::opts_chunk$set(fig.width = 10, fig.height = 8)
 
 #load packages and install if necessary
-pacman::p_load(tidyverse, here, gt, DataExplorer, data.table,
+pacman::p_load(tidyverse, here, gt, DataExplorer, data.table, cowplot,
                install = TRUE)
 
-#load top level functions
-purrr::walk(list.files(here("R_functions"), pattern = "\\.R$", full.names = TRUE), source)
+# #load top level functions
+# purrr::walk(list.files(here("R_functions"), pattern = "\\.R$", full.names = TRUE), source)
+# 
+# #load QAQC functions
+# purrr::walk(list.files(here("R_functions/QAQC"), full.names = TRUE), source)
+# 
+# #establish fishery-specific sub-folders as necessary. Copies templates into new folders.
+# establish_dir(params) # !!! off during development
 
-#load QAQC functions
-purrr::walk(list.files(here("R_functions/QAQC"), full.names = TRUE), source)
+## !! temporarily making portable. No outsourced functions.
+```
 
-#establish fishery-specific sub-folders as necessary. Copies templates into new folders.
-establish_dir(params) # !!! off during development
+```{r func_fetch_dwg}
+fetch_dwg <- function(fishery_name, ...){
+  
+  dwg_base <- list(
+    #event = "https://data.wa.gov/resource/ui95-axtn.csv",
+    effort = "https://data.wa.gov/resource/h9a6-g38s.csv",
+    interview = "https://data.wa.gov/resource/rpax-ahqm.csv",
+    catch = "https://data.wa.gov/resource/6y4e-8ftk.csv",
+    water_bodies = "https://data.wa.gov/resource/nbd2-vdmz.csv",
+    closures = "https://data.wa.gov/resource/6zm6-iep6.csv"
+    #,gear = "https://data.wa.gov/resource/d2ks-afhz.csv" #currently unused?
+  )
+  
+  dwg <- list()
+  
+  dwg$effort <- paste0(
+    dwg_base$effort,
+    "?$where=fishery_name='",
+    fishery_name,
+    "'&$limit=100000"
+  ) |>
+    utils::URLencode() |>
+    readr::read_csv(show_col_types = F) |>
+    tidyr::drop_na(count_type) |> 
+    dplyr::select(-created_datetime, -modified_datetime)
+  
+  dwg$ll <- paste0(
+    dwg_base$water_bodies,
+    "?$where=water_body_desc in('",
+    paste0(unique(dwg$effort$water_body), collapse = "','"),
+    "')&$limit=100000"
+  ) |>
+    utils::URLencode() |>
+    readr::read_csv(show_col_types = F)
+    
+  dwg$interview <- paste0(
+    dwg_base$interview,
+    "?$where=fishery_name='",
+    fishery_name,
+    "'&$limit=100000"
+  ) |>
+    utils::URLencode() |>
+    readr::read_csv(show_col_types = F) |>
+    dplyr::select(
+      -created_datetime, -modified_datetime)
+  
+  dwg$catch <- paste0(
+    dwg_base$catch,
+    "?$where=fishery_name='",
+    fishery_name,
+    "'&$limit=100000"
+  ) |> 
+    utils::URLencode() |>
+    readr::read_csv(show_col_types = F) |>
+    dplyr::select(interview_id, catch_id, species, run, life_stage, fin_mark, sex, fork_length_cm, fate, fish_count) |> 
+    dplyr::mutate(
+      catch_group = paste(species, life_stage, fin_mark, fate, sep = "_") # fish catch groups to estimate catch of 
+    )
+  
+  dwg$closures <- paste0(
+    dwg_base$closures,
+    "?$where=fishery_name='",
+    fishery_name,
+    "'&$limit=100000"
+  ) |> 
+    utils::URLencode() |>
+    readr::read_csv(show_col_types = F) |>
+    dplyr::select(fishery_name, section_num, event_date)
+  
+  return(dwg)
+}
+
+```
+
+```{r func_flag_qaqc}
+#function to highlight column on tables which flagged an issue in the data
+#example: hightlight_qaqc(no_end_time, "MISSING_end_time")
+flag_qaqc <- function(table, column_name) {
+  foo <- table %>% 
+    tab_style(
+      style = cell_text(color = "red"),
+      locations = cells_body(columns = column_name)
+    ) %>%
+    tab_style(
+      style = cell_fill(color = "yellow"),
+      locations = cells_column_labels(columns = column_name)
+    ) 
+  return(foo)
+}
+
+```
+
+```{r func_make_hyperlink}
+#function to convert generated URL to hyperlink
+make_hyperlink <- function(myurl, mytext = myurl) {
+  paste('<a href="', myurl, '">', mytext, '</a>')
+}
+
+```
+
+## User-defined Parameters
+
+```{r}
+gt(tibble(param = names(params), value = as.character(params)))
+```
+
+```{r func_na_summary_table}
+# function to summarize the number of NAs within a creel dataset
+generate_na_summary <- function(dwg, params) {
+  
+  obj_names <- c("interview", "catch", "effort")
+  
+  
+  #function to summarize NAs within data
+  process_object <- function(dwg, obj_name) {
+    na_summary <- dwg[[obj_name]] %>%
+      summarise_all(.funs = list(~sum(is.na(.)))) %>%
+      pivot_longer(everything(), names_to = "Column", values_to = "NA Count") %>%
+      filter(`NA Count` > 0) %>% 
+      mutate(Object = obj_name)
+    return(na_summary)
+  }
+  #apply function to objects of interest in data list
+  result_list <- map(obj_names, ~process_object(dwg, .))
+  
+  #hide columns where NAs aren't a bad thing / are always blank
+  hidden_cols <- c("state_residence", "location_season_name	", "indirect_census_bank",
+                   "direct_census_bank", "no_count_reason", "comments",
+                   "location_season_name", "p_census_bank", "p_census_boat",
+                   "indirect_census_bank", "direct_census_bank")
+  
+  #format table
+  na_summary_table <- bind_rows(result_list) %>% 
+    filter(!Column %in% hidden_cols) %>% 
+    gt(groupname_col = "Object",
+       row_group_as_column = TRUE) %>% 
+    tab_header(title = "NA Summary Table",
+               subtitle = params$fishery_name) %>% 
+    tab_stubhead(label = "Category")
+  
+  return(na_summary_table)
+}
+
+```
+
+```{r func_plot_freq_missing}
+#DataExplorer::plot_missing() function modified for specific use-case
+#Accessed: 10/11/2023, Modified 10/11/2023 CH.
+#Link to source: https://github.com/boxuancui/DataExplorer/blob/master/R/plot_missing.r
+#Edit source: https://stackoverflow.com/questions/55941265/how-to-change-colors-and-band-labels-in-data-explorers-plot-missing-function
+plot_freq_missing <- function(data,
+                         group = list("Good" = 0.05, "Okay" = 0.2, "Poor" = 0.6, "Scarce" = 1),
+                         missing_only = FALSE,
+                         geom_label_args = list(),
+                         title = NULL,
+                         ggtheme = theme_gray(),
+                         theme_config = list("legend.position" = c("bottom"))) {
+  ## Declare variable first to pass R CMD check
+  num_missing <- pct_missing <- Band <- NULL
+  ## Profile missing values
+  missing_value <- data.table(profile_missing(data))
+  if (missing_only) missing_value <- missing_value[num_missing > 0]
+  ## Sort group based on value
+  group <- group[sort.list(unlist(group))]
+  invisible(lapply(seq_along(group), function(i) {
+    if (i == 1) {
+      missing_value[pct_missing <= group[[i]], Band := names(group)[i]]
+    } else {
+      missing_value[pct_missing > group[[i-1]] & pct_missing <= group[[i]], Band := names(group)[i]]
+    }
+  }))
+  
+  # Determine ordinal levels from group supplied
+  ordinal_levels <- names(group[sort.list(unlist(group))])
+  
+  # Convert character to ordered factor to support ordinal legend
+  missing_value[, Band := factor(Band,
+                                 levels=ordinal_levels,
+                                 ordered = T)]
+  
+  ## Create ggplot object
+  output <- ggplot(missing_value, aes_string(x = "feature", y = "num_missing", fill = "Band")) +
+    geom_bar(stat = "identity") +
+    scale_fill_manual("Band",
+                      values = c("Good" = "green2","Okay" = "gold",
+                      "Poor" = "darkorange", "Scarce" = "firebrick2")) +
+    coord_flip() +
+    xlab("Features") + ylab("Missing Rows") +
+    guides(fill = guide_legend(override.aes = aes(label = "")))
+  geom_label_args_list <- list("mapping" = aes(label = paste0(round(100 * pct_missing, 2), "%")))
+  output <- output +
+    do.call("geom_label", c(geom_label_args_list, geom_label_args))
+  ## Plot object
+  class(output) <- c("single", class(output))
+  plotDataExplorer(
+    plot_obj = output,
+    title = title,
+    ggtheme = ggtheme,
+    theme_config = theme_config
+  )
+}
 
 ```
 
@@ -81,9 +293,9 @@ How do the sampling dates differ from the randomly generated schedule pre-season
 
 ## Missing values
 
-::: callout-warning
-The following plots show missing values within the data.
-:::
+```{r na_summary_table}
+generate_na_summary(dwg, params)
+```
 
 ```{r}
 missing_config <- list(
@@ -96,34 +308,28 @@ missing_config <- list(
      strip.background = element_rect(fill = "white", colour = "black", linewidth = rel(2))
 )
 
-#Effort
-plot_freq_missing(dwg$effort, missing_only = TRUE,
-                           theme_config = missing_config,
-                           title = "Columns in Effort Data with Missing Values")
-#Interviews
-plot_freq_missing(dwg$interview, missing_only = TRUE,
-                           theme_config = missing_config,
-                           title = "Columns in Interview Data with Missing Values")
-#Catch
-plot_freq_missing(dwg$catch, missing_only = TRUE,
-                           theme_config = missing_config,
-                           title = "Columns in Catch Data with Missing Values")
+# #Effort
+# plot_freq_missing(dwg$effort, missing_only = TRUE,
+#                            theme_config = missing_config,
+#                            title = "Columns in Effort Data with Missing Values")
+# #Interviews
+# plot_freq_missing(dwg$interview, missing_only = TRUE,
+#                            theme_config = missing_config,
+#                            title = "Columns in Interview Data with Missing Values")
+# #Catch
+# plot_freq_missing(dwg$catch, missing_only = TRUE,
+#                            theme_config = missing_config,
+#                            title = "Columns in Catch Data with Missing Values")
 
 #customizing plot_missing further
 #https://stackoverflow.com/questions/55941265/how-to-change-colors-and-band-labels-in-data-explorers-plot-missing-function
 ```
 
-## Environmental Conditions
-
--   Streamflow graphs?
-
--   Local weather summary for fishery-to-date?
-
 # Events
 
 Not currently accessed using our fetch_dwg() function, although it could be adapted to download data from event table too.
 
--   Questionable catch: wild steelhead, PS wild chinook
+-   Questionable catch: wild steelhead, PS wild Chinook
 
 -   Not verified
 
@@ -131,32 +337,72 @@ Not currently accessed using our fetch_dwg() function, although it could be adap
 
 # Effort
 
+
 ```{r effort_index_count_plots}
+
 #index effort counts per shift by surveyor
-fig_index_counts <- dwg$effort %>% 
-  filter(survey_type == "Index") %>% 
-  group_by(event_date, surveyor_num) %>% 
-  reframe(count = count_sequence, sum = sum(count_sequence))
+fig_index_counts <- dwg$effort %>%
+  filter(survey_type == "Index") %>%
+  group_by(event_date, surveyor_num, count_sequence, section_num) %>%
+  summarise(num_events = n(), .groups = "keep")
 
 fig_index_counts %>%
-  ggplot(aes(x = event_date, y = count, fill = factor(surveyor_num))) +
-  geom_bar(stat = "identity", position = "dodge") +
-  facet_wrap(vars(surveyor_num))
+  ggplot(aes(x = event_date, y = count_sequence, fill = factor(surveyor_num))) +
+  geom_bar(stat = "identity", width = 1, color = "black") + #for outline
+  geom_bar(stat = "identity", width = 1) +
+  facet_grid(section_num ~ surveyor_num, scales = "free_y", switch = "y",
+             labeller = label_both) +
+  labs(x = "Event Date", y = "Effort Count Total",
+       title = "Effort Counts per Date by Section and Surveyor",
+       subtitle = "Look of unexpected deviations from study design.") +
+  theme_bw() +
+  theme(legend.position = "none",
+        strip.text.x = element_text(
+          size = 8, color = "black", face = "bold.italic"
+          ),
+        strip.text.y = element_text(
+          size = 8, color = "black", face = "bold.italic"
+          )
+        )
+```
+## Effort End Time \< Start Time
 
-fig_index_counts %>%
-  ggplot(aes(x = event_date, y = sum, color = factor(surveyor_num))) +
-  geom_line()
+```{r}
+filtered_data <- dwg$effort %>%
+  filter(effort_end_time < effort_start_time)
+
+if (nrow(filtered_data) > 0) {
+  filtered_data %>% gt_preview()
+} else {
+  cat("There are no effort counts where end time < start time.")
+}
+
 ```
 
--   count of \# index sites counted per section
+## Number of Index Sites Counted per Section
 
--   effort trend line by section
+```{r}
 
-------------------------------------------------------------------------
+census_dates <- dwg$effort %>% 
+  filter(tie_in_indicator == 1) %>% 
+  select(event_date) %>% 
+  distinct()
 
--   Effort Count Sequence
+ggplot(dwg$effort, aes(x = as.Date(event_date))) +
+  geom_bar(position = "stack", color="black") +
+    geom_bar(position = "stack", fill="blue") +
+  facet_grid(section_num ~ surveyor_num, scales = "free_y", switch = "y",
+             labeller = label_both) +
+  labs(title = "Index Sites Visited Each Date by Surveyor and Section Number", x = "Event Date", y = "Number of Index Sites Counted",
+       subtitle = "Dashed lines indicate census effort count dates") +
+  scale_x_date(date_labels = "%m-%d", date_breaks = "1 week") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1),
+        legend.position = "none") +
+  geom_vline(data = census_dates, aes(xintercept = as.Date(event_date)), linetype = "dashed", color = "red")
 
--   Effort End Time \> Start Time
+
+```
 
 # Interviews
 
@@ -262,21 +508,70 @@ if (nrow(foo) >= 1) {
 ```
 :::
 
--   Fishing End Time \> Interview Time
+## Fishing End Time \> Interview Time
 
--   Fishing Star Time \> Fishing End Time
+```{r}
+filtered_data <- dwg$interview %>%
+  filter(fishing_end_time > interview_time)
 
--   Trailer Count \> Vehicle Count
+if (nrow(filtered_data) > 0) {
+  filtered_data %>% gt_preview()
+} else {
+  cat("There are no interviews where fishing end time > interview time.")
+}
+```
 
--   Angler Count \> Group Count
+## Fishing Start Time \> Fishing End Time
 
--   Vehicle count \> Group Count
+```{r}
+filtered_data <- dwg$interview %>%
+  filter(fishing_start_time > fishing_end_time)
 
--   N/A Previously Interviewed
+if (nrow(filtered_data) > 0) {
+  filtered_data %>% gt_preview()
+} else {
+  cat("There are no interviews where fishing start time > fishing end time.")
+}
+```
 
--   N/A Fishing Location
+## Trailer Count \> Vehicle Count
 
--   N/A Fishery Name
+```{r}
+filtered_data <- dwg$interview %>%
+  filter(trailer_count > vehicle_count)
+
+if (nrow(filtered_data) > 0) {
+  filtered_data %>% gt_preview()
+} else {
+  cat("There are no interviews where trailer count > vehicle count.")
+}
+```
+
+## Angler Count \> Group Count
+
+```{r}
+filtered_data <- dwg$interview %>%
+  filter(angler_count > total_group_count)
+
+if (nrow(filtered_data) > 0) {
+  filtered_data %>% gt_preview()
+} else {
+  cat("There are no interviews where anger count > total group count.")
+}
+```
+
+## Vehicle count \> Group Count
+
+```{r}
+filtered_data <- dwg$interview %>%
+  filter(vehicle_count > total_group_count)
+
+if (nrow(filtered_data) > 0) {
+  filtered_data %>% gt_preview()
+} else {
+  cat("There are no interviews where vehicle count > total group count.")
+}
+```
 
 # Catch
 
@@ -299,11 +594,39 @@ Bar plots of each column within the catch table, grouped by "**fate**". The hori
 
 ```{r catch_bar_plot3}
 #Bar plots
-DataExplorer::plot_bar(dwg$catch, ncol = 1, maxcat = 15, by = "fate") 
+# DataExplorer::plot_bar(dwg$catch, ncol = 1, maxcat = 15, by = "fate") 
 ```
 
-Histogram of fish_count.
+## Histogram of fish_count
 
-```{r}
-DataExplorer::plot_histogram(dwg$catch$fish_count)
+Look for outliers in number of fish reported in interviews. Top figure shows whole histogram of fish_count and bottom figure shows a zoomed in view of the potential outliers.
+
+```{r, fig.width=8, fig.height=10}
+# Calculate the peak (mode) of the data
+peak_value <- dwg$catch %>% count(fish_count) %>% arrange(desc(n)) %>% first()
+
+# Define a threshold for the "zoom" (you can adjust this value)
+threshold <- 5  # Values more than 2 times the peak are considered "far"
+
+# Create a new column to label bars that are far from the peak
+dwg$catch <- dwg$catch %>%
+  mutate(far_from_peak = ifelse(fish_count > peak_value$fish_count * threshold, as.character(fish_count), NA))
+
+# Create the histogram with labels for far values
+plot <- ggplot(data = dwg$catch, aes(x = fish_count)) +
+  geom_histogram(bins = 25, color = "black", fill = "blue") +
+  geom_text(data = filter(dwg$catch, !is.na(far_from_peak)), aes(x = fish_count, y = 0, label = far_from_peak),
+            vjust = -0.5, color = "red", size = 3) +
+  theme_classic()
+
+# Create zoomed-in version for small values
+zoomed_plot <- ggplot(data = filter(dwg$catch, fish_count > peak_value$fish_count * threshold), aes(x = fish_count)) +
+  geom_histogram(bins = 25, color = "black", fill = "blue", position = "identity", width = 5) +
+  scale_y_continuous(breaks = seq(0, peak_value$fish_count * threshold, by = 5),
+                     labels = seq(0,peak_value$fish_count * threshold, by = 5)) +
+  theme_classic() +
+  theme(plot.margin = margin(t=0, r=0, b=0,l = 0.7, "cm"))
+
+# Combine the two plots with the zoomed version placed below the main plot
+plot_grid(plot, zoomed_plot, ncol = 1, rel_heights = c(3, 1))
 ```
