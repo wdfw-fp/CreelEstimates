@@ -32,7 +32,7 @@ This document is a draft version and should not be relied upon for final decisio
 
 This Quarto document is a tool for WDFW freshwater creel project staff and managers to perform quality assurance and quality control (QAQC) checks on angler catch and effort data. It may be used in-season during the review of recently collected data or as a companion document to the fw_creel.Rmd analysis.
 
-Previews tables display the first five rows, the number of any ellipsed rows, and the last row of the table. Currently a single table, "Missing Trip Status" in the Interview section has a tabset for obth preview and a full table. The full table displays all rows but cannot currently horizontally and vertically scroll at the same time.
+Previews tables display the first five rows, the number of any ellipsed rows, and the last row of the table. Currently a single table, "Missing Trip Status" in the Interview section has a tabset for a preview and a full table. The full table displays all rows but cannot currently horizontally and vertically scroll at the same time.
 
 # Instructions
 
@@ -407,7 +407,7 @@ ggplot(dwg$effort, aes(x = as.Date(event_date))) +
 
 ::: {.scroll-container style="overflow-y: scroll; height: 600px;"}
 ```{r}
-#table sorted by decesnding count seq
+#table sorted by descending count seq
 dwg$effort %>%
   filter(tie_in_indicator == 0) %>% 
   select(creel_event_id, event_date, water_body, project_name, fishery_name,
@@ -642,31 +642,38 @@ Bar plots of each column within the catch table, grouped by "**fate**". The hori
 Look for outliers in number of fish reported in interviews. Top figure shows whole histogram of fish_count and bottom figure shows a zoomed in view of the potential outliers.
 
 ```{r, fig.width=8, fig.height=10}
-# Calculate the peak (mode) of the data
-peak_value <- dwg$catch %>% count(fish_count) %>% arrange(desc(n)) %>% first()
+#calculate the mode of the data
+peak_value <- dwg$catch %>% 
+  count(fish_count) %>% 
+  arrange(desc(n)) %>% 
+  first()
 
-# Define a threshold for the "zoom" (you can adjust this value)
-threshold <- 5  # Values more than 2 times the peak are considered "far"
+#define a threshold for the "zoom"
+threshold <- 5  # Values > 5 times the mode
 
-# Create a new column to label bars that are far from the peak
+#identify values outside the threshold
 dwg$catch <- dwg$catch %>%
-  mutate(far_from_peak = ifelse(fish_count > peak_value$fish_count * threshold, as.character(fish_count), NA))
+  mutate(far_from_peak = 
+           ifelse(fish_count > peak_value$fish_count * threshold,
+                  as.character(fish_count), NA))
 
-# Create the histogram with labels for far values
-plot <- ggplot(data = dwg$catch, aes(x = fish_count)) +
+#plot histogram
+fish_count_plot <- ggplot(data = dwg$catch, aes(x = fish_count)) +
   geom_histogram(bins = 25, color = "black", fill = "blue") +
-  geom_text(data = filter(dwg$catch, !is.na(far_from_peak)), aes(x = fish_count, y = 0, label = far_from_peak),
+  geom_text(data = filter(dwg$catch, !is.na(far_from_peak)), 
+            aes(x = fish_count, y = 0, label = far_from_peak),
             vjust = -0.5, color = "red", size = 3) +
   theme_classic()
 
-# Create zoomed-in version for small values
-zoomed_plot <- ggplot(data = filter(dwg$catch, fish_count > peak_value$fish_count * threshold), aes(x = fish_count)) +
+#create zoomed-in version for small values
+fish_count_zoomed_plot <- ggplot(data = filter(dwg$catch, fish_count > peak_value$fish_count * threshold),
+                      aes(x = fish_count)) +
   geom_histogram(bins = 25, color = "black", fill = "blue", position = "identity", width = 5) +
   scale_y_continuous(breaks = seq(0, peak_value$fish_count * threshold, by = 5),
                      labels = seq(0,peak_value$fish_count * threshold, by = 5)) +
   theme_classic() +
   theme(plot.margin = margin(t=0, r=0, b=0,l = 0.7, "cm"))
 
-# Combine the two plots with the zoomed version placed below the main plot
-cowplot::plot_grid(plot, zoomed_plot, ncol = 1, rel_heights = c(3, 1))
+#combine the two plots
+cowplot::plot_grid(fish_count_plot, fish_count_zoomed_plot, ncol = 1, rel_heights = c(3, 1))
 ```
