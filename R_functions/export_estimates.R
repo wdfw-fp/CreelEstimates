@@ -312,11 +312,62 @@ export_estimates <- function(params, estimates_pe, estimates_bss) {
     write.csv(creel_estimates$stratum_catch, file = paste0(params$fishery_name, " creel estimates_stratum catch.csv"), row.names = F)
     write.csv(creel_estimates$stratum_effort, file = paste0(params$fishery_name, " creel estimates_stratum effort.csv"), row.names = F)
     write.csv(creel_estimates$summarized_catch, file = paste0(params$fishery_name, " creel estimates_summarized catch.csv"), row.names = F)
-    write.csv(creel_estimates$summarized_catch, file = paste0(params$fishery_name, " creel estimates_summarized catch.csv"), row.names = F)
+    write.csv(creel_estimates$summarized_effort, file = paste0(params$fishery_name, " creel estimates_summarized effort.csv"), row.names = F)
     
     write.csv(analysis_lut, file = "creel analysis_lut.csv", row.names = F)
     
-    # #Establish connection
+    # --------------------------------------------------#
+    # This internal function copies a given fishery analysis script to a shared network drive
+    # as a way to archive any programming deviations from the template fw_creel.Rmd analysis
+    
+    archive_analysis_script <- function(params) {
+      #define location of local analysis script
+      local_path <- file.path(here(), "fishery_analyses", 
+                              params$project_name, params$fishery_name,
+                              paste0(
+                                "fw_creel_", params$fishery_name, ".Rmd"
+                              ))
+      
+      #define path for shared network drive
+      # teams_path <- file.path(path.expand(
+      #   "~/OneDrive - Washington State Executive Branch Agencies/General - DFW-Team FP FW Creel Monitoring Program/Analysis/catch_estimation_scripts"
+      # ))
+      
+      teams_path <- file.path(
+        paste0("C:/Users/", Sys.getenv("USERNAME"),
+               "/OneDrive - Washington State Executive Branch Agencies",
+               "/General - DFW-Team FP FW Creel Monitoring Program",
+               "/Analysis/catch_estimation_scripts")
+      )
+      
+      #fishery-specific file structure
+      folder_str <- file.path(params$project_name, params$fishery_name)
+      
+      #apply that file structure within Teams folder
+      archived_str <- paste0(teams_path, "/", folder_str)
+      
+        # create folder structure if it does not already exist
+      if (!dir.exists(archived_str)) {
+          dir.create(archived_str, recursive = TRUE)
+        }
+        
+        #copy analysis file to shared drive
+        ## might need to build in error handling for file.path nchar() > 260
+        file.copy(from=local_path, to=file.path(archived_str,
+                                        paste0(params$fishery_name, "_",
+                                               params$data_grade, "_", Sys.Date(), ".Rmd")), 
+                  overwrite = FALSE)
+        
+        
+      }
+
+    
+    #call internal function
+    archive_analysis_script(params)
+    
+    # --------------------------------------------------#
+    
+    # #Establish connection with database
     # con <- DBI::dbConnect(RPostgres::Postgres(),
     #                       dbname = "",
     #                       host = "",
