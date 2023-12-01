@@ -21,6 +21,7 @@ params:
   day_length_expansion: "night closure"
   min_fishing_time: 0.5
   output_location_filepath: "local"
+  model_used: "PE only"
   data_grade: "provisional"
   export: FALSE
 output:
@@ -711,20 +712,20 @@ map_df(estimates_bss, ~.x$overview) |>
 ## how to write out html to outputs file path??
 
 # data fetched from dwg and summarized data used for PE and BSS (dwg_summ)
-if(nchar(params$output_location_filepath) > 1) {
-  writexl::write_xlsx(
-  c(set_names(dwg, paste0("dwg_", names(dwg))), set_names(dwg_summ, paste0("dwg_summ", names(dwg_summ)))),
-  path = file.path(here("fishery_analyses", params$project_name, params$fishery_name), paste0("fetch_dwg_", params$fishery_name, ".xlsx"))
-  )
-}
-
-# PE output
-if(nchar(params$output_location_filepath) > 1) {
-  writexl::write_xlsx(
-  c(estimates_pe[rev(names(estimates_pe))]),
-  path = file.path(here("fishery_analyses", params$project_name, params$fishery_name), paste0("pe_output_", params$fishery_name, ".xlsx"))
-  )
-}
+# if(nchar(params$output_location_filepath) > 1) {
+#   writexl::write_xlsx(
+#   c(set_names(dwg, paste0("dwg_", names(dwg))), set_names(dwg_summ, paste0("dwg_summ", names(dwg_summ)))),
+#   path = file.path(here("fishery_analyses", params$project_name, params$fishery_name), paste0("fetch_dwg_", params$fishery_name, ".xlsx"))
+#   )
+# }
+# 
+# # PE output
+# if(nchar(params$output_location_filepath) > 1) {
+#   writexl::write_xlsx(
+#   c(estimates_pe[rev(names(estimates_pe))]),
+#   path = file.path(here("fishery_analyses", params$project_name, params$fishery_name), paste0("pe_output_", params$fishery_name, ".xlsx"))
+#   )
+# }
 
 # overview of BSS output
 # if(nchar(params$output_location_filepath) > 1) {
@@ -733,7 +734,42 @@ if(nchar(params$output_location_filepath) > 1) {
 #   )
 # }
 
+#Export data from one or both models
+if (params$export == TRUE && !params$model_used %in% c("PE only", "BSS only", "Both models" )) {
+  cat("Invalid value for model_used parameter. Must select 'PE only', 'BSS only', or 'Both models'.")
+} else {
 
-export_estimates(params, estimates_pe, estimates_bss)
+  # Initialize objects for storing processed data
+  # also serves as placeholder for other model if only one was used
+  transformed_pe_data <- list(
+    pe_effort = data.frame(),
+    pe_catch = data.frame(),
+    pe_stratum_effort = data.frame(),
+    pe_stratum_catch = data.frame(),
+    pe_summarized_effort = data.frame(),
+    pe_summarized_catch = data.frame()
+  )
+  
+  transformed_bss_data <- list(
+    bss_stratum = data.frame(),
+    bss_summarized = data.frame(),
+    bss_stratum_catch = data.frame(),
+    bss_stratum_effort = data.frame(),
+    bss_summarized_catch = data.frame(),
+    bss_summarized_effort = data.frame()
+  )
+  
+  if (params$model_used == "PE only") {
+    export_estimates(params, estimates_pe, estimates_bss = NULL)
+  }
+  
+  if (params$model_used == "BSS only") {
+    export_estimates(params, estimates_pe = NULL, estimates_bss)
+  }
+  
+  if (params$model_used == "Both models") {
+    export_estimates(params, estimates_pe, estimates_bss)
+  }
+}
 
 ```
