@@ -3,15 +3,11 @@ title: "Freshwater Creel Estimates"
 date: "`r Sys.Date()`"
 params:
   project_name: "District 14"
-  fishery_name: "Skagit fall salmon 2021"
-  est_date_start: "2021-09-01"
-  est_date_end: "2021-11-30"
+  fishery_name: "Skagit winter gamefish 2022-23"
+  est_date_start: "2022-12-01"
+  est_date_end: "2023-01-31"
   est_catch_groups: !r data.frame(rbind(
-    c(species = 'Chinook', life_stage = 'Adult', fin_mark = 'UM', fate = 'Released'),
-    c(species = 'Chinook', life_stage = 'Adult', fin_mark = 'AD', fate = 'Kept'),
-    c(species = 'Chinook', life_stage = 'Adult', fin_mark = 'AD|UM', fate = 'Released|Kept'),
-    c(species = 'Coho', life_stage = 'Adult', fin_mark = 'UM', fate = 'Kept')
-    ))
+    c(species = 'Steelhead', life_stage = 'Adult|UNK|NA', fin_mark = 'UM|UNK|NA', fate = 'Released')
   person_count_type: "group"
   period_pe: "week"
   period_bss: "day"
@@ -276,14 +272,14 @@ plot_inputs_pe_index_effort_counts(effort_index = dwg_summ$effort_index)
 inputs_pe <- list()
 
 #derive a table of potentially section-anglerType-specific values to modify census expansions
-inputs_pe$census_expan <- prep_inputs_pe_census_expan(eff = dwg$effort, census_expansion = params$census_expansion)
+inputs_pe$census_expan <- prep_inputs_pe_census_expan(int = dwg$interview, census_expansion = params$census_expansion)
 
 # Calculate total days the fishery was open per strata (strata = period, day_type, and section_num)
 inputs_pe$days_total <- prep_inputs_pe_days_total(days = dwg$days)
 
 # depending on the types of index counts, reach the calc: ang_hrs_daily_mean_TI_expan = angler_hours_daily_mean * TI_expan_final
 # when index counts are already bank & boat, matching census counts,
-#   then angler_hour daily means are just effort index counts of anglers expanded by day length,
+#   then angler_hour daily means are just effort index counts of anglers expanded by day length, 
 #   which are multiplied against tie-in expanded census counts of anglers by type (per section_num)
 # but when index counts are trailers & vehicles,
 #   then angler_hour daily means require first using interviews to estimate anglers_per_vhcl_trlr by angler_final total & boat 
@@ -316,6 +312,7 @@ if(str_detect(params$index_count_types, "Bank|Boat")) {
     dwg_summarized = dwg_summ,
     interview_ang_per_vehic = inputs_pe$interview_ang_per_vhcl_trlr,
     paired_census_index_counts = inputs_pe$paired_census_index_counts,
+    census_param = params$census_expansion,
     census_expan = inputs_pe$census_expan
     )
   

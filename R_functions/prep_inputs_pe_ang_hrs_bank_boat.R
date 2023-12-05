@@ -7,7 +7,7 @@ prep_inputs_pe_ang_hrs_bank_boat <- function(
   
   eff_ind <- dplyr::left_join(
     dwg_summarized$effort_index, 
-    days |> dplyr::select(event_date, day_type, period, DayL),
+    days |> dplyr::select(event_date, day_type, period, day_length),
     by=c("event_date")
     ) |>  
     dplyr::mutate(

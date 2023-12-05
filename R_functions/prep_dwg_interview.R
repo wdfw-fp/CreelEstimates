@@ -20,11 +20,11 @@ prep_dwg_interview <- function(
   #to allow 'run' specification in params, add 'run' within across()
   dwg_catch <- dwg_catch |> mutate(across(c(species, life_stage, fin_mark, fate), ~replace_na(as.character(.), "NA")))
     
-  if(person_count_type == "group"){
-    dwg_interview$person_count_final <- dwg_interview$total_group_count
-  } else {
-    dwg_interview$person_count_final <- dwg_interview$angler_count
-  }
+  # if(person_count_type == "group"){
+  #   dwg_interview$person_count_final <- dwg_interview$total_group_count
+  # } else {
+  #   dwg_interview$person_count_final <- dwg_interview$angler_count
+  # }
   
   interviews <- dwg_interview |> 
     filter(is.na(angler_type) | str_detect(angler_type, "ank|oat")) |> 
@@ -45,8 +45,8 @@ prep_dwg_interview <- function(
           !stringr::str_detect(boat_type, "ontoon|ayak") & 
           (is.na(fish_from_boat) | fish_from_boat == "Boat") ~ "boat",
         boat_used == "Yes" & !stringr::str_detect(boat_type, "ontoon|ayak") & 
-          fish_from_boat == "Bank" ~ "boat" # EB anglers who used a non- "ontoon|ayak" boat but primarily fished from shore
-        ),
+          fish_from_boat == "Bank" ~ "boat", # EB anglers who used a non- "ontoon|ayak" boat but primarily fished from shore
+        boat_used == "Yes" & is.na(boat_type) ~ "boat"),
       angler_final_int = as.integer(factor(angler_final)),
       
       end_time_final = dplyr::if_else(
@@ -54,15 +54,12 @@ prep_dwg_interview <- function(
         interview_time,
         fishing_end_time),
       fishing_time = round(as.numeric(end_time_final - fishing_start_time) / 3600, 5),
-      # ,
-      # 
-      # person_count_final = case_when(
-      #   person_count_type == "group" ~ total_group_count,
-      #   person_count_type == "angler" ~ angler_count # EB this fails when using the "angler" person_count_type option
-      # ),
-      vehicle_count = if_else(vehicle_count > person_count_final, person_count_final, vehicle_count),
-      fishing_time_total = fishing_time * person_count_final
-    ) |>
+      person_count_final = case_when(
+        person_count_type == "group" ~ total_group_count,
+        person_count_type == "angler" ~ angler_count # EB this fails when using the "angler" person_count_type option
+      ),
+      # vehicle_count = if_else(vehicle_count > person_count_final, person_count_final, vehicle_count), #EB should be addressed in QA/QC, not here
+      fishing_time_total = fishing_time * person_count_final) |>
     dplyr::filter(fishing_time >= min_fishing_time) |> 
     dplyr::select(
       interview_id, 

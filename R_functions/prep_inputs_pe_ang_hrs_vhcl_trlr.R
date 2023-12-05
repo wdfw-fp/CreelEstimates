@@ -3,6 +3,7 @@ prep_inputs_pe_ang_hrs_vhcl_trlr <- function(
     dwg_summarized, #list with shared interview, index and census tibbles
     interview_ang_per_vehic, #tibble of interview-based values to translate vehicle/trailer counts to boat/bank
     paired_census_index_counts,
+    census_param,
     census_expan,
     ...
     ){
@@ -73,53 +74,53 @@ prep_inputs_pe_ang_hrs_vhcl_trlr <- function(
   }
   
   
-  if(nrow(dwg_summarized$effort_census) == 0) {
-    census_TI_expan <- expand_grid(
-      section_num = unique(angler_hours_daily_mean$section_num), 
-      angler_final = unique(angler_hours_daily_mean$angler_final),
-      TI_expan_final = 1)
-  } else {
-    #begin census expansion values object by joining census and index in terms of total & boat
-    census_TI_expan <- dplyr::left_join(
-      #census already grouped & summed by event_date, section_num, tie_in_indicator, count_sequence, and angler_final [bank, boat]
-      #but as for interview above, first split and collapse to reassign angler_final as total & boat
-      bind_rows(
-        dwg_summarized$effort_census |>
-          dplyr::group_by(section_num, event_date, count_sequence) |>
-          dplyr::summarize(angler_final = "total", count_census = sum(count_census),  .groups = "drop")
-        ,
-        dwg_summarized$effort_census |>
-          dplyr::filter(angler_final == "boat") |>
-          dplyr::group_by(section_num, event_date, count_sequence) |>
-          dplyr::summarize(angler_final = "boat", count_census = sum(count_census), .groups = "drop")
-      ),
-      #index counts via interviews for angler-per-vehic; angler_final already total & boat
-      #this is very similar to above pe_estimates$angler_hours_daily_mean
-      #but all count_seqs rather than summarized to daily mean
-      #as above, applies mean ang-per-vehic within section_num-day_type-angtype
-      #where interview missing an ang-type or no interviews on that date
-      #prevents loss of use of census info b/c of a single day missing interviews...
-      dplyr::full_join(
-        interview_ang_per_vehic
-        ,
-        eff_ind
-        ,
-        by = c("angler_final")
-        ) |>
-        dplyr::group_by(section_num, day_type, angler_final) |> 
-        dplyr::mutate(
-          ang_per_vhcl_trlr = if_else(
-            is.na(ang_per_vhcl_trlr),
-            mean(ang_per_vhcl_trlr, na.rm=T),
-            ang_per_vhcl_trlr)) |> 
-        dplyr::ungroup() |> 
-        dplyr::mutate(count_index = ang_per_vhcl_trlr * count_index) |>
-        dplyr::select(section_num, event_date, count_sequence, angler_final, count_index)
-      ,
-      by = c("section_num", "event_date", "count_sequence", "angler_final")
-    ) |> 
-      tidyr::drop_na(count_index)
-    
+  # if(census_param != "Direct")  {
+  #   census_TI_expan <- expand_grid(
+  #     section_num = unique(angler_hours_daily_mean$section_num), 
+  #     angler_final = unique(angler_hours_daily_mean$angler_final),
+  #     TI_expan_final = 1)
+  # } else {
+  #   #begin census expansion values object by joining census and index in terms of total & boat
+  #   census_TI_expan <- dplyr::left_join(
+  #     #census already grouped & summed by event_date, section_num, tie_in_indicator, count_sequence, and angler_final [bank, boat]
+  #     #but as for interview above, first split and collapse to reassign angler_final as total & boat
+  #     bind_rows(
+  #       dwg_summarized$effort_census |>
+  #         dplyr::group_by(section_num, event_date, count_sequence) |>
+  #         dplyr::summarize(angler_final = "total", count_census = sum(count_census),  .groups = "drop")
+  #       ,
+  #       dwg_summarized$effort_census |>
+  #         dplyr::filter(angler_final == "boat") |>
+  #         dplyr::group_by(section_num, event_date, count_sequence) |>
+  #         dplyr::summarize(angler_final = "boat", count_census = sum(count_census), .groups = "drop")
+  #     ),
+  #     #index counts via interviews for angler-per-vehic; angler_final already total & boat
+  #     #this is very similar to above pe_estimates$angler_hours_daily_mean
+  #     #but all count_seqs rather than summarized to daily mean
+  #     #as above, applies mean ang-per-vehic within section_num-day_type-angtype
+  #     #where interview missing an ang-type or no interviews on that date
+  #     #prevents loss of use of census info b/c of a single day missing interviews...
+  #     dplyr::full_join(
+  #       interview_ang_per_vehic
+  #       ,
+  #       eff_ind
+  #       ,
+  #       by = c("angler_final")
+  #       ) |>
+  #       dplyr::group_by(section_num, day_type, angler_final) |> 
+  #       dplyr::mutate(
+  #         ang_per_vhcl_trlr = if_else(
+  #           is.na(ang_per_vhcl_trlr),
+  #           mean(ang_per_vhcl_trlr, na.rm=T),
+  #           ang_per_vhcl_trlr)) |> 
+  #       dplyr::ungroup() |> 
+  #       dplyr::mutate(count_index = ang_per_vhcl_trlr * count_index) |>
+  #       dplyr::select(section_num, event_date, count_sequence, angler_final, count_index)
+  #     ,
+  #     by = c("section_num", "event_date", "count_sequence", "angler_final")
+  #   ) |> 
+  #     tidyr::drop_na(count_index)
+  #   
     #now overwrite, coercing angler_final back to bank/boat as above for pe_estimates$angler_hours_daily_mean
     #again dropping NAs and negatives as invalid for inferring estimates
 ####    
@@ -187,10 +188,21 @@ prep_inputs_pe_ang_hrs_vhcl_trlr <- function(
   #     
   # }
   
-  }  
+  # }  
 #####    
-  census_TI_expan <- inputs_pe$paired_census_index_counts
   
+  
+if(census_param != "Direct")  {
+  census_TI_expan <- expand_grid(
+    section_num = unique(angler_hours_daily_mean$section_num), 
+    angler_final = unique(angler_hours_daily_mean$angler_final),
+    TI_expan_final = 1)
+} else {
+    census_TI_expan <- paired_census_index_counts
+  }
+
+  # census_TI_expan <- inputs_pe$paired_census_index_counts
+      
   #now multiply mean daily effort in fishing_time by tie-in ratio bias term 
   #aiming for event_date, section_num, angler_final [total, boat, bank (as total-boat)]
   angler_hours_daily_mean <- left_join(

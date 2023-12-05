@@ -1,7 +1,7 @@
 fetch_dwg <- function(fishery_name, ...){
   
   dwg_base <- list(
-    #event = "https://data.wa.gov/resource/ui95-axtn.csv",
+    # event = "https://data.wa.gov/resource/ui95-axtn.csv",
     effort = "https://data.wa.gov/resource/h9a6-g38s.csv",
     interview = "https://data.wa.gov/resource/rpax-ahqm.csv",
     catch = "https://data.wa.gov/resource/6y4e-8ftk.csv",
@@ -51,7 +51,7 @@ fetch_dwg <- function(fishery_name, ...){
   ) |> 
     utils::URLencode() |>
     readr::read_csv(show_col_types = F) |>
-    dplyr::select(interview_id, catch_id, species, run, life_stage, fin_mark, sex, fork_length_cm, fate, fish_count) |> 
+    dplyr::select(interview_id, catch_id, species, run, life_stage, fin_mark, sex, fork_length_cm, fate, cwt_detection_status, snout_code, fish_count) |> 
     dplyr::mutate(
       catch_group = paste(species, life_stage, fin_mark, fate, sep = "_") # fish catch groups to estimate catch of 
     )

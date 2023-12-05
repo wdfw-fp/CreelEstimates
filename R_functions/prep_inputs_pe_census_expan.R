@@ -1,9 +1,9 @@
 prep_inputs_pe_census_expan <- function(
-    eff,
+    int,
     census_expansion,
     ...){
 
-  eff |> 
+  int |> 
     dplyr::filter(location_type == "Section") |> 
     dplyr::distinct(section_num, p_census_bank, p_census_boat) |>
     tidyr::pivot_longer(
