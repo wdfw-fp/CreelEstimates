@@ -66,13 +66,21 @@ process_estimates_pe <- function(estimates_pe) {
   
   # Effort transformation
   transformed_pe_data$pe_summarized_effort <- transformed_pe_data$pe_summarized_effort %>%
-    group_by(analysis_id, project_name, fishery_name, min_event_date,
-             max_event_date, model_type) %>%
+    group_by(analysis_id, project_name, fishery_name, model_type) %>%
     summarise(est_sum = sum(est)
     ) %>%
     pivot_longer(cols = c(est_sum),
                  names_to = "estimate_type",
-                 values_to = "value")
+                 values_to = "value") %>% 
+    #set min date as start of monitoring period
+    mutate(min_event_date = as.Date(params$est_date_start),
+    #set max_event_date as sys.date if in-season, set as est_end_date if out of monitoring period 
+           max_event_date = as.Date(
+             ifelse(
+               Sys.Date() <= params$est_date_end, Sys.Date(),
+               params$est_date_end
+               ))
+    )
   
   #tidy output
   transformed_pe_data$pe_summarized_effort <- transformed_pe_data$pe_summarized_effort %>%
@@ -83,15 +91,23 @@ process_estimates_pe <- function(estimates_pe) {
   
   # Catch transformation
   transformed_pe_data$pe_summarized_catch <- transformed_pe_data$pe_summarized_catch %>%
-    group_by(analysis_id, project_name, fishery_name, min_event_date,
-             max_event_date, model_type, est_cg) %>% #includes catch group col
+    group_by(analysis_id, project_name, fishery_name, model_type, est_cg) %>% #includes catch group col
     summarise(n_obs_sum = sum(n_obs),
               N_days_open_sum = sum(N_days_open),
               est_sum = sum(est)
     ) %>%
     pivot_longer(cols = c(n_obs_sum:est_sum),
                  names_to = "estimate_type",
-                 values_to = "value")
+                 values_to = "value") %>% 
+    #set min date as start of monitoring period
+    mutate(min_event_date = as.Date(params$est_date_start),
+    #set max_event_date as sys.date if in-season, set as est_end_date if out of monitoring period 
+           max_event_date = as.Date(
+             ifelse(
+               Sys.Date() <= params$est_date_end, Sys.Date(),
+               params$est_date_end
+             ))
+    )
   
   #tidy output
   transformed_pe_data$pe_summarized_catch <- transformed_pe_data$pe_summarized_catch %>%
