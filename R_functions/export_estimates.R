@@ -52,14 +52,14 @@ export_estimates <- function(params, estimates_pe=NULL, estimates_bss=NULL) {
     transformed_bss_data$bss_stratum_catch <- transformed_bss_data$bss_stratum_catch %>% 
       rename(period = "week", estimate_category = "estimate") %>% 
       select(-c("month", "estimate_index", "day_index")) %>% 
-      mutate(day_type = "",
+      mutate(day_type = NA,
              event_date = as.Date(event_date)) #matching date format pre-bind
     
     #table 2, stratum_effort
     transformed_bss_data$bss_stratum_effort <- transformed_bss_data$bss_stratum_effort %>% 
       rename(period = "week", estimate_category = "estimate") %>% 
       select(-c("month", "estimate_index", "day_index")) %>% 
-      mutate(day_type = "",
+      mutate(day_type = NA,
              event_date = as.Date(event_date)) #matching date format pre-bind
     
     #table 3, summarized_catch
@@ -121,7 +121,7 @@ export_estimates <- function(params, estimates_pe=NULL, estimates_bss=NULL) {
     write.csv(creel_estimates$summarized_catch, file = paste0(params$fishery_name, " creel estimates_summarized catch.csv"), row.names = F)
     write.csv(creel_estimates$summarized_effort, file = paste0(params$fishery_name, " creel estimates_summarized effort.csv"), row.names = F)
     
-    write.csv(analysis_lut, file = "creel analysis_lut.csv", row.names = F)
+    write.csv(analysis_lut, file = "creel_analysis_lut.csv", row.names = F)
     
     # --------------------------------------------------#
     # This internal function copies a given fishery analysis script to a shared network drive
