@@ -55,8 +55,6 @@ process_estimates_pe <- function(estimates_pe) {
     mutate(estimate_category = "catch") %>%
     relocate("estimate_category", .after = "model_type")
   
-  #Join catch and effort intermediate tables
-  # creel_estimates$pe_strat <- bind_rows(transformed_pe_data$pe_stratum_catch, transformed_pe_data$pe_stratum_effort)
   
   ############################# Rolled up table ##################################
   
@@ -116,8 +114,5 @@ process_estimates_pe <- function(estimates_pe) {
     mutate(estimate_category = "catch") %>%
     relocate("estimate_category", .after = "model_type")
   
-  # Join catch and effort intermediate tables
-  # creel_estimates$pe_total <- bind_rows(transformed_pe_data$pe_summarized_catch, transformed_pe_data$pe_summarized_effort)
-  # assign("transformed_pe_data", transformed_pe_data, envir = .GlobalEnv)
   return(transformed_pe_data)
 }

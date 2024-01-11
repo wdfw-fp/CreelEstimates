@@ -21,8 +21,8 @@ process_estimates_bss <- function(estimates_bss) {
   analysis_id <- analysis_id
   project_name <- params$project_name
   fishery_name <- params$fishery_name
-  min_event_date <- NA
-  max_event_date <- NA
+  min_event_date <- all_data$event_date
+  max_event_date <- all_data$event_date
   model_type <- "BSS"
   
   # perform the data wrangling 

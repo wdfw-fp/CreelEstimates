@@ -37,7 +37,6 @@ export_estimates <- function(params, estimates_pe=NULL, estimates_bss=NULL) {
     #table 4, summarized_effort
     transformed_pe_data$pe_summarized_effort <- transformed_pe_data$pe_summarized_effort %>% 
       mutate(est_cg = NA)
-    
   }
 
   # Process BSS estimates to common format with internal function
@@ -107,6 +106,13 @@ export_estimates <- function(params, estimates_pe=NULL, estimates_bss=NULL) {
     #table 4
     summarized_effort = rbind(transformed_pe_data$pe_summarized_effort, transformed_bss_data$bss_summarized_effort)
   )
+  
+  #combine catch and effort data
+  creel_estimates$stratum <- rbind(creel_estimates$stratum_catch,
+                                   creel_estimates$stratum_effort)
+  
+  creel_estimates$total <- rbind(creel_estimates$summarized_catch,
+                                 creel_estimates$summarized_effort)
 
   #assign to global env
   creel_estimates <<- creel_estimates
@@ -116,11 +122,8 @@ export_estimates <- function(params, estimates_pe=NULL, estimates_bss=NULL) {
   if(export_data) {
     
     # FOR DEMO WRITE TO CSV FILES
-    write.csv(creel_estimates$stratum_catch, file = paste0(params$fishery_name, " creel estimates_stratum catch.csv"), row.names = F)
-    write.csv(creel_estimates$stratum_effort, file = paste0(params$fishery_name, " creel estimates_stratum effort.csv"), row.names = F)
-    write.csv(creel_estimates$summarized_catch, file = paste0(params$fishery_name, " creel estimates_summarized catch.csv"), row.names = F)
-    write.csv(creel_estimates$summarized_effort, file = paste0(params$fishery_name, " creel estimates_summarized effort.csv"), row.names = F)
-    
+    write.csv(creel_estimates$stratum, file = paste0(params$fishery_name, "_creel estimates_stratum.csv"), row.names = F)
+    write.csv(creel_estimates$total, file = paste0(params$fishery_name, "_creel estimates_total.csv"))  
     write.csv(analysis_lut, file = "creel_analysis_lut.csv", row.names = F)
     
     # --------------------------------------------------#
