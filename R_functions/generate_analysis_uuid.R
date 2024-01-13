@@ -44,6 +44,9 @@ generate_analysis_uuid <- function(params) {
                                                     session_info = capture_session_info(), #apply internal function
                                                     repo_version = paste0("https://github.com/wdfw-fp/CreelEstimates/tree/",
                                                                           system("git rev-parse HEAD", intern = TRUE))
+    #New column for analysis_lut added in export_estimates()
+    #Records file path for archived scripts
+                                                    
     )
     )
   } else {

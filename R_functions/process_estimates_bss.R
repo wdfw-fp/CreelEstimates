@@ -21,8 +21,6 @@ process_estimates_bss <- function(estimates_bss) {
   analysis_id <- analysis_id
   project_name <- params$project_name
   fishery_name <- params$fishery_name
-  min_event_date <- all_data$event_date
-  max_event_date <- all_data$event_date
   model_type <- "BSS"
   
   # perform the data wrangling 
@@ -34,8 +32,8 @@ process_estimates_bss <- function(estimates_bss) {
       analysis_id = analysis_id,
       project_name = project_name,
       fishery_name = fishery_name,
-      min_event_date = min_event_date,
-      max_event_date = max_event_date,
+      min_event_date = event_date, #Apply BSS daily event date to min and max dates
+      max_event_date = event_date,
       model_type = model_type,
     ) %>% 
     relocate(analysis_id, project_name, fishery_name, min_event_date,
@@ -50,9 +48,9 @@ process_estimates_bss <- function(estimates_bss) {
     all_frames[[i]] <- table_bind
   }
   
-  all_data <- do.call(rbind, all_frames)
+  all_data_summ <- do.call(rbind, all_frames)
   
-  transformed_bss_data$bss_summarized <- all_data |> 
+  transformed_bss_data$bss_summarized <- all_data_summ |> 
     pivot_longer(
       cols = c(mean:n_div), 
       names_to = "estimate_type", values_to = "value") %>% 
@@ -60,8 +58,8 @@ process_estimates_bss <- function(estimates_bss) {
       analysis_id = analysis_id,
       project_name = project_name,
       fishery_name = fishery_name,
-      min_event_date = min_event_date,
-      max_event_date = max_event_date,
+      min_event_date = min(all_data$event_date), #Apply BSS daily min value as start date
+      max_event_date = max(all_data$event_date), #Apply Bss daily max value as end date
       model_type = model_type,
     ) %>% 
     relocate(analysis_id, project_name, fishery_name, min_event_date,

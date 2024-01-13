@@ -8,6 +8,10 @@ export_estimates <- function(params, estimates_pe=NULL, estimates_bss=NULL) {
   # Extract parameters
   data_grade <- params$data_grade
   export_data <- params$export
+  
+  #Look up tables (LUTs) from environment
+  analysis_lut <- analysis_lut
+  # estimate_extent <- estimate_extent
 
   #Check that at least one model output is provided
   if (is.null(estimates_pe) && is.null(estimates_bss)) {
@@ -23,13 +27,11 @@ export_estimates <- function(params, estimates_pe=NULL, estimates_bss=NULL) {
     #Get PE and BSS dataframes to match before binding rows
     
     #table 1, stratum_catch
-    transformed_pe_data$pe_stratum_catch <- transformed_pe_data$pe_stratum_catch %>% 
-      mutate(event_date = as.Date(NA))
+    transformed_pe_data$pe_stratum_catch <- transformed_pe_data$pe_stratum_catch
     
     #table 2, stratum_effort
     transformed_pe_data$pe_stratum_effort <- transformed_pe_data$pe_stratum_effort %>% 
-      mutate(est_cg = NA,
-             event_date = as.Date(NA))
+      mutate(est_cg = NA)
     
     #table 3, summarized_catch
     transformed_pe_data$pe_summarized_catch <- transformed_pe_data$pe_summarized_catch
@@ -50,16 +52,14 @@ export_estimates <- function(params, estimates_pe=NULL, estimates_bss=NULL) {
     #table 1, stratum_catch
     transformed_bss_data$bss_stratum_catch <- transformed_bss_data$bss_stratum_catch %>% 
       rename(period = "week", estimate_category = "estimate") %>% 
-      select(-c("month", "estimate_index", "day_index")) %>% 
-      mutate(day_type = NA,
-             event_date = as.Date(event_date)) #matching date format pre-bind
+      select(-c("month", "estimate_index", "day_index", "event_date")) %>% 
+      mutate(day_type = NA)
     
     #table 2, stratum_effort
     transformed_bss_data$bss_stratum_effort <- transformed_bss_data$bss_stratum_effort %>% 
       rename(period = "week", estimate_category = "estimate") %>% 
-      select(-c("month", "estimate_index", "day_index")) %>% 
-      mutate(day_type = NA,
-             event_date = as.Date(event_date)) #matching date format pre-bind
+      select(-c("month", "estimate_index", "day_index", "event_date")) %>% 
+      mutate(day_type = NA)
     
     #table 3, summarized_catch
     transformed_bss_data$bss_summarized_catch <- transformed_bss_data$bss_summarized_catch %>% 
@@ -123,8 +123,8 @@ export_estimates <- function(params, estimates_pe=NULL, estimates_bss=NULL) {
     
     # FOR DEMO WRITE TO CSV FILES
     write.csv(creel_estimates$stratum, file = paste0(params$fishery_name, "_creel estimates_stratum.csv"), row.names = F)
-    write.csv(creel_estimates$total, file = paste0(params$fishery_name, "_creel estimates_total.csv"))  
-    write.csv(analysis_lut, file = "creel_analysis_lut.csv", row.names = F)
+    write.csv(creel_estimates$total, file = paste0(params$fishery_name, "_creel estimates_total.csv"), row.names = F)  
+
     
     # --------------------------------------------------#
     # This internal function copies a given fishery analysis script to a shared network drive
@@ -154,7 +154,7 @@ export_estimates <- function(params, estimates_pe=NULL, estimates_bss=NULL) {
       folder_str <- file.path(params$project_name, params$fishery_name)
       
       #apply that file structure within Teams folder
-      archived_str <- paste0(teams_path, "/", folder_str)
+      archived_str <<- paste0(teams_path, "/", folder_str)
       
         # create folder structure if it does not already exist
       if (!dir.exists(archived_str)) {
@@ -175,6 +175,13 @@ export_estimates <- function(params, estimates_pe=NULL, estimates_bss=NULL) {
     #call internal function
     archive_analysis_script(params)
     
+    #Add archived script file path to analysis_lut as new column
+    analysis_lut <<- analysis_lut %>% 
+      mutate(archived_script_location = paste0(
+        archived_str,"/", params$fishery_name, "_", params$data_grade, "_", Sys.Date(), ".Rmd"))
+
+    
+    write.csv(analysis_lut, file = "creel_analysis_lut.csv", row.names = F)    
     # --------------------------------------------------#
     
     # #Establish connection with database
