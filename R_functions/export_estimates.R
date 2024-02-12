@@ -124,7 +124,14 @@ export_estimates <- function(params, estimates_pe=NULL, estimates_bss=NULL) {
     # FOR DEMO WRITE TO CSV FILES
     write.csv(creel_estimates$stratum, file = paste0(params$fishery_name, "_creel estimates_stratum.csv"), row.names = F)
     write.csv(creel_estimates$total, file = paste0(params$fishery_name, "_creel estimates_total.csv"), row.names = F)  
-
+    
+    # --------------------------------------------------#
+    
+    #Convert analysis script to JSON and export to creel database for archival
+    JSON_conversion(params, direction = "toJSON")
+    #JSON object string is added as a column to analysis_lut
+    
+    # -------------------------------------------------#
     
     # --------------------------------------------------#
     # This internal function copies a given fishery analysis script to a shared network drive
@@ -182,7 +189,7 @@ export_estimates <- function(params, estimates_pe=NULL, estimates_bss=NULL) {
 
     
     write.csv(analysis_lut, file = "creel_analysis_lut.csv", row.names = F)    
-    # --------------------------------------------------#
+
     
     # #Establish connection with database
     # con <- DBI::dbConnect(RPostgres::Postgres(),
