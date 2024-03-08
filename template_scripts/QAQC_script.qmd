@@ -3,7 +3,7 @@
 # USER INPUTS - CHECK EACH SESSION #
 # SELECT "Render" ABOVE TO PRODUCE REPORT #
 params:
-  fishery_name: "Nisqually salmon 2022"
+  fishery_name: "Hoh winter steelhead 2023-24"
   na_concerns: ["target_species", "trip_status", "boat_type", "fishing_end_time", "boat_used", "effort_start_time", "interview_time", "trailer_count"]
 # optional: previously_interviewed and fish_from_boat
 # -------------------------------- #
@@ -523,6 +523,60 @@ census_dates %>%
 :::
 
 ## Index Counts
+
+::: {.scroll-container style="overflow-y: auto; max-height: 400px;"}
+```{r missing_index_sites}
+#sites visited
+surveyed_index_sites <- dwg$effort |>
+  filter(location_type == "Site") |>
+  select(event_date, section_num, location) |>
+  distinct()
+
+#study design
+expected_index_sites <- dwg$fishery_manager |>
+  filter(location_type == "Site") |>
+  group_by(section_num, location_code) |>
+  summarize()
+
+#expand expected list by surveyed dates
+expected_index_sites_dates <- surveyed_index_sites |>
+  distinct(event_date) |>
+  cross_join(expected_index_sites) |>
+  select(section_num, location_code, event_date)
+
+# Perform anti-join to identify missing index sites
+missing_index_sites <- anti_join(expected_index_sites_dates, surveyed_index_sites, by = c("location_code" = "location", "section_num", "event_date"))
+
+# If there are missing sites, create a summary table
+if (nrow(missing_index_sites) > 0) {
+  missing_index_sites_summary <- missing_index_sites |>
+    group_by(section_num, location_code) |>
+    summarize(min_date = min(event_date),
+              max_date = max(event_date),  
+              num_dates_missed = n())  |>
+    ungroup()
+
+  # Plot summary table
+  missing_index_sites_summary |> 
+    gt() |>
+    tab_header("Summary of index sites missing from effort count data") |>
+    tab_spanner(label = "Survey dates missed",
+                columns = c("min_date", "max_date", "num_dates_missed")) |> 
+    cols_label(
+      section_num = "Section number",
+      location_code = "Site name",
+      min_date = "First",
+      max_date = "Most recent",
+      num_dates_missed = "Number"
+    ) |> 
+    cols_align(
+      align = "center",
+      columns = everything()
+    )
+}
+
+```
+:::
 
 ```{r effort_index_count_plots}
 #Number of index effort counts performed per shift by section and surveyor.
