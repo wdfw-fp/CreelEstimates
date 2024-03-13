@@ -3,7 +3,7 @@
 # USER INPUTS - CHECK EACH SESSION #
 # SELECT "Render" ABOVE TO PRODUCE REPORT #
 params:
-  fishery_name: "Hoh winter steelhead 2023-24"
+  fishery_name: "Skagit winter steelhead 2024"
   na_concerns: ["target_species", "trip_status", "boat_type", "fishing_end_time", "boat_used", "effort_start_time", "interview_time", "trailer_count"]
 # optional: previously_interviewed and fish_from_boat
 # -------------------------------- #
@@ -35,7 +35,7 @@ This Quarto document is a tool for Washington Department of Fish and Wildlife (W
 
 Review content of the tables and figures below to perform quality assurance checks on collected creel data. Look for outlier observations, deviations from study design, impossible or unexpected values, etc.
 
-Events can be opened in FishApps to edit data as necessary by doing the following:
+Many of the QAQC tables in this document contain a `creel_event_id` and/or `fishapps_event_link` field and corresponding values. These are provided to help users locate the specific data entry in the creel database. Upon reviewing the summaries in this document and identifying any necessary updates to the data entries, edits can be easily made in FishApps using the following instructions.
 
 1.  Log into [FishApps](https://apps.wdfw-fish.us/auth).
 
@@ -45,11 +45,7 @@ Events can be opened in FishApps to edit data as necessary by doing the followin
 
     -   If using whole link, paste the copied `fishapps_event_link`.
 
-    -   If using event_id, navigate to any event by using the "Search" feature in FishApps. Open an event and then paste over the `event_id` after "<https://apps.wdfw-fish.us/creel/creel_event/>" in the URL so that the event_id copied from the QA/QC document creates a new link. Press enter to navigate to the event in question using the authenticated FishApps session.
-
-::: callout-note
-Tables for additional fields of interest with NA values can be produced by entering the field name into the na_concerns list param at the beginning of the script.
-:::
+    -   If using event_id, navigate to any event by using the "Search" feature in FishApps. Open an event and then paste over the `event_id` after "<https://apps.wdfw-fish.us/creel/creel_event/>" in the URL so that the event_id copied from the QAQC document creates a new link. Press enter to navigate to the event in question using the authenticated FishApps session.
 
 ```{r setup, echo=FALSE}
 knitr::opts_chunk$set(fig.width = 10, fig.height = 8)
@@ -185,8 +181,6 @@ flag_qaqc <- function(table, column_name) {
 
 ## User-defined Parameters
 
-[Verify that this table returns expected values before proceeding with QA/QC checks.]{style="color:red;"}
-
 ```{r}
 #  table of user-supplied parameters for the fishery to be quality checked
 tibble(Parameters = names(params), 
@@ -211,7 +205,7 @@ generate_na_summary <- function(dwg, params) {
   obj_names <- c("interview", "catch", "effort")
   
   ## Conditional fields ##
-  # calculated seperately and rejoined later
+  # calculated separately and rejoined later
   
     #boat_type conditional on boat_used = Yes
     na_boat_type <- dwg$interview |> 
@@ -344,12 +338,18 @@ dwg$catch <- dwg$interview %>%
 
 ## Missing values
 
-This table summarizes the number of NA values within the creel data. Some columns have been hidden where many NA values are not unexpected or do not cause a potential error. The first panel in the tabset shows the summary table and the second tab shows individual tables, where the first column is the variable of interest, to aid locating specific records in FishApps.
+This table summarizes the number of NA values within the creel data. Some columns have been hidden where many NA values are not unexpected or do not cause a potential error. The first panel in the tabset below shows the summary table and the second tab shows individual tables, where the first column is the variable of interest, to aid locating specific records in FishApps. There are three conditional variables, "boat_type", "fish_from_boat", and "fishing_end_time", which will always produce tables if any rows are present, regardless of being in the `params$na_concerns` list. This is because of how they are calculated. Fish_from_boat may not be a concern for your specific creel project.
+
+::: callout-note
+Tables for additional fields of interest with NA values can be produced by entering the field name into the `na_concerns` list parameter at the beginning of the script and rendering again.
+:::
 
 ::: panel-tabset
 ## [Summary]{style="color:red; font-size:20px;"}
 
 ```{r na_summary_table}
+#this chunk plots the dynamic NA table
+
 #use function to produce NA table
 na_summary <- generate_na_summary(dwg, params)
 
@@ -375,6 +375,8 @@ na_summary$na_summary_table
 
 ::: {.scroll-container style="overflow-y: auto; height: 600px;"}
 ```{r na_summary_table2}
+#this chunk identifies rows of the NA summary table that need tables produced
+
 #get list of na_concern variables to produce tables for
 subset_list <- na_summary$na_summary_table$`_data` |> 
   filter(Column %in% rows_to_flag) |> 
@@ -405,7 +407,9 @@ na_var_table <- function(data, column_name, columns_to_select = NULL, conditiona
 }
 ```
 
-```{r}
+```{r na_summary_table3}
+#this chunk dynamically selects columns for NA tables and calls the table function for each row of subset_list
+
 #initialize objects
 columns_to_select <- NULL
 output_list <- list()
@@ -444,9 +448,12 @@ for (i in seq_len(nrow(subset_list))) {
 
 ```
 
-```{r, results='asis'}
+```{r na_summary_table4, results='asis'}
+#this chunk plots the tables with formatting for the report
+
 #loop through outputs and print tables for necessary
 for (i in seq_along(output_list)) {
+  #each table has its own vertical scroll
   cat('<div class="scroll-container" style="overflow-y: auto; max-height: 300px;">\n')
   
   output_list[[i]] |> gt() |> print()
@@ -457,7 +464,9 @@ for (i in seq_along(output_list)) {
 
 ```
 
-```{r}
+```{r na_summary_table5}
+#this chunk plots the conditional fields as tables if any cases exist. This could probably be incorporated into na_var_table() but this was much simpler.
+
 #tables of conditional fields with NA values
 if (na_summary$na_boat_type$`NA Count` > 0) {
   dwg$interview |> 
@@ -487,7 +496,7 @@ if (na_summary$na_fishing_end_time$`NA Count` > 0) {
 
 ## Census Counts
 
-```{r}
+```{r num_census_dates}
 num_census_dates <- dwg$effort %>% filter(tie_in_indicator==1) %>% select(event_date) %>% distinct()
 num_census_dates <- nrow(num_census_dates)
 ```
@@ -495,7 +504,7 @@ num_census_dates <- nrow(num_census_dates)
 Table of recorded census effort count dates for the `r params$fishery_name` fishery. There have been [`r num_census_dates`]{style="color:red;"} census effort count surveys to-date.
 
 ::: {.scroll-container style="overflow-y: auto; max-height: 400px;"}
-```{r}
+```{r census_count_summary}
 #produce a table of census effort count dates
 census_dates <- dwg$effort %>% 
   filter(tie_in_indicator == 1) %>% 
@@ -525,7 +534,7 @@ census_dates %>%
 ## Index Counts
 
 ::: {.scroll-container style="overflow-y: auto; max-height: 400px;"}
-```{r missing_index_sites}
+```{r missing_index_sites, results='asis'}
 #sites visited
 surveyed_index_sites <- dwg$effort |>
   filter(location_type == "Site") |>
@@ -573,9 +582,11 @@ if (nrow(missing_index_sites) > 0) {
       align = "center",
       columns = everything()
     )
-}
-
+} else {
+  cat("There are no index sites missing from effort count data.<br>","*This requires correct setup of Fishery Manager Table on FishApps with project study design.*") 
+  }
 ```
+
 :::
 
 ```{r effort_index_count_plots}
