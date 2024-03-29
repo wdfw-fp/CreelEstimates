@@ -36,7 +36,7 @@ library("here") #defines root at working dir of .Rproj
 ```
 
 ```{r first_time_run, eval=FALSE, include=FALSE}
-# set up file paths
+# set up file paths (small change)
 ## top level for scripts and outputs
 if (!dir.exists(here("fishery_analyses"))) {
   dir.create(here("fishery_analyses")); "fishery_analyses folder created"
