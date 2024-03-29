@@ -2,12 +2,14 @@
 title: "Freshwater Creel Estimates"
 date: "`r Sys.Date()`"
 params:
-  project_name: "District 14"
-  fishery_name: "Skagit winter gamefish 2022-23"
-  est_date_start: "2022-12-01"
-  est_date_end: "2023-01-31"
+  project_name: "District 13"
+  fishery_name: "Skykomish summer Chinook 2021"
+  est_date_start: "2021-05-29"
+  est_date_end: "2021-07-18"
   est_catch_groups: !r data.frame(rbind(
-    c(species = 'Steelhead', life_stage = 'Adult|UNK|NA', fin_mark = 'UM|UNK|NA', fate = 'Released')
+    c(species = 'Chinook', life_stage = 'Adult', fin_mark = 'UM', fate = 'Released'),
+    c(species = 'Chinook', life_stage = 'Adult', fin_mark = 'AD', fate = 'Kept')
+    ))
   person_count_type: "group"
   period_pe: "week"
   period_bss: "day"
@@ -221,6 +223,9 @@ dwg$interview |>
   )
 ```
 
+
+
+
 ## Catch
 
 ```{r gt_creel_catch}
@@ -259,6 +264,7 @@ dwg_summ$effort_index <- prep_dwg_effort_index(
 
 ```
 
+
 ## Index effort counts
 
 ```{r plot_index_effort_counts, fig.cap= "Index effort counts for each count sequence on surveyed days within the monitoring period."}
@@ -272,7 +278,7 @@ plot_inputs_pe_index_effort_counts(effort_index = dwg_summ$effort_index)
 inputs_pe <- list()
 
 #derive a table of potentially section-anglerType-specific values to modify census expansions
-inputs_pe$census_expan <- prep_inputs_pe_census_expan(int = dwg$interview, census_expansion = params$census_expansion)
+inputs_pe$census_expan <- prep_inputs_pe_census_expan(int = dwg$interview, eff = dwg$effort, census_expansion = params$census_expansion)
 
 # Calculate total days the fishery was open per strata (strata = period, day_type, and section_num)
 inputs_pe$days_total <- prep_inputs_pe_days_total(days = dwg$days)
@@ -692,7 +698,7 @@ map_df(estimates_bss, ~.x$overview) |>
 
 # Save results
 
-```{r write_out_results, eval = FALSE}
+```{r write_out_results, eval = TRUE}
 # bss_overview <- estimates_bss$summary_by_catchgroup
 #write out a workbook with results from model runs 
 
