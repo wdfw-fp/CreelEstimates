@@ -20,9 +20,9 @@ prep_inputs_pe_daily_cpue_catch_est <- function(
       cpue_rom_daily = total_catch / total_hours,
       .groups = "drop"
       ) |> 
-    dplyr::left_join(
+  dplyr::left_join( 
       angler_hours_daily_mean, 
-      by = c("section_num", "day_type", "event_date", "angler_final")
+      by = c("section_num", "day_type", "event_date", "angler_final") 
     ) |>
     tidyr::drop_na(ang_hrs_daily_mean_TI_expan) |> 
     dplyr::mutate(
