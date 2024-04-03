@@ -89,8 +89,9 @@ parameters{
 	real<lower=0,upper=1> phi_E_scaled; //prior on a transformation of phi_E								    			
 	matrix[P_n-1,G*S] eps_E; //effort process errors  
 	matrix[G,S] omega_E_0; //effort residual for initial time step (p)
-	vector<lower=0,upper=1>[G] R_V; //true angler vehicles per angler
-	vector<lower=0,upper=1>[G] R_T; //true angler trailers per angler
+	vector<lower=0,upper=1>[G] R_V; //true angler group vehicles per angler
+	vector<lower=0,upper=1>[G] R_T; //true angler group trailers per angler
+	vector<lower=0,upper=1>[G] R_B; //true angler group boats per angler
 	vector<lower=0>[G] b; //bias in angler vehicles per angler from road counts of cars
 	matrix<lower=0>[D,G] eps_E_H[S,H]; //gamma random variate accounting for overdispersion in the census effort counts due to within-day variability in angler pressure
 	matrix<lower=0,upper=1>[G,S] p_I; //fixed proportion of angler effort observed in an index area
@@ -204,8 +205,8 @@ model{
 		A_I[i] ~ poisson(lambda_E_S_I[section_A[i],countnum_A[i]][day_A[i],gear_A[i]] * p_TI[gear_A[i],section_A[i]] * p_I[gear_A[i],section_A[i]]);
 	}
 	//Census (tie-in) effort counts - boats
-	for(b in 1:B_n){
-		B_s[b] ~ poisson(lambda_E_S_I[section_B[b],countnum_B[b]][day_B[b],2] * R_B[2]);	
+	for(i in 1:B_n){
+		B_s[i] ~ poisson(lambda_E_S_I[section_B[i],countnum_B[i]][day_B[i],2] * R_B[2]);	
 	}
 	//Census (tie-in) effort counts - anglers
 	for(e in 1:E_n){
@@ -228,7 +229,8 @@ model{
 	  if(max(B_A) > 0) {
 		  //Boats
 		  B_A[a] ~ binomial(A_A[a], R_B[gear_IntA[a]]);  //Note: leaving ratio of cars per angler constant among days since was invariant!
-	}											
+	  }											
+	}
 }
 generated quantities{
   matrix[G*S,G*S] Omega_C; //reconstructed CPUE correlations
