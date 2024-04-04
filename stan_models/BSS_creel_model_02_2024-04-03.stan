@@ -179,9 +179,11 @@ model{
 			}
 		}
 		for(s in 1:S){
-			omega_C_0[g,s] ~ normal(0,value_normal_sigma_omega_C_0); 
-			omega_E_0[g,s] ~ normal(0,value_normal_sigma_omega_E_0); 
-	    eps_mu_C[g,s] ~ std_normal();
+			//omega_C_0[g,s] ~ normal(0,value_normal_sigma_omega_C_0); // Old prior
+			//omega_E_0[g,s] ~ normal(0,value_normal_sigma_omega_E_0); // Old prior
+			omega_C_0[g,s] ~ normal(0,sqrt(square(sigma_eps_C)/(1-square(phi_C)))); // new prior updated 4/3/24
+			omega_E_0[g,s] ~ normal(0,sqrt(square(sigma_eps_E)/(1-square(phi_E)))); // new prior updated 4/3/24
+	    	eps_mu_C[g,s] ~ std_normal();
 			eps_mu_E[g,s] ~ std_normal();
       p_I[g,s] ~ beta(0.5,0.5); 
 		}
@@ -240,7 +242,7 @@ generated quantities{
 	matrix<lower=0>[D,G] E[S]; //realized total daily effort
 	real<lower=0> C_sum; //season-total catch
 	real<lower=0> E_sum; //season-total effort
-	vector[V_n + T_n + A_n + E_n + IntC + IntA + IntA] log_lik;
+	//vector[V_n + T_n + A_n + E_n + IntC + IntA + IntA] log_lik; //removed until point-wise log likelihood is updated below
 	Omega_C = multiply_lower_tri_self_transpose(Lcorr_C);
 	Omega_E = multiply_lower_tri_self_transpose(Lcorr_E);
 	C_sum = 0;
