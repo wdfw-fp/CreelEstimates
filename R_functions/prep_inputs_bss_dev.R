@@ -20,6 +20,8 @@ if(str_detect(study_design, "tandard" )){ #KB addition
         count_type == "Boat Anglers"  ~ as.integer(2)
       )
     )
+  effort_census_boats <- dwg_summarized$effort_census |> filter(angler_final == "xxx") # there were no boat census counts built into the standard creel study design; filtering "xxx" as a data wrangling trick to create empty dataframe 
+  effort_census_anglers<- dwg_summarized$effort_census
   
   interview_cg <- 
     dwg_summarized$interview |> 
@@ -27,7 +29,10 @@ if(str_detect(study_design, "tandard" )){ #KB addition
   
   interview_cg_intA <- 
     interview_cg |> 
-    drop_na(vehicle_count, trailer_count, person_count_final) 
+    drop_na(vehicle_count, trailer_count, person_count_final) |> 
+    mutate(
+      boat_count = as.integer(0)
+    )
   
   interview_cg_boat<- interview_cg_intA # KB: interview_cg_boat isn't actually used in the "standard" study design analysis but has to be created/duplicated so that the case_when argument works
   
@@ -37,20 +42,27 @@ if(str_detect(study_design, "tandard" )){ #KB addition
     summarise(across(c(fishing_time_total, fish_count), sum), .groups = "drop")
 
 }else if(study_design == "Drano"){ #KB addition
-  effort_index_vehicle <- dwg_summarized$effort_index |> filter(str_detect(angler_final, "iehicle"))
-  effort_index_trailer <- dwg_summarized$effort_index |> filter(str_detect(angler_final, "railer"))
-  effort_index_angler <- dwg_summarized$effort_index |> filter(str_detect(angler_final, "bank"))
-  effort_index_boats <- dwg_summarized$effort_index |> filter(str_detect(angler_final, "boat"))
+  effort_index_vehicle <- dwg_summarized$effort_index |> filter(angler_final == "xxx") # there were no vehicle index counts built into the Drano Lake creel study design; filtering "xxx" as a data wrangling trick to create empty dataframe 
+  effort_index_trailer <- dwg_summarized$effort_index |> filter(angler_final == "xxx") # there were no trailer index counts built into the Drano Lake creel study design; filtering "xxx" as a data wrangling trick to create empty dataframe
+  effort_index_angler <- dwg_summarized$effort_index |>  filter(angler_final == "xxx") # there were no angler index counts built into the Drano Lake creel study design; technically, angler counts were recorded as index counts but really assumed to be census coutns;  filtering "xxx" as a data wrangling trick to create empty dataframe
+  effort_census_boats <- dwg_summarized$effort_census |> filter(str_detect(angler_final, "boat"))
+  effort_census_anglers<- dwg_summarized$effort_census |> filter(str_detect(angler_final, "bank"))
   
   interview_cg <- 
     dwg_summarized$interview |> 
     filter(est_cg == est_catch_group)
   
-  interview_cg_boat<- #KB addition
-    interview_cg |> 
-    filter(str_detect(angler_final, "boat"))
+  # interview_cg_boat<- #KB addition
+  #   interview_cg |> 
+  #   filter(str_detect(angler_final, "boat"))
   
-  interview_cg_intA <- interview_cg_boat |> mutate(vehicle_count = as.integer(0), trailer_count = as.integer(0))# KB: interview_cg_intA isn't actually used in the "Drano" study design analysis but has to be created/duplicated so that the case_when argument works
+  interview_cg_intA <- 
+    interview_cg |> 
+    mutate(
+      vehicle_count = as.integer(0), 
+      trailer_count = as.integer(0),
+      boat_count = ifelse(str_detect(angler_final, "boat"), 1, 0)
+      )# KB: interview_cg_intA isn't actually used in the "Drano" study design analysis but has to be created/duplicated so that the case_when argument works
 
   interview_cg_daily_summ <- #KB NOTE: this object is used to create data objects that are no longer used in the most up-to-date model (perhaps could be omitted via deletion or at least commented out)
     interview_cg |> 
@@ -90,19 +102,19 @@ if(str_detect(study_design, "tandard" )){ #KB addition
     
     # Vehicle index effort counts 
     V_n = nrow(effort_index_vehicle), # int; total number of individual vehicle index effort counts 
-    V_I = effort_index_vehicle$count_index, # num vec; observed # of vehicles 
     day_V = left_join(effort_index_vehicle, days, by = "event_date") |> pull(day_index),   # int; index for day/period 
-    gear_V = as.integer(rep(1, nrow(effort_index_vehicle))), #update naming...
+ #KB: not used in model   gear_V = as.integer(rep(1, nrow(effort_index_vehicle))), #update naming...
     section_V = as.integer(effort_index_vehicle$section_num), # int; index for section
     countnum_V = as.integer(effort_index_vehicle$count_sequence),     # int; index for count_sequence  
+    V_I = effort_index_vehicle$count_index, # num vec; observed # of vehicles 
 
     # Trailer index effort counts
     T_n = nrow(effort_index_trailer), # int; total number of boat trailer index effort counts 
-    T_I = effort_index_trailer$count_index, # num vec; observed # of boat trailers 
     day_T = left_join(effort_index_trailer, days, by = "event_date") |> pull(day_index), # int; index for day/period
-    gear_T = as.integer(rep(2, nrow(effort_index_trailer))), 
+ #KB: not used in model   gear_T = as.integer(rep(2, nrow(effort_index_trailer))), 
     section_T = as.integer(effort_index_trailer$section_num), # int vec; index for section
     countnum_T = as.integer(effort_index_trailer$count_sequence), # int vec; index for count_sequence  
+    T_I = effort_index_trailer$count_index, # num vec; observed # of boat trailers 
     
 #KB: start back here - not exactly what data we'll need for updated likelihoods...
 #KB ...we'll need to estimate bank effort, which is simply using the bank angler index counts.  but for boats, we'll assume what we saw was a census (so bias term would be 1)...
@@ -112,35 +124,35 @@ if(str_detect(study_design, "tandard" )){ #KB addition
     
     # Angler index effort counts
     A_n = nrow(effort_index_angler), # int; total number of angler index effort counts
-    A_I = effort_index_angler$count_index, #num vec; observed # of anglers
     day_A = left_join(effort_index_angler, days, by = "event_date") |> pull(day_index), # int; index for day/period
     gear_A = effort_index_angler$angler_final_int, # int vec; index denoting "gear/angler type"
     section_A = as.integer(effort_index_angler$section_num), # int vec; index for section
     countnum_A = as.integer(effort_index_angler$count_sequence), # int vec; index for count_num
+    A_I = effort_index_angler$count_index, #num vec; observed # of anglers
     
   ################################################# ###
   #KB addition: start 
 
   ## KB NOTE: not sure this new set of data parameters are needed; instead, I probably want to update the above section 
   
-    # boat index effort counts
-    B_n = nrow(effort_index_boats), # int; total number of angler index effort counts
-    B_I = effort_index_boats$count_index, #num vec; observed # of anglers
-    day_B = left_join(effort_index_boats, days, by = "event_date") |> pull(day_index), # int; index for day/period
-    gear_B = effort_index_boats$angler_final_int, # int vec; index denoting "gear/angler type"
-    section_B = as.integer(effort_index_boats$section_num), # int vec; index for section
-    countnum_B = as.integer(effort_index_boats$count_sequence), # int vec; index for count_num
+    # Census (tie-in) effort counts for boats 
+    B_n = nrow(effort_census_boats), # int; total number of census effort counts for boats
+    day_B = left_join(effort_census_boats, days, by = "event_date") |> pull(day_index), # int; index for day/period
+    gear_B = effort_census_boats$angler_final_int, # int vec; index denoting "gear/angler type"
+    section_B = as.integer(effort_census_boats$section_num), # int vec; index for section
+    countnum_B = as.integer(effort_census_boats$count_sequence), # int vec; index for count_num
+    B_s = effort_census_boats$count_census, #num vec; observed # of boat vessels
   
   #KB addition: end
   ################################################# ###
 
-    # Census (tie-in) effort counts 
-    E_n = nrow(dwg_summarized$effort_census), # int; total number of angler tie-in effort counts
-    E_s = dwg_summarized$effort_census$count_census, # num vec; observed # of anglers
-    day_E = left_join(dwg_summarized$effort_census, days, by = "event_date") |> pull(day_index), # int vec; index denoting day/period
-    gear_E = dwg_summarized$effort_census$angler_final_int, # int vec; index denoting "gear/angler type"  
-    section_E = as.integer(dwg_summarized$effort_census$section_num), # int vec; index for section
-    countnum_E = as.integer(dwg_summarized$effort_census$count_sequence), # int vec; index for count_sequence
+    # Census (tie-in) effort counts for anglers
+    E_n = nrow(effort_census_anglers), # int; total number of census effort counts for anglers
+    day_E = left_join(effort_census_anglers, days, by = "event_date") |> pull(day_index), # int vec; index denoting day/period
+    gear_E = effort_census_anglers$angler_final_int, # int vec; index denoting "gear/angler type"  
+    section_E = as.integer(effort_census_anglers$section_num), # int vec; index for section
+    countnum_E = as.integer(effort_census_anglers$count_sequence), # int vec; index for count_sequence
+    E_s = effort_census_anglers$count_census, # num vec; observed # of anglers
     
 
 #KB update (4/2/24): previously, the object "tie_in_mat" was created outside the function using "dwg$effort"; however, our script created the object "inputs_pe$census_expan" which got us most of the way to "p_TI"; therefore, I updated the data wrangling and moved inside this funciton
@@ -162,13 +174,13 @@ if(str_detect(study_design, "tandard" )){ #KB addition
     h = interview_cg$fishing_time_total, # num vec; total hours fished as fishing_time * person_count_final
     
 #KB NOTE: The following six objects are no longer used in the most up-to-date creel model (thus, perhaps they could be removed or at least commented out?)
-    # interview data - Total Effort & Catch Creeled
-    IntCreel = nrow(interview_cg_daily_summ), # int; totals from interviews aggregated by date-section-anglertype	
-    day_Creel = left_join(interview_cg_daily_summ, days, by = "event_date") |> pull(day_index), # int vec; index denoting day/period
-    gear_Creel = interview_cg_daily_summ$angler_final_int,  # int vec; index denoting "gear/angler type"
-    section_Creel = interview_cg_daily_summ$section_num, # int vec; index for section 
-    C_Creel = interview_cg_daily_summ$fish_count, # num vec; total reported catch by day-section-anglertype
-    E_Creel = interview_cg_daily_summ$fishing_time_total,  #num vec; total hours fished by day-section-anglertype
+    # # interview data - Total Effort & Catch Creeled
+    # IntCreel = nrow(interview_cg_daily_summ), # int; totals from interviews aggregated by date-section-anglertype	
+    # day_Creel = left_join(interview_cg_daily_summ, days, by = "event_date") |> pull(day_index), # int vec; index denoting day/period
+    # gear_Creel = interview_cg_daily_summ$angler_final_int,  # int vec; index denoting "gear/angler type"
+    # section_Creel = interview_cg_daily_summ$section_num, # int vec; index for section 
+    # C_Creel = interview_cg_daily_summ$fish_count, # num vec; total reported catch by day-section-anglertype
+    # E_Creel = interview_cg_daily_summ$fishing_time_total,  #num vec; total hours fished by day-section-anglertype
     
 #KB update: I commented out the following 10 lines and replaced using "case_when"
 
@@ -186,43 +198,53 @@ if(str_detect(study_design, "tandard" )){ #KB addition
   ################################################# ###
   #KB addition: start 
 
+  IntA = nrow(distinct(interview_cg_intA, interview_id)),     # int; total number of angler interviews where V_A, T_A, A_A were collected
+  day_IntA = left_join(interview_cg_intA, days, by = "event_date") |> pull(day_index), # int vec; index denoting day/period
+  gear_IntA = interview_cg_intA$angler_final_int, # int vec; index denoting "gear/angler type"
+  section_IntA = interview_cg_intA$section_num, # int vec; index for section
+  V_A = as.integer(interview_cg_intA$vehicle_count),  # num vec; total number of vehicles an angler group brought
+  T_A = as.integer(interview_cg_intA$trailer_count),  # num vec; total number of trailers an angler group brought
+  B_A = as.integer(interview_cg_intA$boat_count),     # num vec; total number of boats an angler group brought
+  A_A = as.integer(interview_cg_intA$person_count_final),  # num vec; total number of anglers in the groups interviewed
+
+
 #KB: I'm having issues with the vector lengths on the left-hand side of the case_when scenarios not matching in length
 #KB: However, I'm not sure this set up will even work they way the likelihood is set up now with just IntA which will always be >0 with this script and the two study designs...
 #KB  ...but we won't want to loop over all these variables (for example, with the standard study designs we won't have or want to calculate boats per anglers and with Drano study design we won't have or want to calculate...
 #KB  ... trailers and vehicles per angler)
 
-    IntA = case_when( # int; total number of angler interviews... 
-      str_detect(study_design, "tandard" )  ~ nrow(distinct(interview_cg_intA, interview_id)), #...where V_A, T_A, A_A were collected when implementing "standard" study design
-      study_design == "Drano"  ~ nrow(distinct(interview_cg_boat, interview_id))               #...where angler_final was a boat group when implementing "Drano" study design
-    ),    
-    day_IntA = case_when( # int vec; index denoting day/period...
-      str_detect(study_design, "tandard" )  ~ left_join(interview_cg_intA, days, by = "event_date") |> pull(day_index),
-      study_design == "Drano"  ~ left_join(interview_cg_boat, days, by = "event_date") |> pull(day_index)
-    ),
-    gear_IntA = case_when( # int vec; index denoting "gear/angler type"
-      str_detect(study_design, "tandard" )  ~ interview_cg_intA$angler_final_int,
-      study_design == "Drano"  ~ interview_cg_boat$angler_final_int   # KB NOTE: will this be a problem the "angler_final_int" was created before "bank" angler_final grouping was filtered out? (now goes 2-4)
-    ),
-    section_IntA = case_when( # int vec; index for section
-      str_detect(study_design, "tandard" )  ~ interview_cg_intA$section_num,
-      study_design == "Drano"  ~ interview_cg_boat$section_num
-    ),
-    V_A = case_when( # num vec; total number of vehicles an angler group brought
-      str_detect(study_design, "tandard" )  ~ as.integer(interview_cg_intA$vehicle_count),
-      study_design == "Drano"  ~ as.integer()
-    ),
-    T_A = case_when( # num vec; total number of trailers an angler group brought
-      str_detect(study_design, "tandard" )  ~ as.integer(interview_cg_intA$trailer_count),
-      study_design == "Drano"  ~ as.integer()
-    ),
-    A_A = case_when(  # num vec; total number of anglers in the groups interviewed
-      str_detect(study_design, "tandard" )  ~ as.integer(interview_cg_intA$person_count_final),
-      study_design == "Drano"  ~ as.integer(interview_cg_boat$person_count_final)
-    ),
-    B_A = case_when(  # num vec; total number of boats an angler group brought
-      str_detect(study_design, "tandard" )  ~ as.integer(),
-      study_design == "Drano"  ~ rep(1, nrow(interview_cg_boat))  #study design set up so that boat groups consisted of 1 boat
-    ),
+    # IntA = case_when( # int; total number of angler interviews... 
+    #   str_detect(study_design, "tandard" )  ~ nrow(distinct(interview_cg_intA, interview_id)), #...where V_A, T_A, A_A were collected when implementing "standard" study design
+    #   study_design == "Drano"  ~ nrow(distinct(interview_cg_boat, interview_id))               #...where angler_final was a boat group when implementing "Drano" study design
+    # ),    
+    # day_IntA = case_when( # int vec; index denoting day/period...
+    #   str_detect(study_design, "tandard" )  ~ left_join(interview_cg_intA, days, by = "event_date") |> pull(day_index),
+    #   study_design == "Drano"  ~ left_join(interview_cg_boat, days, by = "event_date") |> pull(day_index)
+    # ),
+    # gear_IntA = case_when( # int vec; index denoting "gear/angler type"
+    #   str_detect(study_design, "tandard" )  ~ interview_cg_intA$angler_final_int,
+    #   study_design == "Drano"  ~ interview_cg_boat$angler_final_int   # KB NOTE: will this be a problem the "angler_final_int" was created before "bank" angler_final grouping was filtered out? (now goes 2-4)
+    # ),
+    # section_IntA = case_when( # int vec; index for section
+    #   str_detect(study_design, "tandard" )  ~ interview_cg_intA$section_num,
+    #   study_design == "Drano"  ~ interview_cg_boat$section_num
+    # ),
+    # V_A = case_when( # num vec; total number of vehicles an angler group brought
+    #   str_detect(study_design, "tandard" )  ~ as.integer(interview_cg_intA$vehicle_count),
+    #   study_design == "Drano"  ~ as.integer()
+    # ),
+    # T_A = case_when( # num vec; total number of trailers an angler group brought
+    #   str_detect(study_design, "tandard" )  ~ as.integer(interview_cg_intA$trailer_count),
+    #   study_design == "Drano"  ~ as.integer()
+    # ),
+    # A_A = case_when(  # num vec; total number of anglers in the groups interviewed
+    #   str_detect(study_design, "tandard" )  ~ as.integer(interview_cg_intA$person_count_final),
+    #   study_design == "Drano"  ~ as.integer(interview_cg_boat$person_count_final)
+    # ),
+    # B_A = case_when(  # num vec; total number of boats an angler group brought
+    #   str_detect(study_design, "tandard" )  ~ as.integer(),
+    #   study_design == "Drano"  ~ rep(1, nrow(interview_cg_boat))  #study design set up so that boat groups consisted of 1 boat
+    # ),
 
   #KB addition: end
   ################################################# ###
