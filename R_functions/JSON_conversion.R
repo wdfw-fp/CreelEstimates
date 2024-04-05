@@ -6,11 +6,13 @@ library(jsonlite)
 JSON_conversion <- function(params, direction) {
   
   if (direction == "toJSON") {
-  
+    #save local script to archive any alterations from template script
+    rstudioapi::documentSave()
+    
     #locate script location on local repository clone
     analysis_script <- readLines(paste0(
       getwd(), "/fishery_analyses/", params$project_name, "/", params$fishery_name,
-      "/", params$fishery_name, ".Rmd"
+      "/", "fw_creel_", params$fishery_name, ".Rmd"
       ))
     
     #convert to JSON format and validate
@@ -19,9 +21,9 @@ JSON_conversion <- function(params, direction) {
     
     if(valid) { #if TRUE
       
-      # insert JSON object into creel analysis look up table as new column
-      analysis_lut <- analysis_lut %>% 
-        mutate(analysis_script = JSON_script)
+      #add JSON string into creel analysis look up table as new column
+      analysis_lut <<- analysis_lut %>% 
+        mutate(analysis_json = JSON_script)
       
     } else {
         stop("Not a valid JSON string")
@@ -30,7 +32,7 @@ JSON_conversion <- function(params, direction) {
   } else if (direction == "fromJSON") {
     
     #convert back from JSON format
-    parse_JSON <- jsonlite::fromJSON(analysis_lut$analysis_script)
+    parse_JSON <- jsonlite::fromJSON(analysis_lut$analysis_json)
     reconstructed_script <- paste(parse_JSON, collapse = "\n")
     
     #export reconstructed analysis file
@@ -44,5 +46,4 @@ JSON_conversion <- function(params, direction) {
   } else {
     stop("Invalid direction argument. Choose 'toJSON' or 'fromJSON'.")
   }
-  
 }
