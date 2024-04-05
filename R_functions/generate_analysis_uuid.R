@@ -6,12 +6,19 @@ generate_analysis_uuid <- function(params) {
     # Initalize analysis look up table in Global Env
     analysis_lut <<- data.frame(analysis_id = character(0), 
                                 analysis_name = character(0),
-                                analysis_params = character(0),
                                 session_info = character(0),
                                 repo_version = character(0))
     
     #-------------------------------------------------------------------#
     #Internal function to process session info
+    
+    # user <- paste("User:", Sys.info()["user"])
+    # analysis_session_info <- sessioninfo::session_info() |> capture.output()
+    # analysis_session_info[1] <- paste(user, analysis_session_info[1])
+    # analysis_session_info <- analysis_session_info |> jsonlite::toJSON(pretty = TRUE)
+    
+    # x <- jsonlite::fromJSON(analysis_session_info)
+    # x
     capture_session_info <- function() {
       #Get info
       r_version <- R.version$version.string
