@@ -108,9 +108,10 @@ export_estimates <- function(params, estimates_pe=NULL, estimates_bss=NULL) {
   creel_estimates$total <- rbind(creel_estimates$summarized_catch, creel_estimates$summarized_effort)
   
   #bring in fishery manager table
-  fishery_manager_trim <- vw_fishery_manager |> # !!! change to dwg$fishery_manager
+  fishery_manager_trim <- dwg$fishery_manager |>
     filter(location_type == "Section") |> 
-    select(section_num, catch_area_code) |> 
+    select(section_num, catch_area_code, catch_area_description) |>
+    arrange(section_num) |> 
     distinct() #assumes no duplicate section_num in fishery manager table
   
   #join CRC from fishery manager table to estimate tables
@@ -194,9 +195,6 @@ export_estimates <- function(params, estimates_pe=NULL, estimates_bss=NULL) {
     fate_lut <- fetch_table(con, "creel", "fate_lut") |> select(fate_name, fate_id)
     angler_type_lut <- fetch_table(con, "creel", "angler_type_lut") |> select(angler_type_code, angler_type_id)
     
-    # !!! temp while dwg fishery manager doesnt have crc field
-    vw_fishery_manager <- fetch_table(con, "creel", "vw_fishery_manager") |>  filter(fishery_name == params$fishery_name)
-    
     #parse out catch group column into component fields to match with database format and use of UUIDs
     ##total UUIDs ----------------------------------------------------------------------------------------------
     creel_estimates$total <- creel_estimates$total |>
@@ -233,7 +231,8 @@ export_estimates <- function(params, estimates_pe=NULL, estimates_bss=NULL) {
     creel_estimates$stratum <- creel_estimates$stratum |> left_join(angler_type_lut, by = c("angler_final" = "angler_type_code"))
     #reformat
     creel_estimates$stratum <- creel_estimates$stratum |> 
-      select(-c("project_name", "fishery_name","species_name", "life_stage_name","fin_mark_code", "fate_name", "angler_final")) |>
+      select(-c("project_name", "fishery_name","species_name", "life_stage_name","fin_mark_code", "fate_name", "angler_final",
+                -"catch_area_description")) |> #remove crc desc column, not needed for db table. Retained for interpretation if params$export == "local"
       relocate(c("project_id", "fishery_id")) |> 
       relocate(c("species_id", "life_stage_id", "fin_mark_id", "fate_id", "angler_type_id"), .after = "model_type")    
     
