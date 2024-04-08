@@ -163,8 +163,17 @@ export_estimates <- function(params, estimates_pe=NULL, estimates_bss=NULL) {
       if (!DBI::dbIsValid(con)) {
         stop("Failed to establish connection after ", max_attempts, " attempts.")
       } else {
-        message("Connection established successfully.")
+        message("Connection sucessfully established.")
       }
+      
+      #show con in RStudio Connections pane
+      odbc:::on_connection_opened(con, 
+                                  paste(
+                                    c(paste("con <-", gsub(", ", ",\n\t", c(match.call()))
+                                            )
+                                      ), collapse = "\n"
+                                    )
+                                  )
       
       return(con)
     }
@@ -287,7 +296,7 @@ export_estimates <- function(params, estimates_pe=NULL, estimates_bss=NULL) {
    #Confirm upload
     #dbReadTable(con, "") #recent batch only? - confirm session analysis_id exists
     # print("Data sucessfully exported.")
-    # dbDisconnect(con)
+    dbDisconnect(con)
     
     cat("Data sucessfully exported to database.")
     
