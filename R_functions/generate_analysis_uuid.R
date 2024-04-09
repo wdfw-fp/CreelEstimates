@@ -39,7 +39,7 @@ generate_analysis_uuid <- function(params) {
     
     #Generate uuid and assign to object in Global Env
     analysis_id <- uuid::UUIDgenerate()
-    assign("analysis_id", analysis_id, envir = .GlobalEnv)
+    assign("analysis_id", analysis_id, envir = .GlobalEnv) # !!! consider removing from environment. Exists within analysis_lut
     
     #Populate analysis look up table
     analysis_lut <<- rbind(analysis_lut, data.frame(analysis_id, 
