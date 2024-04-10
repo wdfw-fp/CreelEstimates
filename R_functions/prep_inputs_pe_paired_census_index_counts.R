@@ -1,6 +1,6 @@
 # Summarize paired census and index angler effort counts 
 
-prep_inputs_pe_paired_census_index_counts_dev <- function(
+prep_inputs_pe_paired_census_index_counts <- function(
     days, #tibble with time strata and closure fields
     dwg_summarized, #list with shared interview, index and census tibbles
     interview_ang_per_object, #tibble of interview-based values to translate vehicle/trailer counts to boat/bank
