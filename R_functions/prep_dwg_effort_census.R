@@ -1,6 +1,6 @@
 #Aggregate census (tie in) effort counts, associating to closest-in-time index count.
 
-prep_dwg_effort_census_dev <- function(
+prep_dwg_effort_census <- function(
     eff, 
     study_design,
     angler_type_kayak_pontoon = NA, 
@@ -15,7 +15,7 @@ prep_dwg_effort_census_dev <- function(
 
    
   if(str_detect(study_design, "tandard" )){
-    #create intermediate object census_angler_groups that converts count_type objects to angler_final based on study design & user defined arguments (in YAML)
+    #create intermediate object census_angler_groups that i.) pairs closest index and census counts and ii.) then converts count_type objects to angler_final based on study design & user defined arguments (in YAML)
     census_angler_groups<-
       dplyr::left_join(
         #census values of interest...
