@@ -1,4 +1,4 @@
-prep_inputs_bss_dev <- function(
+prep_inputs_bss <- function(
     period,
     days, #tibble with time strata and closure fields
     dwg_summarized, #list with shared interview, index and census tibbles
