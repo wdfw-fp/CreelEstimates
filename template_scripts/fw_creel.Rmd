@@ -3,14 +3,12 @@ title: "Freshwater Creel Estimates"
 date: "`r Sys.Date()`"
 params:
   project_name: "District 14"
-  fishery_name: "Skagit fall salmon 2021"
-  est_date_start: "2021-09-01"
-  est_date_end: "2021-11-30"
+  fishery_name: "Cascade spring Chinook 2022"
+  est_date_start: "2022-06-01"
+  est_date_end: "2022-07-15"
   est_catch_groups: !r data.frame(rbind(
     c(species = 'Chinook', life_stage = 'Adult', fin_mark = 'UM', fate = 'Released'),
-    c(species = 'Chinook', life_stage = 'Adult', fin_mark = 'AD', fate = 'Kept'),
-    c(species = 'Chinook', life_stage = 'Adult', fin_mark = 'AD|UM', fate = 'Released|Kept'),
-    c(species = 'Coho', life_stage = 'Adult', fin_mark = 'UM', fate = 'Kept')
+    c(species = 'Chinook', life_stage = 'Adult', fin_mark = 'AD', fate = 'Kept')
     ))
   person_count_type: "group"
   period_pe: "week"
@@ -20,10 +18,11 @@ params:
   census_expansion: "Direct"
   day_length_expansion: "night closure"
   min_fishing_time: 0.5
-  output_location_filepath: "local"
-  model_used: "PE only"
-  data_grade: "provisional"
-  export: FALSE
+  output_location_filepath: "local" #can remove param with new ETL
+  #ETL parameters
+  export: "local" #options:  "local", "database", "no"
+  model_used: "PE only" #options: "PE only", "BSS only", "Both models"
+  data_grade: "provisional" #options: "provisional", "approved"
 output:
   html_document:
     fig_caption: yes
@@ -57,24 +56,24 @@ if (!dir.exists(here("fishery_analyses", params$project_name, params$fishery_nam
   paste(here("fishery_analyses", params$project_name, params$fishery_name), "folder created")
 }
 
-# evaluate if analysis .Rmd already exists, if not then generate new file 
-if (file.exists(here("fishery_analyses", params$project_name, params$fishery_name, 
+# evaluate if analysis .Rmd already exists, if not then generate new file
+if (file.exists(here("fishery_analyses", params$project_name, params$fishery_name,
        paste0("fw_creel_", params$fishery_name, ".Rmd")))) {
-  
+
   print("Analysis .Rmd file already exists")
-  
+
 } else {
 #save the master template with new params arguments for the fishery
 rstudioapi::documentSave(rstudioapi::getActiveDocumentContext()$id)
 #make an appropriately renamed copy
 file.copy(
   here("template_scripts/fw_creel.Rmd"),
-  here("fishery_analyses", params$project_name, params$fishery_name, 
+  here("fishery_analyses", params$project_name, params$fishery_name,
        paste0("fw_creel_", params$fishery_name, ".Rmd"))
 )
 #open the new copy
 rstudioapi::documentOpen(
-  here("fishery_analyses", params$project_name, params$fishery_name, 
+  here("fishery_analyses", params$project_name, params$fishery_name,
        paste0("fw_creel_", params$fishery_name, ".Rmd"))
 )
 }
@@ -86,6 +85,9 @@ library("suncalc")
 library("tidyverse")
 library("patchwork")
 library("gt")
+library("dbplyr")
+library("DBI")
+library("sessioninfo")
 theme_set(theme_light())
 
 library("rstan")
@@ -95,8 +97,8 @@ purrr::walk(list.files(here("R_functions"), full.names = T), source)
 ```
 
 ```{r generate_analysis_id}
-#Establishes a unique 'analysis_id' for each session and populates an 'analysis_lut".
-generate_analysis_uuid(params)
+#Establishes a unique 'analysis_id' for each session and populates an 'analysis_lut'.
+generate_analysis_lut(params)
 ```
 
 
@@ -735,7 +737,7 @@ map_df(estimates_bss, ~.x$overview) |>
 # }
 
 #Export data from one or both models
-if (params$export == TRUE && !params$model_used %in% c("PE only", "BSS only", "Both models" )) {
+if (params$export %in% c("database", "local") && !params$model_used %in% c("PE only", "BSS only", "Both models" )) {
   cat("Invalid value for model_used parameter. Must select 'PE only', 'BSS only', or 'Both models'.")
 } else {
 
