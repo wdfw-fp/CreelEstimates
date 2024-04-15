@@ -11,7 +11,7 @@ process_estimates_bss <- function(estimates_bss) {
   
   for(i in catch_groups){
     sub_list <- estimates_bss[[i]]
-    table_bind <- dplyr::bind_rows(sub_list[2:4])
+    table_bind <- dplyr::bind_rows(sub_list[2:4]) #cpue_daily, catch_daily, effort_daily
     all_frames[[i]] <- table_bind
   }
   
@@ -54,7 +54,7 @@ process_estimates_bss <- function(estimates_bss) {
   # convert the list of lists into a single dataframe in a for loop
   for (i in catch_groups){
     sub_list <- estimates_bss[[i]]
-    table_bind <- bind_rows(sub_list[1])
+    table_bind <- bind_rows(sub_list[1]) #overview
     all_frames[[i]] <- table_bind
   }
   

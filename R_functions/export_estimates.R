@@ -129,11 +129,7 @@ export_estimates <- function(params, estimates_pe=NULL, estimates_bss=NULL) {
   creel_estimates$stratum <- creel_estimates$stratum |> rename(estimate_value = value)
   creel_estimates$total <- creel_estimates$total |> rename(estimate_value = value)  
   
-  # !! Round field estimate_value to 4 decimal places rather than float. 
-  creel_estimates$stratum$estimate_value <- round(creel_estimates$stratum$estimate_value, digits = 0)
-  creel_estimates$total$estimate_value <- round(creel_estimates$total$estimate_value, digits = 0)
-  
-  # change angler_final capitalization to match creel database
+  # change angler_final capitalization to match creel database lut
   creel_estimates$stratum <- creel_estimates$stratum |> 
     mutate(angler_final = case_when(
       angler_final == "bank" ~ "Bank",
@@ -146,6 +142,12 @@ export_estimates <- function(params, estimates_pe=NULL, estimates_bss=NULL) {
   #-----------------------------------------------------------------------------------------------------------------#
   # Connect to database and conditionally export
   if(export_data == tolower("database")) {
+    
+    estimate_reviewers <- c("holc2477") #please don't manually modify this list :) 
+    
+    if (!Sys.info()["user"] %in% estimate_reviewers && params$data_grade == tolower("provisional")) {
+      stop("Creel project leads may only upload estimates with a data_grade of 'provisional'.")
+    }
     
     #Convert analysis script to JSON string which is added as a column to analysis_lut
     JSON_conversion(params, direction = "toJSON")
@@ -199,9 +201,11 @@ export_estimates <- function(params, estimates_pe=NULL, estimates_bss=NULL) {
     
     #define function to fetch tables from database
     fetch_table <- function(con = NULL, schema, table) {
+      
       if(!DBI::dbIsValid(con)) {
         stop("No database connection provided.")
       }
+      
       table <- dplyr::tbl(con, 
                           dbplyr::in_schema(dbplyr::sql(schema), 
                                             dbplyr::sql(table))) |> 
@@ -210,7 +214,7 @@ export_estimates <- function(params, estimates_pe=NULL, estimates_bss=NULL) {
       return(table)
     }
     
-    #query tables necessary to get UUIDS
+    #query database tables necessary to get UUIDS
     project_lut <- fetch_table(con, "creel", "project_lut") |> select(project_name, project_id)
     fishery_lut <- fetch_table(con, "creel", "fishery_lut") |> select(fishery_name, fishery_id)
     species_lut <- fetch_table(con, "creel", "species_lut") |> select(species_name, species_id)
@@ -263,22 +267,17 @@ export_estimates <- function(params, estimates_pe=NULL, estimates_bss=NULL) {
       relocate(c("project_id", "fishery_id")) |> 
       relocate(c("species_id", "life_stage_id", "fin_mark_id", "fate_id", "angler_type_id"), .after = "model_type")    
     
-    ### write estimates to database ###
+    ### write estimates to database ####
     
     #model_analysis_lut
-    # field_types_analysis_lut <- c(analysis_id = "uuid", analysis_name = "varchar", session_info = "varchar", estimate_json = "json")
-    
-    # !!! trim "repo_version" field from analysis_lut during testing phase
-    analysis_lut <- analysis_lut |> select(-c("repo_version"))
-    creel_estimates$stratum <- creel_estimates$stratum |> select(-c("estimate_category"))
-    
     #determine if session analysis_id already exists in database model_analysis_lut table
     analysis_id_check <- fetch_table(con, "creel", "model_analysis_lut") |> select("analysis_id", "analysis_name")
     
     if (analysis_lut$analysis_id %in% analysis_id_check$analysis_id) {
       stop("Analysis uuid already exists in the creel database. Review before proceeding.")
     } else { 
-      #if analysis uuid does not already exist, write to database analysis lut
+      
+      #if session analysis uuid does not already exist, write to database analysis lut
       DBI::dbWriteTable(
         conn = con,
         name = DBI::Id(schema = "creel", table = "model_analysis_lut"),
@@ -286,47 +285,34 @@ export_estimates <- function(params, estimates_pe=NULL, estimates_bss=NULL) {
         row.names = FALSE,
         overwrite = FALSE,
         append = TRUE
-        # field.types = field_types_analysis_lut
+      )
+    
+      #model_estimates_total
+      DBI::dbWriteTable(
+        conn = con,
+        name = DBI::Id(schema = "creel", table = "model_estimates_total"),
+        value = creel_estimates$total,
+        row.names = FALSE,
+        overwrite = FALSE,
+        append = TRUE
+      )
+    
+      #model_estimates_stratum
+      DBI::dbWriteTable(
+        conn = con,
+        name = DBI::Id(schema = "creel", table = "model_estimates_stratum"),
+        value = creel_estimates$stratum,
+        row.names = FALSE,
+        overwrite = FALSE,
+        append = TRUE
       )
     }
-    #model_estimates_total
-    # field_types_total <- c(analysis_id = "uuid", project_id = "uuid", fishery_id = "uuid", model_type = "varchar", 
-    #                        species_id = "uuid", life_stage_id = "uuid", fin_mark_id = "uuid", fate_id = "uuid", 
-    #                        estimate_type = "varchar", estimate_value = "int4", min_event_date = "date", 
-    #                        max_event_date = "date", data_grade = "varchar")
-    
-    DBI::dbWriteTable(
-      conn = con,
-      name = DBI::Id(schema = "creel", table = "model_estimates_total"),
-      value = creel_estimates$total,
-      row.names = FALSE,
-      overwrite = FALSE,
-      append = TRUE
-      # field.types = field_types_total
-    )
-    
-    #model_estimates_stratum
-    # field_types_stratum <- c(analysis_id = "uuid", project_id = "uuid", fishery_id = "uuid", crc_area_id = "uuid", 
-    #                          section_num = "int4", min_event_date = "date", max_event_date = "date", period = "int4",
-    #                          day_type = "varchar",angler_type_id = "uuid", species_id = "uuid", life_stage_id = "uuid", 
-    #                          fin_mark_id = "uuid", fate_id = "uuid", model_type = "varchar", estimate_type = "varchar", 
-    #                          estimate_value = "int4", data_grate = "varchar")
-    
-    DBI::dbWriteTable(
-      conn = con,
-      name = DBI::Id(schema = "creel", table = "model_estimates_stratum"),
-      value = creel_estimates$stratum,
-      row.names = FALSE,
-      overwrite = FALSE,
-      append = TRUE
-      # field.types = field_types_stratum
-    )
     
     #verify data has been sent to database
-    # !!! currently only checks analysis_lut for uuid, not stratum or total tables
-    confirm_upload <- fetch_table(con, "creel", "model_analysis_lut") |> filter(analysis_id %in% analysis_lut$analysis_id)
+    confirm_upload <- fetch_table(con, "creel", "model_analysis_lut") |> 
+      filter(analysis_id %in% analysis_lut$analysis_id)
     
-    if (nrow(upload) == 1) {
+    if (nrow(confirm_upload) == 1) {
       dbDisconnect(con)
       cat("Data sucessfully exported to database. Disconnected from database.")
     } else {
@@ -356,5 +342,3 @@ export_estimates <- function(params, estimates_pe=NULL, estimates_bss=NULL) {
     cat("Export parameter must be either 'database', 'local', or 'no'.")
   }
 }
-
-
