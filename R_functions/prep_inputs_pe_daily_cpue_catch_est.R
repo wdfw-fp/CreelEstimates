@@ -1,7 +1,7 @@
 prep_inputs_pe_daily_cpue_catch_est <- function(
     days, #tibble with time strata and closure fields
     dwg_summarized, #list with shared interview, index and census tibbles
-    angler_hours_daily_mean,
+    angler_hours_daily_mean, #tibble of daily mean angler hours by event_date, angler_type, and section_num
     ...
 ){
   
@@ -20,10 +20,8 @@ prep_inputs_pe_daily_cpue_catch_est <- function(
       cpue_rom_daily = total_catch / total_hours,
       .groups = "drop"
       ) |> 
- #KB   # dplyr::left_join( #KB: replaced left_join with a full_join so it'll be easier to see what days there were no interviews for a particular "angler_final" grouping but "angler_hours_XXX" were estiamed to be >0
     dplyr::full_join(
       angler_hours_daily_mean, 
-#KB     # by = c("section_num", "day_type", "event_date", "angler_final") #KB: add "period" so that this grouping column was not duplicated; previous output had "period.x" and "period.y"
       by = c("section_num", "period", "day_type", "event_date", "angler_final")
     ) |>
     tidyr::drop_na(ang_hrs_daily_mean_TI_expan) |> 
