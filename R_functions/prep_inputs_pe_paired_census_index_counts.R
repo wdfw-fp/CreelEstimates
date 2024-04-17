@@ -107,10 +107,7 @@ if(str_detect(study_design, "tandard" )){
           1,
           TI_expan_weighted
         ) |> replace_na(1),
-        TI_expan_final = if_else(
-          cen_exp_meth == "Direct",
-          TI_expan_weighted / p_census,
-          census_indir)
+        TI_expan_final = TI_expan_weighted / p_census
       )
     
   }
