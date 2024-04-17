@@ -1,6 +1,5 @@
-prep_inputs_pe_census_expan <- function(
+prep_dwg_census_expan <- function(
     eff,
-    census_expansion,
     ...){
 
   eff |> 
@@ -13,9 +12,9 @@ prep_inputs_pe_census_expan <- function(
       values_to = "p_census"
     ) |> 
     dplyr::mutate(
-      p_census = replace_na(p_census, 1),
-      census_indir = 1,
-      cen_exp_meth = census_expansion
+      p_census = replace_na(p_census, 1) #,
+      # census_indir = 1,
+      # cen_exp_meth = census_expansion
     ) |> 
     dplyr::arrange(angler_final, section_num)
   
