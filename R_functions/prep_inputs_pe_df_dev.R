@@ -1,16 +1,8 @@
-prep_inputs_pe_df_dev <- function(
+prep_inputs_pe_df <- function(
 #KB    days,
     angler_hours_daily_mean,
     ...
 ){
-  
-#KB  dplyr::left_join(
-  #KB   angler_hours_daily_mean
-  #KB    , 
-  #KB   days |> dplyr::select(event_date, period)
-  #KB   ,
-  #KB   by = "event_date"
-  #KB   ) |> 
   angler_hours_daily_mean |>  #KB addition
     dplyr::count(section_num, period, day_type, angler_final, name = "n_days_samp") |> 
     dplyr::group_by(section_num, angler_final) |>
