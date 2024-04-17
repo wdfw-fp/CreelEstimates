@@ -1,4 +1,4 @@
-prep_inputs_pe_daily_cpue_catch_est_dev <- function(
+prep_inputs_pe_daily_cpue_catch_est <- function(
     days, #tibble with time strata and closure fields
     dwg_summarized, #list with shared interview, index and census tibbles
     angler_hours_daily_mean,
