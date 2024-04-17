@@ -34,19 +34,18 @@ if(str_detect(study_design, "tandard" )){
             dplyr::group_by(section_num, event_date, count_sequence) |>
             dplyr::summarize(angler_final = "boat", count_census = sum(count_census), .groups = "drop")
         ),
-      dwg_summarized$effort_index |> select(-fishery_name, -angler_final_int)
-      # dwg_summarized$effort_index |> select(-fishery_name, -count_type, -angler_final_int) #KB: removed count_type from effort_index output so need to remove/update this line of code
-      ,
-      by = c("section_num", "event_date", "count_sequence", "angler_final")
-    ) |> 
-    tidyr::drop_na(count_index) |> 
-    left_join(interview_ang_per_object |> select(angler_final, ang_per_object), by=c("angler_final"))|>
-    dplyr::ungroup() |>
-    mutate(
-      count_index_expand = ang_per_object * count_index 
-    ) |> 
-    select(-count_index, -ang_per_object)  |> 
-    rename(count_index = count_index_expand)
+        dwg_summarized$effort_index |> select(-fishery_name, -angler_final_int)
+        ,
+        by = c("section_num", "event_date", "count_sequence", "angler_final")
+      ) |> 
+      tidyr::drop_na(count_index) |> 
+      left_join(interview_ang_per_object |> select(angler_final, ang_per_object), by=c("angler_final"))|>
+      dplyr::ungroup() |>
+      mutate(
+        count_index_expand = ang_per_object * count_index 
+      ) |> 
+      select(-count_index, -ang_per_object)  |> 
+      rename(count_index = count_index_expand)
     
     #now overwrite, coercing angler_final back to bank/boat as above for pe_estimates$angler_hours_daily_mean
     #again dropping NAs and negatives as invalid for inferring estimates
