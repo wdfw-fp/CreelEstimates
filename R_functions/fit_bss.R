@@ -1,5 +1,5 @@
 #thin wrapper on stan()
-fit_bss_dev <- function(
+fit_bss <- function(
   # model_file = here::here("stan_models/BSS_creel_model_02_2021-01-22.stan"),
   #model_file_name = here::here(paste0("stan_models/", model_file_name)), #BSS_creel_model_02_2021-01-22.stan"),
   model_file_name = here::here("stan_models/BSS_creel_model_02_2024-04-03.stan"),
