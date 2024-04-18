@@ -1,128 +1,18 @@
-#creates angler_final categorical and calcs fishing_time & total time conditional on user choice of angler vs group counts
-#joins catch values (wide)
-
-#section_num of fishing_loc is assigned as Section whether or not interview_loc present
-#when no fishing_loc, then use section_num of interview_loc
+# creates i.) est_cg field using species, life_stage, fin_mark, and fate, ii.) summarizes the number each angler group caught, and...
+# ...iii.) creates output based on study_design and corresponding interview fields needed for angler effort calculations  
 
 prep_dwg_interview_catch <- function(
-    interview_plus_angler_types, 
-    study_design,
-    dwg_catch, 
-#KB    person_count_type, #string passed from params controlling angler_count vs total_group_count 
-#KB    min_fishing_time,  #numeric passed from params to filter fishing_time at least as long as this per-person duration
-    est_catch_groups, #data.fram passed from params of possibly-aggregated catch groups of interest to estimate
+    interview_plus_angler_types, # output from preceding functions that created calculated fishing time and defined angler_final 
+    dwg_catch,                   # catch data from dwg 
+    study_design,                # string passed from params denoting which study design was followed during data collection
+    est_catch_groups,            # data.frame passed from params of aggregated catch groups of interest to estimate
     ...){
-  
-  # KB - commented out following 3 lines (not entirely sure why this warning message is needed)  
-  # if(any(is.na(c(dwg_interview$vehicle_count, dwg_interview$trailer_count)))){ 
-  #   cat("Interview data have NA values for vehicle/trailer_count fields")      
-  # } 
 
   #coerce missing values to actual strings to allow params$est_catch_groups to include NAs alongside non-NA
   #to allow 'run' specification in params, add 'run' within across()
-#KB  dwg_catch <-
-  dwg_catch_group <- #KB addition
+  dwg_catch_group <- 
     dwg_catch |> 
     mutate(across(c(species, life_stage, fin_mark, fate), ~replace_na(as.character(.), "NA")))
-  
-  # KB - commented out following 3 lines (these were used in the preceding new/updated ""prep_dwg_interview_fishing_time" function)   
-  # if(person_count_type == "group"){
-  #   dwg_interview$person_count_final <- dwg_interview$total_group_count
-  # }else if (person_count_type == "angler"){
-  #   dwg_interview$person_count_final <- dwg_interview$angler_count
-  # }
-
-  # KB - commented out following 54 lines (these were used in the preceding new/updated "prep_dwg_interview_angler_types" function)   
-      # if(str_detect(study_design, "tandard" )){ #KB addition
-      #   #KB  interviews <- 
-      #   interview_angler_types <- # KB addition
-      #     interview_fishing_time  # KB addition
-      #   #KB     dwg_interview |> 
-      #   filter(is.na(angler_type) | str_detect(angler_type, "ank|oat")) |> 
-      #     dplyr::mutate(
-      #       # KB - commented out following 1 line (this were used in the preceding new/updated ""prep_dwg_interview_fishing_time" function)        
-      #       # trip_status = replace_na(trip_status, "Unknown"),
-      #       angler_final = dplyr::case_when( 
-      #         tolower(angler_type) == "boat" ~ "boat", 
-      #         tolower(angler_type) == "bank" ~ "bank", 
-      #         
-      #         boat_used == "No" ~ "bank", 
-      #         boat_used == "Yes" & 
-      #           stringr::str_detect(boat_type, "ontoon|ayak") & 
-      #           (is.na(fish_from_boat) | fish_from_boat == "Bank") ~ "bank", 
-      #         #allow kayaks as "boat":
-      #         boat_used == "Yes" & stringr::str_detect(boat_type, "ontoon|ayak") & fish_from_boat == "Boat" ~ "boat", # EB if kayaks that fished from boat are left NA, they will break the code for BSS 
-      #         boat_used == "Yes" & 
-      #           !stringr::str_detect(boat_type, "ontoon|ayak") & 
-      #           (is.na(fish_from_boat) | fish_from_boat == "Boat") ~ "boat", 
-      #         boat_used == "Yes" & !stringr::str_detect(boat_type, "ontoon|ayak") & 
-      #           fish_from_boat == "Bank" ~ "boat" # EB anglers who used a non- "ontoon|ayak" boat but primarily fished from shore 
-      #       ),
-      #       angler_final_int = as.integer(factor(angler_final)) #, #KB
-      #     ) #KB addition
-      # }else if(study_design == "Drano"){ #KB addition
-      #   #KB  interviews <- 
-      #   interview_angler_types <- # KB addition
-      #     interview_fishing_time |>  # KB addition
-      #     #KB     dwg_interview |> 
-      #     #KB     filter(is.na(angler_type) | str_detect(angler_type, "ank|oat")) |> 
-      #     dplyr::mutate(
-      #       # KB - commented out following 1 line (this were used in the preceding new/updated ""prep_dwg_interview_fishing_time" function)
-      #       # trip_status = replace_na(trip_status, "Unknown"),
-      #       angler_final = 
-      #         dplyr::case_when(
-      #           boat_used == "No" ~ "bank",
-      #           
-      #           boat_used == "Yes" & stringr::str_detect(boat_type, "railered|Motorized") & stringr::str_detect(boat_type_collapse, "Y") ~ "boat",
-      #           boat_used == "Yes" & stringr::str_detect(boat_type, "railered|Motorized") & stringr::str_detect(boat_type_collapse, "N") ~ "boat_motor",
-      #           
-      #           boat_used == "Yes" & stringr::str_detect(boat_type, "Skiff|Pram") & stringr::str_detect(boat_type_collapse, "Y") ~ "boat",
-      #           boat_used == "Yes" & stringr::str_detect(boat_type, "Skiff|Pram") & stringr::str_detect(boat_type_collapse, "N") ~  "boat_skiff",
-      #           
-      #           boat_used == "Yes" & stringr::str_detect(boat_type, "ontoon|ayak") & angler_type_kayak_pontoon == "boat" & stringr::str_detect(boat_type_collapse, "Y") ~ "boat",
-      #           boat_used == "Yes" & stringr::str_detect(boat_type, "ontoon|ayak") & angler_type_kayak_pontoon == "boat" & stringr::str_detect(boat_type_collapse, "N") ~ "boat_single",
-      #           boat_used == "Yes" & stringr::str_detect(boat_type, "ontoon|ayak") & angler_type_kayak_pontoon == "bank"  ~ "bank",
-      #           TRUE ~ "fail"
-      #         )
-      #       , angler_final_int = as.integer(factor(angler_final)) #, #KB
-      #     ) #KB addition
-      # }  #KB addition
-  
-  
-# KB - commented out following 5 lines (these were used in the preceding new/updated ""prep_dwg_interview_fishing_time" function)     
-  # end_time_final = dplyr::if_else(
-  #   trip_status == "Incomplete" | is.na(fishing_end_time),
-  #   interview_time,
-  #   fishing_end_time),
-  # fishing_time = round(as.numeric(end_time_final - fishing_start_time) / 3600, 5),
-  
-# KB - these 6 lines were already commented out in the original "prep_dwg_interview" function
-  # ,
-  # 
-  # person_count_final = case_when(
-  #   person_count_type == "group" ~ total_group_count,
-  #   person_count_type == "angler" ~ angler_count # EB this fails when using the "angler" person_count_type option
-  # ),
-  
-# KB - commented out following 4 lines (these were used in the preceding new/updated ""prep_dwg_interview_fishing_time" function) 
-  #   vehicle_count = if_else(vehicle_count > person_count_final, person_count_final, vehicle_count), #KB - I don't understand why this line of code is here; seems like a QAQC update but not sure
-  #   fishing_time_total = fishing_time * person_count_final
-  # ) |>
-  # dplyr::filter(fishing_time >= min_fishing_time) # |> # KB - commented out the pipe here
-  
-# KB - commented out following 12 lines, need to review and update as needed, in final "interview" output/df
-  # dplyr::select(
-  #   interview_id, 
-  #   section_num, event_date, angler_final, angler_final_int,
-  #   vehicle_count, trailer_count,
-  #   angler_count, total_group_count,
-  #   fishing_time, person_count_final, fishing_time_total, 
-  #   trip_status, previously_interviewed
-  #   # -creel_event_id, -water_body, -project_name, -interview_number,
-  #   # -crc_area, -fishing_location, -ends_with("_time"),
-  #   # -comment_txt, -water_body_desc
-  # ) |> 
-  # dplyr::arrange(section_num, event_date, angler_final) # KB - review and update this line, as needed, in final "interview" output/df
   
   catches <- map_df(
     1:nrow(est_catch_groups),
@@ -142,8 +32,7 @@ prep_dwg_interview_catch <- function(
 
   #replicate wrangled interviews n-many of catch_groups to estimate
   int_cat <- map_df(
-    1:nrow(est_catch_groups), #unique(catches$est_cg),
-#KB ~interviews |>
+    1:nrow(est_catch_groups), 
     ~interview_plus_angler_types |>   
       mutate(est_cg = paste0(unlist(est_catch_groups[.x,]), collapse = "_"))
     ) |>
@@ -153,8 +42,7 @@ prep_dwg_interview_catch <- function(
       fishery_name = params$fishery_name # add back fishery_name
     ) |>
     relocate(fishery_name)
-  
-  
+
   if(str_detect(study_design, "tandard" )){
     interview_final<-
       int_cat |> 
@@ -162,37 +50,24 @@ prep_dwg_interview_catch <- function(
         interview_id,
         section_num, event_date, angler_final, angler_final_int,
         vehicle_count, trailer_count,
-        #angler_count, total_group_count,
         fishing_time, person_count_final, fishing_time_total,
         trip_status, previously_interviewed,
         est_cg, fish_count
-        # -creel_event_id, -water_body, -project_name, -interview_number,
-        # -crc_area, -fishing_location, -ends_with("_time"),
-        # -comment_txt, -water_body_desc
       ) |>
       dplyr::arrange(section_num, event_date, angler_final) 
+    
   }else if(study_design == "Drano"){
+    
     interview_final<-
       int_cat |> 
       dplyr::select(
         interview_id,
         section_num, event_date, angler_final, angler_final_int,
-        #vehicle_count, trailer_count,
-        #angler_count, total_group_count,
         fishing_time, person_count_final, fishing_time_total,
         trip_status, previously_interviewed,
         est_cg, fish_count
-        # -creel_event_id, -water_body, -project_name, -interview_number,
-        # -crc_area, -fishing_location, -ends_with("_time"),
-        # -comment_txt, -water_body_desc
       ) |>
       dplyr::arrange(section_num, event_date, angler_final) 
   }
-
-  return(
-    #KB - the following 1 line was already commented out in the original "prep_dwg_interview" function
-    #list(interviews = interviews, catches = catches, int_cat = int_cat) 
-    interview_final 
-
-  )
+  return(interview_final)
 }
