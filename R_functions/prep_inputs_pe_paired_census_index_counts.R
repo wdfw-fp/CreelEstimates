@@ -1,11 +1,11 @@
 # Summarize paired census and index angler effort counts 
 
 prep_inputs_pe_paired_census_index_counts <- function(
-    days, #tibble with time strata and closure fields
-    dwg_summarized, #list with shared interview, index and census tibbles
-    interview_ang_per_object, #tibble of interview-based values to translate vehicle/trailer counts to boat/bank
-    census_expan, # tibble summarizing p_census by angler_final and section_num where p_census is a hard coded value in the database specifying the proportion of a a section that is covered during a census count; values less than 1 with result in census counts being expanded (e.g., census count divided by p_census)
-    study_design, # parameter specifying study design and which if/else loop gets called below
+    days,                     # tibble with time strata and closure fields
+    dwg_summarized,           # list with shared interview, index and census tibbles
+    interview_ang_per_object, # tibble of interview-based values to translate vehicle/trailer counts to boat/bank
+    census_expan,             # tibble summarizing p_census by angler_final and section_num where p_census is a hard coded value in the database specifying the proportion of a a section that is covered during a census count; values less than 1 with result in census counts being expanded (e.g., census count divided by p_census)
+    study_design,             # parameter specifying study design and which if/else loop gets called below
     ...
 ){
 
