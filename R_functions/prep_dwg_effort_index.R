@@ -1,14 +1,14 @@
-#Aggregates index effort counts over locations within count_seq & section
+#Aggregates index effort counts over locations within count_seq & section based on study_design and user input values for boat_type_collapse, fish_location_determines_type, angler_type_kayak_pontoon 
 #Note summarize() does not account for missed locations with date-section-sequence 
 prep_dwg_effort_index <- function(
-    eff, 
-    study_design,
-    boat_type_collapse = NA,
-    fish_location_determines_type = NA,
-    angler_type_kayak_pontoon = NA, 
+    eff,                                # effort data from dwg filtered using start & end dates passed from params
+    study_design,                       # string passed from params denoting which study design was followed during data collection
+    boat_type_collapse = NA,            # string passed from params that controls whether all (potential) boat types (e.g., motor_boat, drift_boat) are collapsed (i.e., boat_type_collapse: "Yes") into a single boat type or kept separate (boat_type_collapse: "No"). 
+    fish_location_determines_type = NA, # string passed from params that controls whether the observed fishing location for a given angler group during an effort count determines their angler type. 
+    angler_type_kayak_pontoon = NA,     # string passed from params that controls whether a boat designated as a kayak, pontoon, or kick during an effort count or angler group interview should be designated as a boat or bank angler.
     ...){
   
-#create intermediate object index_angler_groups that converts count_type objects to angler_final based on study design & user defined arguments (in YAML)
+#create intermediate object index_angler_groups that converts count_type objects to angler_final
 if(str_detect(study_design, "tandard" )){
 
   index_angler_groups<- 
@@ -24,8 +24,8 @@ if(str_detect(study_design, "tandard" )){
           count_type == "Trailers Only" ~ "boat",
           count_type == "Vehicle Only" ~ "total",
           TRUE ~ "fail"
-    )
-) 
+        )
+    ) 
 
 }else if(study_design == "Drano"){ 
 

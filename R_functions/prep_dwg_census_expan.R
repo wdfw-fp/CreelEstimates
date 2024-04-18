@@ -1,5 +1,5 @@
 prep_dwg_census_expan <- function(
-    eff,
+    eff, # effort data from dwg filtered using start & end dates passed from params
     ...){
 
   eff |> 
