@@ -1,3 +1,7 @@
+# calculate daily cpue by section, date (period, day_type), angler_final, and catch group (aka est_cg) using the Ratio-of-Means (rom) calculation 
+# NOTE: the Ratio-of-Mean cpue calculation inherently weights angler groups with longer fishing times as opposed to Mean-of-Ratio (mor) calculation which...
+# ... gives equal weight to every interview 
+
 prep_inputs_pe_daily_cpue_catch_est <- function(
     days, #tibble with time strata and closure fields
     dwg_summarized, #list with shared interview, index and census tibbles

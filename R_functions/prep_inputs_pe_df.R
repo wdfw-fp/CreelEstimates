@@ -1,5 +1,6 @@
+# calculate degrees of freedom based on number of creel survey days
+
 prep_inputs_pe_df <- function(
-#KB    days,
     angler_hours_daily_mean,
     ...
 ){

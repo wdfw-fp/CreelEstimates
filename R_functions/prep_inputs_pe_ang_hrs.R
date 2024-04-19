@@ -1,10 +1,9 @@
 prep_inputs_pe_ang_hrs <- function(
-    days, #tibble with time strata and closure fields
-    dwg_summarized, #list with shared interview, index and census tibbles
-    interview_ang_per_object,
-    paired_census_index_counts,
-    census_expan,
-    study_design,
+    days,                       # tibble with time strata and closure fields
+    dwg_summarized,             # list with shared interview, effort index and effort census tibbles
+    interview_ang_per_object,   # tibble (from list) that has summarized anglers per count_type object by angler_final 
+    paired_census_index_counts, # tibble (from list) that has summarized tie-in (aka census) count expansion factors by section & angler_final
+    study_design,               # parameter specifying study design and which if/else loop gets called below
     ...
     ){
   
@@ -92,8 +91,7 @@ prep_inputs_pe_ang_hrs <- function(
     mutate(
       ang_hrs_daily_mean_TI_expan = angler_hours_daily_mean * TI_expan_final
     )
-  
-  
+
   #return(angler_hours_daily_mean)
   return(angler_hours_daily_mean_TI_expan)
 }

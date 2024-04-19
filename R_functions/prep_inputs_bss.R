@@ -1,14 +1,16 @@
+# create object/list of data inputs for BSS model
+
 prep_inputs_bss <- function(
     period,
-    days, #tibble with time strata and closure fields
-    dwg_summarized, #list with shared interview, index and census tibbles
-    est_catch_group,
-    tie_in_mat,
-    priors,
-    study_design,
+    days,            # tibble with time strata and closure fields
+    dwg_summarized,  # list with shared interview, index and census tibbles
+    est_catch_group, # data.frame passed from params of aggregated catch groups of interest to estimate
+    census_expan,    # tibble summarizing p_census by angler_final and section_num where p_census is a hard coded value in the database specifying the proportion of a a section that is covered during a census count; values less than 1 with result in census counts being expanded (e.g., census count divided by p_census)
+    priors,          # list of hyperpriors specified by user
+    study_design,    # string passed from params denoting which study design was followed during data collection
     ...){
 
-if(str_detect(study_design, "tandard" )){ #KB addition
+if(str_detect(study_design, "tandard" )){ 
   #in-function-scope intermediates
   effort_index_vehicle <- dwg_summarized$effort_index |> filter(str_detect(angler_final, "total"))   #angler_final = "total" is the same data as count_type = "vehicle" (see prep_dwg_effort_index function)
   effort_index_trailer <- dwg_summarized$effort_index |> filter(str_detect(angler_final, "boat"))    #angler_final = "boat" is the same data as count_type = "trailer" (see prep_dwg_effort_index function)
@@ -41,7 +43,7 @@ if(str_detect(study_design, "tandard" )){ #KB addition
     group_by(event_date, section_num, angler_final_int) |> 
     summarise(across(c(fishing_time_total, fish_count), sum), .groups = "drop")
 
-}else if(study_design == "Drano"){ #KB addition
+}else if(study_design == "Drano"){ 
   
   effort_index_vehicle <- dwg_summarized$effort_index |> filter(angler_final == "xxx") # there were no vehicle index counts built into the Drano Lake creel study design; filtering "xxx" as a data wrangling trick to create empty dataframe 
   effort_index_trailer <- dwg_summarized$effort_index |> filter(angler_final == "xxx") # there were no trailer index counts built into the Drano Lake creel study design; filtering "xxx" as a data wrangling trick to create empty dataframe
@@ -137,7 +139,7 @@ stan_list <- list(
   
   #proportion spatial coverage during census (tie-in; TI) counts  
   p_TI = 
-    tie_in_mat |> 
+    census_expan |> 
     select(angler_final, section_num, p_census) |> 
     pivot_wider(names_from = section_num, values_from = p_census) |> 
     select(-angler_final) |> 
