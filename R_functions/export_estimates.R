@@ -119,7 +119,7 @@ export_estimates <- function(params, estimates_pe=NULL, estimates_bss=NULL) {
   
   #join CRC from fishery manager table to estimate tables
   creel_estimates$stratum <- left_join(creel_estimates$stratum, fishery_manager_trim, by ="section_num")
-  
+   
   # fishery_manager_total <- as.vector(fishery_manager_trim$catch_area_code)
   # fishery_manager_total <- paste(fishery_manager_total, collapse = ",")
   # #join CRCs from all sections for total strata
@@ -136,21 +136,37 @@ export_estimates <- function(params, estimates_pe=NULL, estimates_bss=NULL) {
       angler_final == "boat" ~ "Boat"
     ))
   
+  # add period_timestep field to denote yaml model parameters
+  creel_estimates$stratum <- creel_estimates$stratum |> 
+    mutate(period_timestep = case_when(
+      model_type == "PE" ~ params$period_pe,
+      model_type == "BSS" ~ params$period_bss
+      ))
+  
+  creel_estimates$total <- creel_estimates$total |> 
+    mutate(period_timestep = case_when(
+      model_type == "PE" ~ params$period_pe,
+      model_type == "BSS" ~ params$period_bss
+    ))
+  
   #assign to global env
   creel_estimates <<- creel_estimates
-
-  #-----------------------------------------------------------------------------------------------------------------#
+  
+  #-------------------------------------------------------------------------------------------------------------------#
+  ## EXPORTING ESTIMATES ##
+  
   # Connect to database and conditionally export
   if(export_data == tolower("database")) {
     
-    estimate_reviewers <- c("holc2477") #please don't manually modify this list :) 
+    estimate_reviewers <- c("holc2477", "bentlktb") #please don't manually modify this list :) 
     
     if (!Sys.info()["user"] %in% estimate_reviewers && params$data_grade == tolower("provisional")) {
       stop("Creel project leads may only upload estimates with a data_grade of 'provisional'.")
     }
     
-    #Convert analysis script to JSON string which is added as a column to analysis_lut
-    JSON_conversion(params, direction = "toJSON")
+    #convert metadata to json. Automatically added to analysis_lut
+    json_conversion(type = "script")
+    json_conversion(type = "r_session")
     
     #-----------------------------------------------------------------------------------------------------------------#
     
@@ -179,7 +195,8 @@ export_estimates <- function(params, estimates_pe=NULL, estimates_bss=NULL) {
       if (!DBI::dbIsValid(con)) {
         stop("Failed to establish connection after ", max_attempts, " attempts.")
       } else {
-        message("Connection sucessfully established.")
+        cat("\n\n")
+        message("Database connection established.")
       }
       
       #show con in RStudio Connections pane
@@ -198,9 +215,7 @@ export_estimates <- function(params, estimates_pe=NULL, estimates_bss=NULL) {
     con <- establish_db_con(dsn = "creel_estimates_test")
     
     #-----------------------------------------------------------------------------------------------------------------#
-    
-    #define function to fetch tables from database
-    fetch_table <- function(con = NULL, schema, table) {
+    fetch_db_table <- function(con = NULL, schema, table) {
       
       if(!DBI::dbIsValid(con)) {
         stop("No database connection provided.")
@@ -215,14 +230,15 @@ export_estimates <- function(params, estimates_pe=NULL, estimates_bss=NULL) {
     }
     
     #query database tables necessary to get UUIDS
-    project_lut <- fetch_table(con, "creel", "project_lut") |> select(project_name, project_id)
-    fishery_lut <- fetch_table(con, "creel", "fishery_lut") |> select(fishery_name, fishery_id)
-    species_lut <- fetch_table(con, "creel", "species_lut") |> select(species_name, species_id)
-    life_stage_lut <- fetch_table(con, "creel", "life_stage_lut") |> select(life_stage_name, life_stage_id)
-    fin_mark_lut <- fetch_table(con, "creel", "fin_mark_lut") |> select(fin_mark_code, fin_mark_id)
-    fate_lut <- fetch_table(con, "creel", "fate_lut") |> select(fate_name, fate_id)
-    angler_type_lut <- fetch_table(con, "creel", "angler_type_lut") |> select(angler_type_code, angler_type_id)
-    crc_area_lut <- fetch_table(con, "creel", "crc_area_lut") |> select(catch_area_code, crc_area_id)
+    cat("\nFetching database uuids.")
+    project_lut <- fetch_db_table(con, "creel", "project_lut") |> select(project_name, project_id)
+    fishery_lut <- fetch_db_table(con, "creel", "fishery_lut") |> select(fishery_name, fishery_id)
+    species_lut <- fetch_db_table(con, "creel", "species_lut") |> select(species_name, species_id)
+    life_stage_lut <- fetch_db_table(con, "creel", "life_stage_lut") |> select(life_stage_name, life_stage_id)
+    fin_mark_lut <- fetch_db_table(con, "creel", "fin_mark_lut") |> select(fin_mark_code, fin_mark_id)
+    fate_lut <- fetch_db_table(con, "creel", "fate_lut") |> select(fate_name, fate_id)
+    angler_type_lut <- fetch_db_table(con, "creel", "angler_type_lut") |> select(angler_type_code, angler_type_id)
+    crc_area_lut <- fetch_db_table(con, "creel", "crc_area_lut") |> select(catch_area_code, crc_area_id)
     
     #parse out catch group column into component fields to match with database format and use of UUIDs
     ##total UUIDs ----------------------------------------------------------------------------------------------
@@ -238,7 +254,8 @@ export_estimates <- function(params, estimates_pe=NULL, estimates_bss=NULL) {
     creel_estimates$total <- creel_estimates$total |> left_join(life_stage_lut, by = "life_stage_name")
     creel_estimates$total <- creel_estimates$total |> left_join(fin_mark_lut, by = "fin_mark_code")
     creel_estimates$total <- creel_estimates$total |> left_join(fate_lut, by = "fate_name")
-    #reformat
+    
+    #reformat, remove common name fields in favor of UUID fields
     creel_estimates$total <- creel_estimates$total |> 
       select(-c("project_name", "fishery_name", "species_name", "life_stage_name","fin_mark_code", "fate_name")) |>
       relocate(c("project_id", "fishery_id")) |> 
@@ -271,13 +288,14 @@ export_estimates <- function(params, estimates_pe=NULL, estimates_bss=NULL) {
     
     #model_analysis_lut
     #determine if session analysis_id already exists in database model_analysis_lut table
-    analysis_id_check <- fetch_table(con, "creel", "model_analysis_lut") |> select("analysis_id", "analysis_name")
+    analysis_id_check <- fetch_db_table(con, "creel", "model_analysis_lut") |> select(analysis_id, analysis_name)
     
-    if (analysis_lut$analysis_id %in% analysis_id_check$analysis_id) {
+    if (toupper(analysis_lut$analysis_id) %in% analysis_id_check$analysis_id) {
       stop("Analysis uuid already exists in the creel database. Review before proceeding.")
     } else { 
       
       #if session analysis uuid does not already exist, write to database analysis lut
+      cat("\nWriting to model_analysis_lut table.")
       DBI::dbWriteTable(
         conn = con,
         name = DBI::Id(schema = "creel", table = "model_analysis_lut"),
@@ -286,8 +304,9 @@ export_estimates <- function(params, estimates_pe=NULL, estimates_bss=NULL) {
         overwrite = FALSE,
         append = TRUE
       )
-    
+      
       #model_estimates_total
+      cat("\nWriting to model_estimates_total table.")
       DBI::dbWriteTable(
         conn = con,
         name = DBI::Id(schema = "creel", table = "model_estimates_total"),
@@ -298,6 +317,7 @@ export_estimates <- function(params, estimates_pe=NULL, estimates_bss=NULL) {
       )
     
       #model_estimates_stratum
+      cat("\nWriting to model_estimates_stratum table.")
       DBI::dbWriteTable(
         conn = con,
         name = DBI::Id(schema = "creel", table = "model_estimates_stratum"),
@@ -308,21 +328,30 @@ export_estimates <- function(params, estimates_pe=NULL, estimates_bss=NULL) {
       )
     }
     
-    #verify data has been sent to database
-    confirm_upload <- fetch_table(con, "creel", "model_analysis_lut") |> 
-      filter(analysis_id %in% analysis_lut$analysis_id)
+    cat("Uploading complete. Beginning verification of analysis_id.")
     
-    if (nrow(confirm_upload) == 1) {
-      dbDisconnect(con)
-      cat("Data sucessfully exported to database. Disconnected from database.")
+    #verify data has been sent to database
+    confirm_upload <- fetch_db_table(con, "creel", "model_analysis_lut") |> select(analysis_id, analysis_name)
+    
+    if (toupper(analysis_lut$analysis_id) %in% confirm_upload$analysis_id) {
+      
+      DBI::dbDisconnect(con)
+      cat("Data sucessfully exported. Disconnecting from database.")
     } else {
-      stop("Unable to confirm upload by checking database for session analysis_id.")
+      
+      #what to do if analysis_id is not in analysis_lut (partial/failed export)
+      message("Unable to confirm upload by checking database for session analysis_id.")
+      cat("\n")
+      message("Writing analysis_lut to local computer so that analysis_id for partial data upload can be investigated.")
+      readr::write_csv(analysis_lut, file = paste0("FAILED_UPLOAD_LOG_","analysis_lut.csv"), append = TRUE)
+      DBI::dbDisconnect(con)
     }
     
   } else if (export_data == tolower("local")) {
     
-    #Convert analysis script to JSON string which is added as a column to analysis_lut
-    JSON_conversion(params, direction = "toJSON")
+    #convert metadata to json. Automatically added to analysis_lut
+    json_conversion(type = "script")
+    json_conversion(type = "r_session")
     
     #project- and fishery-specific folder from CreelEstimates
     #could be more flexible and made folders where needed? for case of recreation of script on computer that did run anaylsis
@@ -333,10 +362,13 @@ export_estimates <- function(params, estimates_pe=NULL, estimates_bss=NULL) {
     write_csv(creel_estimates$stratum, file = paste0(write_directory,"model_estimates_stratum.csv"))
     write_csv(creel_estimates$total, file = paste0(write_directory, "model_estimates_total.csv"))  
     
-    cat("\nModel estimates and analysis_lut saved to local computer.")
+    cat("\n\n")
+    cat("Standardized model estimate tables and analysis_lut saved to fishery folder on local computer.")
     
   } else if (export_data == tolower("No")) {
+    cat("\n\n")
     cat("Catch and effort estimates not exported.")
+    cat("\nStandardized model estimates can be viewed in output list 'creel_estimates'.")
 
   } else {
     cat("Export parameter must be either 'database', 'local', or 'no'.")

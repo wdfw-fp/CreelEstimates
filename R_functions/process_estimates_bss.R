@@ -1,4 +1,4 @@
-process_estimates_bss <- function(estimates_bss) {
+process_estimates_bss <- function(estimates_bss, ...) {
   ####################################################################################################### #
   # BSS wrangling ####
   ####################################################################################################### #
@@ -28,7 +28,7 @@ process_estimates_bss <- function(estimates_bss) {
       )
   
   #Extract fishery-specific creel metadata
-  analysis_id <- analysis_id
+  analysis_id <- analysis_lut$analysis_id
   project_name <- params$project_name
   fishery_name <- params$fishery_name
   model_type <- "BSS"

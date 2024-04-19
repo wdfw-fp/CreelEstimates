@@ -12,13 +12,13 @@ process_estimates_pe <- function(estimates_pe) {
   # Add UUID and model_type columns
   #PE effort
   transformed_pe_data$pe_effort <- transformed_pe_data$pe_effort %>%
-    mutate(analysis_id = analysis_id,
+    mutate(analysis_id = analysis_lut$analysis_id,
            model_type = "PE") %>%
     relocate(analysis_id)
   
   #PE catch
   transformed_pe_data$pe_catch <- transformed_pe_data$pe_catch %>%
-    mutate(analysis_id = analysis_id,
+    mutate(analysis_id = analysis_lut$analysis_id,
            model_type = "PE") %>%
     relocate(analysis_id)
   ############################ Stratified table ##################################
