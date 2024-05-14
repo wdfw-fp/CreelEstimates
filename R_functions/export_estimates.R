@@ -1,3 +1,7 @@
+#This function is the primary control of creel model estimate ETL process
+#It calls upon PE and BSS outputs to indepedently reformat to a standardized format
+#The resulting objects are either output locally as a csv or uploaded to the creel database
+
 export_estimates <- function(params, estimates_pe=NULL, estimates_bss=NULL) {
   
   # Extract parameters
@@ -28,14 +32,14 @@ export_estimates <- function(params, estimates_pe=NULL, estimates_bss=NULL) {
     transformed_pe_data$pe_stratum_catch <- transformed_pe_data$pe_stratum_catch
     
     #table 2, stratum_effort
-    transformed_pe_data$pe_stratum_effort <- transformed_pe_data$pe_stratum_effort %>% 
+    transformed_pe_data$pe_stratum_effort <- transformed_pe_data$pe_stratum_effort |> 
       mutate(est_cg = NA)
     
     #table 3, summarized_catch
     transformed_pe_data$pe_summarized_catch <- transformed_pe_data$pe_summarized_catch
     
     #table 4, summarized_effort
-    transformed_pe_data$pe_summarized_effort <- transformed_pe_data$pe_summarized_effort %>% 
+    transformed_pe_data$pe_summarized_effort <- transformed_pe_data$pe_summarized_effort |> 
       mutate(est_cg = NA)
   }
 
@@ -48,23 +52,25 @@ export_estimates <- function(params, estimates_pe=NULL, estimates_bss=NULL) {
     #Get PE and BSS dataframes to match before binding rows
     
     #table 1, stratum_catch
-    transformed_bss_data$bss_stratum_catch <- transformed_bss_data$bss_stratum_catch %>% 
-      rename(period = "week", estimate_category = "estimate") %>% 
-      select(-c("month", "estimate_index", "day_index", "event_date")) %>% 
-      mutate(day_type = NA)
+    transformed_bss_data$bss_stratum_catch <- transformed_bss_data$bss_stratum_catch |> 
+      rename(period = "week", estimate_category = "estimate") |> 
+      select(-c("month", "estimate_index", "day_index", "event_date")) |> 
+      #add day_type to match PE format
+      mutate(day_type = ifelse(weekdays(min_event_date) %in% params$days_wkend, "weekend", "weekday"))
     
     #table 2, stratum_effort
-    transformed_bss_data$bss_stratum_effort <- transformed_bss_data$bss_stratum_effort %>% 
-      rename(period = "week", estimate_category = "estimate") %>% 
-      select(-c("month", "estimate_index", "day_index", "event_date")) %>% 
-      mutate(day_type = NA)
+    transformed_bss_data$bss_stratum_effort <- transformed_bss_data$bss_stratum_effort |> 
+      rename(period = "week", estimate_category = "estimate") |> 
+      select(-c("month", "estimate_index", "day_index", "event_date")) |> 
+      #add day_type to match PE format
+      mutate(day_type = ifelse(weekdays(min_event_date) %in% params$days_wkend, "weekend", "weekday"))
     
     #table 3, summarized_catch
-    transformed_bss_data$bss_summarized_catch <- transformed_bss_data$bss_summarized_catch %>% 
+    transformed_bss_data$bss_summarized_catch <- transformed_bss_data$bss_summarized_catch |> 
       rename(estimate_category = "estimate") 
     
     #table 4, summarized_effort
-    transformed_bss_data$bss_summarized_effort <- transformed_bss_data$bss_summarized_effort %>% 
+    transformed_bss_data$bss_summarized_effort <- transformed_bss_data$bss_summarized_effort |> 
       rename(estimate_category = "estimate")
     
   }
@@ -92,7 +98,7 @@ export_estimates <- function(params, estimates_pe=NULL, estimates_bss=NULL) {
     stop("Invalid value for data_grade. Use 'approved' or 'provisional'.")
   }
   #-----------------------------------------------------------------------------------------------------------------#
-  #Combine PE and BSS before exporting
+  #Combine PE and BSS standardized objects
   
   creel_estimates <- list(
     #table 1
@@ -170,51 +176,68 @@ export_estimates <- function(params, estimates_pe=NULL, estimates_bss=NULL) {
     
     #-----------------------------------------------------------------------------------------------------------------#
     
-    #function to establish database connection with retry and delay
-    establish_db_con<- function(dsn, max_attempts = 5, delay_seconds = 3) {
+    #function to establish database connection
+    establish_db_con<- function(db, max_attempts = 5, delay_seconds = 3) {
+      # initialize objects
       attempt <- 1
       con <- NULL
       
+      #prompt for username and password
+      cat("\n\nPlease enter database username and password.")
+      db_username <- rstudioapi::askForPassword("Please enter database username")
+      db_password <- rstudioapi::askForPassword("Please enter user password")
+
       while (attempt <= max_attempts && is.null(con)) {
         # Attempt to establish connection
         con <- tryCatch({
-          DBI::dbConnect(odbc::odbc(), dsn = dsn)
+          # DBI::dbConnect(odbc::odbc(), dsn = dsn)
+          DBI::dbConnect(
+            RPostgres::Postgres(),
+            user = db_username,
+            password = db_password,
+            port = as.integer(5433),
+            dbname = db,
+            host = "pg.test.wdfw-fish.us"
+          )
         }, error = function(e) {
-          # Print error message
+          cat("\n")
           message(paste("Attempt", attempt, "failed:", conditionMessage(e)))
-          # Increment attempt count
+          cat("\n", crayon::red$bgYellow("Make sure that you are connected to VPN.\n"))
+
           attempt <<- attempt + 1
-          # Pause for delay before next attempt
+
           Sys.sleep(delay_seconds)
           # Return NULL to retry
           NULL
         })
       }
-      
+
       #check if connection was established
       if (!DBI::dbIsValid(con)) {
         stop("Failed to establish connection after ", max_attempts, " attempts.")
       } else {
         cat("\n\n")
-        message("Database connection established.")
+        cat("Database connection established.")
       }
-      
-      #show con in RStudio Connections pane
-      odbc:::on_connection_opened(con, 
-                                  paste(
-                                    c(paste("con <-", gsub(", ", ",\n\t", c(match.call()))
-                                            )
-                                      ), collapse = "\n"
-                                    )
-                                  )
-      
+
+      # #show con in RStudio Connections pane
+      # odbc:::on_connection_opened(con,
+      #                             paste(
+      #                               c(paste("con <-", gsub(", ", ",\n\t", c(match.call()))
+      #                                       )
+      #                                 ), collapse = "\n"
+      #                               )
+      #                             )
+
       return(con)
     }
     
     #connect to database
-    con <- establish_db_con(dsn = "creel_estimates_test")
+    con <- establish_db_con(db = "FISH")
     
     #-----------------------------------------------------------------------------------------------------------------#
+    
+    #define function to query database tables
     fetch_db_table <- function(con = NULL, schema, table) {
       
       if(!DBI::dbIsValid(con)) {
@@ -241,6 +264,7 @@ export_estimates <- function(params, estimates_pe=NULL, estimates_bss=NULL) {
     crc_area_lut <- fetch_db_table(con, "creel", "crc_area_lut") |> select(catch_area_code, crc_area_id)
     
     #parse out catch group column into component fields to match with database format and use of UUIDs
+    
     ##total UUIDs ----------------------------------------------------------------------------------------------
     creel_estimates$total <- creel_estimates$total |>
       tidyr::separate(col = est_cg, 
@@ -282,18 +306,29 @@ export_estimates <- function(params, estimates_pe=NULL, estimates_bss=NULL) {
       select(-c("project_name", "fishery_name","species_name", "life_stage_name","fin_mark_code", "fate_name", 
                 "angler_final", "catch_area_code", "catch_area_description")) |>
       relocate(c("project_id", "fishery_id")) |> 
-      relocate(c("species_id", "life_stage_id", "fin_mark_id", "fate_id", "angler_type_id"), .after = "model_type")    
+      relocate(c("species_id", "life_stage_id", "fin_mark_id", "fate_id", "angler_type_id"), .after = "model_type") 
+
+    #reformat NaN estimate values in stratum scale to 0 values
+    creel_estimates$stratum <- creel_estimates$stratum |>  
+      mutate(estimate_value = case_when(
+        is.nan(estimate_value) ~ 0,
+        TRUE ~ estimate_value
+      ))
     
+    creel_estimates <<- creel_estimates
+
     ### write estimates to database ####
-    
+
     #model_analysis_lut
     #determine if session analysis_id already exists in database model_analysis_lut table
+    cat("\nVerifying that session 'analysis_id' does not exist in database before upload.")
     analysis_id_check <- fetch_db_table(con, "creel", "model_analysis_lut") |> select(analysis_id, analysis_name)
-    
-    if (toupper(analysis_lut$analysis_id) %in% analysis_id_check$analysis_id) {
-      stop("Analysis uuid already exists in the creel database. Review before proceeding.")
-    } else { 
-      
+
+    if (analysis_lut$analysis_id %in% analysis_id_check$analysis_id) {
+      cat("\n")
+      stop("\nAnalysis uuid already exists in the creel database. Review before proceeding.")
+    } else {
+
       #if session analysis uuid does not already exist, write to database analysis lut
       cat("\nWriting to model_analysis_lut table.")
       DBI::dbWriteTable(
@@ -304,7 +339,7 @@ export_estimates <- function(params, estimates_pe=NULL, estimates_bss=NULL) {
         overwrite = FALSE,
         append = TRUE
       )
-      
+
       #model_estimates_total
       cat("\nWriting to model_estimates_total table.")
       DBI::dbWriteTable(
@@ -315,9 +350,9 @@ export_estimates <- function(params, estimates_pe=NULL, estimates_bss=NULL) {
         overwrite = FALSE,
         append = TRUE
       )
-    
+
       #model_estimates_stratum
-      cat("\nWriting to model_estimates_stratum table.")
+      cat("\nWriting to model_estimates_stratum table. This may take a moment.")
       DBI::dbWriteTable(
         conn = con,
         name = DBI::Id(schema = "creel", table = "model_estimates_stratum"),
@@ -327,34 +362,40 @@ export_estimates <- function(params, estimates_pe=NULL, estimates_bss=NULL) {
         append = TRUE
       )
     }
-    
-    cat("Uploading complete. Beginning verification of analysis_id.")
-    
+
+    cat("\nUploading complete. Verifying session 'analysis_id' in database analysis look up table.")
+
     #verify data has been sent to database
     confirm_upload <- fetch_db_table(con, "creel", "model_analysis_lut") |> select(analysis_id, analysis_name)
-    
-    if (toupper(analysis_lut$analysis_id) %in% confirm_upload$analysis_id) {
-      
+
+    if (analysis_lut$analysis_id %in% confirm_upload$analysis_id) {
+
       DBI::dbDisconnect(con)
-      cat("Data sucessfully exported. Disconnecting from database.")
+      cat("\nData sucessfully exported. Disconnecting from database.")
+      
     } else {
-      
       #what to do if analysis_id is not in analysis_lut (partial/failed export)
-      message("Unable to confirm upload by checking database for session analysis_id.")
       cat("\n")
-      message("Writing analysis_lut to local computer so that analysis_id for partial data upload can be investigated.")
+      message("Unable to confirm upload by checking database for session analysis_id.")
+      
+      cat("\n")
+      message(paste("writing",crayon::red$bgYellow("FAILED_UPLOAD_LOG_analysis_lut.csv") , "to CreelEstimates folder so that analysis_id for partial data upload can be investigated."))
+      
       readr::write_csv(analysis_lut, file = paste0("FAILED_UPLOAD_LOG_","analysis_lut.csv"), append = TRUE)
+      
       DBI::dbDisconnect(con)
+      stop("\nDisconnecting from database.")
     }
     
   } else if (export_data == tolower("local")) {
+    #process for exporting ETL output tables locally for inspection prior to uploading to database
     
     #convert metadata to json. Automatically added to analysis_lut
     json_conversion(type = "script")
     json_conversion(type = "r_session")
     
     #project- and fishery-specific folder from CreelEstimates
-    #could be more flexible and made folders where needed? for case of recreation of script on computer that did run anaylsis
+    #could be more flexible and make folders where needed? for case of recreation of script on computer that did run analysis
     write_directory <- paste0(getwd(), "/fishery_analyses/", params$project_name, "/", params$fishery_name,"/")
     
     #write csv files to local working directory
@@ -366,11 +407,13 @@ export_estimates <- function(params, estimates_pe=NULL, estimates_bss=NULL) {
     cat("Standardized model estimate tables and analysis_lut saved to fishery folder on local computer.")
     
   } else if (export_data == tolower("No")) {
+    #send message to user that no ETL actions were taken
     cat("\n\n")
     cat("Catch and effort estimates not exported.")
-    cat("\nStandardized model estimates can be viewed in output list 'creel_estimates'.")
+    cat("\nStandardized model estimates can be viewed in output list object 'creel_estimates'.")
 
   } else {
+    #send message to user with correct export parameter options
     cat("Export parameter must be either 'database', 'local', or 'no'.")
   }
 }
