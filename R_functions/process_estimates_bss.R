@@ -102,5 +102,8 @@ process_estimates_bss <- function(estimates_bss, ...) {
     filter(estimate %in% "E_sum")
   
   # assign("transformed_bss_data", transformed_bss_data, envir = .GlobalEnv)
+  
+  cat("\nBSS standardization transformation complete.")
+  
   return(transformed_bss_data)
 }

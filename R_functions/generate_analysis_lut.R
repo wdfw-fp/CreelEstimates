@@ -3,6 +3,9 @@ generate_analysis_lut <- function(params) {
   #check that analysis uuid
   if (!exists("analysis_lut", envir = .GlobalEnv)) {
     
+    #initialize look up table
+    analysis_lut <- NULL
+    
     #generate session-specific analysis uuid
     analysis_id <- uuid::UUIDgenerate()
     
@@ -17,7 +20,8 @@ generate_analysis_lut <- function(params) {
                                                             system("git rev-parse HEAD", intern = TRUE))
                                       )
                            )
-  } else {
+    cat("Unique analysis_id created for this R session.")
+    } else {
     cat("analysis_lut with unique 'analysis_id' already generated in this R session.")
   }
 }
