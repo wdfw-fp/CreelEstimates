@@ -2,10 +2,10 @@
 
 prep_dwg_interview_fishing_time <- function(
     dwg_interview,          # interview data from dwg filtered using start & end dates passed from params
-    person_count_type = NA, # string passed from params controlling angler_count vs total_group_count 
     min_fishing_time,       # numeric passed from params to filter fishing_time at least as long as this per-person duration
     study_design,           # string passed from params denoting which study design was followed during data collection
-    ...){
+    ...
+    ){
 
 if(str_detect(study_design, "tandard" ) | study_design == "Drano"){ # If Study design in the YAML is specified as [S]tandard or Drano proceed with running this function...  
   
