@@ -306,6 +306,7 @@ dwg$catch |>
 
 # 3.) Effort census data summarization
   # 3.1 - Aggregate census (tie in) effort counts, associating to closest-in-time index count
+    ##NOTE: a warning message will appear indicating "...an unexpected many-to-many relationship..." if multiple effort census counts were completed in the same section and day; this message can be ignored as the data wrangling works as intended despite this warning
     effort_census_summ <- 
       prep_dwg_effort_census(
         eff = dwg$effort |> filter(between(event_date, as.Date(params$est_date_start), as.Date(params$est_date_end))),
