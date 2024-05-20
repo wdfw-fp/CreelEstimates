@@ -147,6 +147,7 @@ dwg$days <- prep_days(
 ## Fishery sections
 
 ```{r table_sections}
+# Summary table of water_body, section_nums, and locations for a given fishery
 dwg$effort |> 
   filter(location_type == "Section") |> 
   distinct(water_body, section_num, location) |> 
@@ -158,6 +159,7 @@ dwg$effort |>
 ## Days
 
 ```{r gt_creel_days}
+# Summary table of all dates (not just surveyed dates) for a given fishery & whether each section_num was open or closed
 dwg$days |> 
   mutate(across(starts_with("open_"), ~if_else(., "open","closed"))) |> 
   rename_with(.cols = starts_with("open_"), .fn = ~str_remove_all(., "open_")) |> 
@@ -174,9 +176,7 @@ dwg$days |>
 
 ## Period-Dates reference
 ```{r gt_period_dates_reference}
-
-# reference for period (time_strata)
-
+# Summary table of dates for each period (time_strata)
 dwg$days |> 
     group_by(period) |> 
     summarise(
@@ -189,6 +189,7 @@ dwg$days |>
 ## Effort
 
 ```{r gt_creel_effort}
+# Total number of effort surveys by section num, location, and type (aka tie_in_indicator; 1=census, 0=index)
 dwg$effort |>
   filter(between(event_date, as.Date(params$est_date_start), as.Date(params$est_date_end))) |> 
   distinct(section_num, location, event_date, tie_in_indicator, count_sequence) |> 
@@ -203,17 +204,38 @@ dwg$effort |>
     style = list(cell_fill("grey70"), cell_text(weight = "bold")),
     locations = cells_body(rows = tie_in_indicator == "census")
   )
+
+# Total number of census effort surveys by water_body, event_date, and section_num; 
+  ## NOTE: NAs in the "effort_type.y" column indicate that a census survey was conducted without the paired index count; if this occurs, the census data without a paired index count needs to be filter out for BSS model to run
+left_join(
+  dwg$effort |>
+    filter(tie_in_indicator == 1, between(event_date, as.Date(params$est_date_start), as.Date(params$est_date_end))) |> 
+    mutate(effort_type = "Census") |> 
+    select(water_body, event_date, section_num, effort_type) |> 
+    distinct() |> 
+    arrange(event_date, section_num),
+  dwg$effort |>
+    filter(tie_in_indicator == 0, between(event_date, as.Date(params$est_date_start), as.Date(params$est_date_end))) |> 
+    mutate(effort_type = "Index") |> 
+    select(water_body, event_date, section_num, effort_type) |> 
+    distinct() |> 
+    arrange(event_date, section_num),
+  by = c("water_body", "event_date", "section_num")
+) |> print(n= Inf)
+
 ```
 
 ## Interview
 
 ```{r gt_creel_interview}
+# Total number of angler group interviews by section_num and fishing_location
 dwg$interview |>
   filter(between(event_date, as.Date(params$est_date_start), as.Date(params$est_date_end))) |>
   count(section_num, fishing_location) |>
   arrange(section_num) |>
   gt(groupname_col = "section_num", caption = "Total number of angler interviews by (analysis/final) section")
 
+# Number of angler group interviews by event_date and section_num; 
 dwg$interview |>  
   filter(between(event_date, as.Date(params$est_date_start), as.Date(params$est_date_end))) |> 
   count(section_num, event_date) |> 
@@ -234,12 +256,21 @@ dwg$interview |>
 ## Catch
 
 ```{r gt_creel_catch}
+# Total number of "encounters" for each unique catch_group recorded during angler group interviews
 dwg$catch |>
   left_join(dwg$interview, by = "interview_id") |> 
   filter(between(event_date, as.Date(params$est_date_start), as.Date(params$est_date_end))) |> 
   group_by(catch_group) |> 
   summarise(fish_count = sum(fish_count), .groups = "drop") |> 
   gt(caption = "Total reported encounters in interviews to date for catch groups defined as individual combinations of species, life state, fin mark, and fate")
+```
+
+# Manual data edits (if needed)
+
+```{r manual_edits, echo=FALSE, results = 'hide'}
+# If needed, manually edit/filter the creel data imported from dwg; be sure to include an explanation of each edit
+
+
 ```
 
 # Shared data aggregation
