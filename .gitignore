@@ -47,3 +47,5 @@ vignettes/*.pdf
 /input_files/params_list.rds
 # ETL output file
 FAILED_UPLOAD_LOG_analysis_lut.csv
+# Database connection
+config.yml
