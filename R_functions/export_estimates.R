@@ -177,33 +177,27 @@ export_estimates <- function(params, estimates_pe=NULL, estimates_bss=NULL) {
     #-----------------------------------------------------------------------------------------------------------------#
     
     #function to establish database connection
-    establish_db_con<- function(db, max_attempts = 5, delay_seconds = 3) {
+    establish_db_con<- function(max_attempts = 5, delay_seconds = 3) {
       # initialize objects
+      config <- yaml::read_yaml("config.yml")
       attempt <- 1
       con <- NULL
-      
-      #prompt for username and password
-      cat("\n\nPlease enter database username and password.")
-      db_username <- rstudioapi::askForPassword("Please enter database username")
-      db_password <- rstudioapi::askForPassword("Please enter user password")
 
       while (attempt <= max_attempts && is.null(con)) {
         # Attempt to establish connection
         con <- tryCatch({
-          # DBI::dbConnect(odbc::odbc(), dsn = dsn)
           DBI::dbConnect(
             RPostgres::Postgres(),
-            user = db_username,
-            password = db_password,
-            port = as.integer(5433),
-            dbname = db,
-            host = "pg.test.wdfw-fish.us"
+            host = config$server$host,
+            port = config$server$port,
+            dbname = config$server$database_FISH,
+            user = config$user$username,
+            password = config$user$password
           )
         }, error = function(e) {
           cat("\n")
           message(paste("Attempt", attempt, "failed:", conditionMessage(e)))
-          cat("\n", crayon::red$bgYellow("Make sure that you are connected to VPN.\n"))
-
+          
           attempt <<- attempt + 1
 
           Sys.sleep(delay_seconds)
@@ -233,7 +227,7 @@ export_estimates <- function(params, estimates_pe=NULL, estimates_bss=NULL) {
     }
     
     #connect to database
-    con <- establish_db_con(db = "FISH")
+    con <- establish_db_con()
     
     #-----------------------------------------------------------------------------------------------------------------#
     
@@ -317,6 +311,33 @@ export_estimates <- function(params, estimates_pe=NULL, estimates_bss=NULL) {
     
     creel_estimates <<- creel_estimates
 
+    #function to ask for confirmation
+    # ask_for_confirmation <- function() {
+    #   response <- ""
+    #   while (response != "Y" && response != "N") {
+    #     response <- readline("Would you like to proceed with upload? [Y/N]: ") |> toupper()
+    #     if (response != "Y" && response != "N") {
+    #       cat("Please enter 'Y' for Yes or 'N' for No.\n")
+    #     }
+    #   }
+    #   return(response == "Y")
+    # }
+    
+    
+    ask_for_confirmation <- function() {
+        response <- ""
+        repeat {
+          if (response != "") {
+            cat("Please enter 'Y' for Yes or 'N' for No.\n")
+          }
+          response <- toupper(trimws(readline("Would you like to proceed with upload? [Y/N]: ")))
+          if (response %in% c("Y", "N")) {
+            return(response == "Y")
+          }
+        }
+      }
+    
+    
     ### write estimates to database ####
 
     #model_analysis_lut
@@ -328,42 +349,51 @@ export_estimates <- function(params, estimates_pe=NULL, estimates_bss=NULL) {
       cat("\n")
       stop("\nAnalysis uuid already exists in the creel database. Review before proceeding.")
     } else {
-
-      #if session analysis uuid does not already exist, write to database analysis lut
-      cat("\nWriting to model_analysis_lut table.")
-      DBI::dbWriteTable(
-        conn = con,
-        name = DBI::Id(schema = "creel", table = "model_analysis_lut"),
-        value =  analysis_lut,
-        row.names = FALSE,
-        overwrite = FALSE,
-        append = TRUE
-      )
-
-      #model_estimates_total
-      cat("\nWriting to model_estimates_total table.")
-      DBI::dbWriteTable(
-        conn = con,
-        name = DBI::Id(schema = "creel", table = "model_estimates_total"),
-        value = creel_estimates$total,
-        row.names = FALSE,
-        overwrite = FALSE,
-        append = TRUE
-      )
-
-      #model_estimates_stratum
-      cat("\nWriting to model_estimates_stratum table. This may take a moment.")
-      DBI::dbWriteTable(
-        conn = con,
-        name = DBI::Id(schema = "creel", table = "model_estimates_stratum"),
-        value = creel_estimates$stratum,
-        row.names = FALSE,
-        overwrite = FALSE,
-        append = TRUE
-      )
+      
+      proceed <- ask_for_confirmation()
+  
+      if (proceed) {
+        cat("Continuing with upload...\n")
+      
+        #if session analysis uuid does not already exist, write to database analysis lut
+        cat("Writing to model_analysis_lut table.\n")
+        DBI::dbWriteTable(
+          conn = con,
+          name = DBI::Id(schema = "creel", table = "model_analysis_lut"),
+          value =  analysis_lut,
+          row.names = FALSE,
+          overwrite = FALSE,
+          append = TRUE
+        )
+  
+        #model_estimates_total
+        cat("Writing to model_estimates_total table.\n")
+        DBI::dbWriteTable(
+          conn = con,
+          name = DBI::Id(schema = "creel", table = "model_estimates_total"),
+          value = creel_estimates$total,
+          row.names = FALSE,
+          overwrite = FALSE,
+          append = TRUE
+        )
+  
+        #model_estimates_stratum
+        cat("Writing to model_estimates_stratum table. This may take a moment.\n")
+        DBI::dbWriteTable(
+          conn = con,
+          name = DBI::Id(schema = "creel", table = "model_estimates_stratum"),
+          value = creel_estimates$stratum,
+          row.names = FALSE,
+          overwrite = FALSE,
+          append = TRUE
+        )
+      } else {
+      cat("Writing to database tables aborted.\n")
+      return(NULL)
+      }
     }
 
-    cat("\nUploading complete. Verifying session 'analysis_id' in database analysis look up table.")
+    cat("Uploading complete. Verifying session 'analysis_id' in database analysis look up table.\n")
 
     #verify data has been sent to database
     confirm_upload <- fetch_db_table(con, "creel", "model_analysis_lut") |> select(analysis_id, analysis_name)
@@ -371,7 +401,7 @@ export_estimates <- function(params, estimates_pe=NULL, estimates_bss=NULL) {
     if (analysis_lut$analysis_id %in% confirm_upload$analysis_id) {
 
       DBI::dbDisconnect(con)
-      cat("\nData sucessfully exported. Disconnecting from database.")
+      cat("Data sucessfully exported. Disconnecting from database.\n")
       
     } else {
       #what to do if analysis_id is not in analysis_lut (partial/failed export)
@@ -414,6 +444,6 @@ export_estimates <- function(params, estimates_pe=NULL, estimates_bss=NULL) {
 
   } else {
     #send message to user with correct export parameter options
-    cat("Export parameter must be either 'database', 'local', or 'no'.")
+    cat("Export parameter must be either 'no', 'local', or 'database'.")
   }
 }
