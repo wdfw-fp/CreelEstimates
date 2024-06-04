@@ -20,9 +20,10 @@ params:
   min_fishing_time: 0.5
   output_location_filepath: "local" #can remove param with new ETL
   #ETL parameters
-  export: "local" #options:  "local", "database", "no"
-  model_used: "PE only" #options: "PE only", "BSS only", "Both models"
-  data_grade: "provisional" #options: "provisional", "approved"
+  export: "local" #options:  "no", "local", "database". -Default: local
+  export_tables: "both" #options: "total", "stratum", "both". -Default: total
+  model_used: "PE only" #options: "PE only", "BSS only", "Both models". -Default: PE only
+  data_grade: "provisional" #options: "provisional", "approved". Note: approved data may only be submitted by FRFM admin
 output:
   html_document:
     fig_caption: yes

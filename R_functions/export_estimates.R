@@ -324,7 +324,7 @@ export_estimates <- function(params, estimates_pe=NULL, estimates_bss=NULL) {
     # }
     
     
-    ask_for_confirmation <- function() {
+    ask_for_confirmation <- function() { #could be moved outside to use elsewhere
         response <- ""
         repeat {
           if (response != "") {
@@ -335,8 +335,42 @@ export_estimates <- function(params, estimates_pe=NULL, estimates_bss=NULL) {
             return(response == "Y")
           }
         }
-      }
+    }
     
+    #define functions for writting tables
+    #model_analysis_lut
+    write_lut <- function() {
+      dbWriteTable(
+        conn = con, 
+        name = Id(schema = "creel", table = "model_analysis_lut"),
+        value = analysis_lut,
+        row.names = FALSE,
+        overwrite = FALSE,
+        append = TRUE)
+    }
+    
+    #model_estimates_total
+    write_total <- function() {
+      DBI::dbWriteTable(
+      conn = con,
+      name = DBI::Id(schema = "creel", table = "model_estimates_total"),
+      value = creel_estimates$total,
+      row.names = FALSE,
+      overwrite = FALSE,
+      append = TRUE)
+    }
+    
+    
+    #model_estimates_stratum
+    write_stratum <- function() {
+      DBI::dbWriteTable(
+      conn = con,
+      name = DBI::Id(schema = "creel", table = "model_estimates_stratum"),
+      value = creel_estimates$stratum,
+      row.names = FALSE,
+      overwrite = FALSE,
+      append = TRUE)
+    }
     
     ### write estimates to database ####
 
@@ -348,46 +382,52 @@ export_estimates <- function(params, estimates_pe=NULL, estimates_bss=NULL) {
     if (analysis_lut$analysis_id %in% analysis_id_check$analysis_id) {
       cat("\n")
       stop("\nAnalysis uuid already exists in the creel database. Review before proceeding.")
-    } else {
+    } else { #analysis_id not already in database
       
+      #a pause, option to abort process
       proceed <- ask_for_confirmation()
   
       if (proceed) {
         cat("Continuing with upload...\n")
-      
-        #if session analysis uuid does not already exist, write to database analysis lut
-        cat("Writing to model_analysis_lut table.\n")
-        DBI::dbWriteTable(
-          conn = con,
-          name = DBI::Id(schema = "creel", table = "model_analysis_lut"),
-          value =  analysis_lut,
-          row.names = FALSE,
-          overwrite = FALSE,
-          append = TRUE
-        )
-  
-        #model_estimates_total
-        cat("Writing to model_estimates_total table.\n")
-        DBI::dbWriteTable(
-          conn = con,
-          name = DBI::Id(schema = "creel", table = "model_estimates_total"),
-          value = creel_estimates$total,
-          row.names = FALSE,
-          overwrite = FALSE,
-          append = TRUE
-        )
-  
-        #model_estimates_stratum
-        cat("Writing to model_estimates_stratum table. This may take a moment.\n")
-        DBI::dbWriteTable(
-          conn = con,
-          name = DBI::Id(schema = "creel", table = "model_estimates_stratum"),
-          value = creel_estimates$stratum,
-          row.names = FALSE,
-          overwrite = FALSE,
-          append = TRUE
-        )
+        Sys.sleep(3)
+        
+        #evaluate export_tables parameter
+        if (params$export_tables == "total") {
+          
+          #write lut and total
+          cat(paste0("Writing to model_analysis_lut table...  ","\u2713", "\n"))
+          write_lut()
+          
+          cat(paste0("Writing to model_estimates_total table...  ","\u2713", "\n"))
+          write_total()
+          
+        } else if (params$export_tables == "stratum") {
+          
+          #write lut and stratum
+          cat(paste0("Writing to model_analysis_lut table...  ","\u2713", "\n"))
+          write_lut()
+          
+          cat(paste0("Writing to model_estimates_stratum table...  ","\u2713", "\n"))
+          write_stratum()
+          
+        } else if (params$export_tables == "both") {
+          
+          #write lut, total, and stratum
+          cat(paste0("Writing to model_analysis_lut table...  ","\u2713", "\n"))
+          write_lut()
+          
+          cat(paste0("Writing to model_estimates_total table...  ","\u2713", "\n"))
+          write_total()
+          
+          cat(paste0("Writing to model_estimates_stratum table...  ","\u2713", "\n"))
+          write_stratum()
+          
+        } else {
+          cat("\nParameter export_tables must be either 'total', 'stratum', or 'both'.")
+        }
+        
       } else {
+      # If confirmation = No
       cat("Writing to database tables aborted.\n")
       return(NULL)
       }
@@ -396,12 +436,14 @@ export_estimates <- function(params, estimates_pe=NULL, estimates_bss=NULL) {
     cat("Uploading complete. Verifying session 'analysis_id' in database analysis look up table.\n")
 
     #verify data has been sent to database
+    # this could be made more comprehensive
     confirm_upload <- fetch_db_table(con, "creel", "model_analysis_lut") |> select(analysis_id, analysis_name)
 
     if (analysis_lut$analysis_id %in% confirm_upload$analysis_id) {
 
       DBI::dbDisconnect(con)
-      cat("Data sucessfully exported. Disconnecting from database.\n")
+      cat(paste("Data sucessfully exported.", "\u2713","\n"))
+      cat("Disconnecting from database.\n")
       
     } else {
       #what to do if analysis_id is not in analysis_lut (partial/failed export)
