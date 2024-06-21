@@ -164,7 +164,7 @@ export_estimates <- function(params, estimates_pe=NULL, estimates_bss=NULL) {
   # Connect to database and conditionally export
   if(export_data == tolower("database")) {
     
-    estimate_reviewers <- c("holc2477", "bentlktb") #please don't manually modify this list :) 
+    estimate_reviewers <- c("holc2477", "booe1477", "bentlktb") #please don't manually modify this list :) 
     
     if (!Sys.info()["user"] %in% estimate_reviewers && params$data_grade == tolower("provisional")) {
       stop("Creel project leads may only upload estimates with a data_grade of 'provisional'.")
@@ -330,7 +330,7 @@ export_estimates <- function(params, estimates_pe=NULL, estimates_bss=NULL) {
           if (response != "") {
             cat("Please enter 'Y' for Yes or 'N' for No.\n")
           }
-          response <- toupper(trimws(readline("Would you like to proceed with upload? [Y/N]: ")))
+          response <- toupper(trimws(readline("\nWould you like to proceed with upload? [Y/N]: ")))
           if (response %in% c("Y", "N")) {
             return(response == "Y")
           }
