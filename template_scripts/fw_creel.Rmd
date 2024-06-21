@@ -20,7 +20,6 @@ params:
   days_wkend: !r c('Saturday', 'Sunday')
   day_length_expansion: "night closure"
   min_fishing_time: 0.5
-  output_location_filepath: "local" #can remove param with new ETL
   bss_model_file_name: "BSS_creel_model_02_2024-04-03.stan"
   #ETL parameters
   export: "local" #options:  "no", "local", "database". -Default: local
