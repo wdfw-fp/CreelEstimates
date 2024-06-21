@@ -92,10 +92,7 @@ process_estimates_pe <- function(estimates_pe) {
   rows_post <- nrow(filtered_data)
   n_nan <- rows_pre - rows_post
   
-  #message to user with red text
-  message(paste("NaN values present in the PE effort estimates.", n_nan, "rows filtered out for upload."))
-  # cat("\033[31m", "NaN values present in the PE effort estimates.", n_nan, "rows filtered out for upload.", "\033[39m")
-  cat("\n")
+  message(paste("\n", n_nan, "instances of NaN values detected in the PE effort estimates. Values of NaN are filtered and removed from the final data uploaded to the database."))
   
   #transformation
   transformed_pe_data$pe_summarized_effort <- transformed_pe_data$pe_summarized_effort |>
