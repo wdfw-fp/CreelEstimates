@@ -181,21 +181,6 @@ export_estimates <- function(params, estimates_pe=NULL, estimates_bss=NULL) {
     
     #-----------------------------------------------------------------------------------------------------------------#
     
-    #define function to query database tables
-    fetch_db_table <- function(con = NULL, schema, table) {
-      
-      if(!DBI::dbIsValid(con)) {
-        stop("No database connection provided.")
-      }
-      
-      table <- dplyr::tbl(con, 
-                          dbplyr::in_schema(dbplyr::sql(schema), 
-                                            dbplyr::sql(table))) |> 
-        dplyr::collect()
-      
-      return(table)
-    }
-    
     #query database tables necessary to get UUIDS
     cat("\nFetching database uuids.")
     project_lut <- fetch_db_table(con, "creel", "project_lut") |> select(project_name, project_id)
