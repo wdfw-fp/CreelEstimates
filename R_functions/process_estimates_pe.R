@@ -94,8 +94,8 @@ process_estimates_pe <- function(estimates_pe) {
   
   message(paste("\n", n_nan, "instances of NaN values detected in the PE effort estimates. Values of NaN are filtered and removed from the final data uploaded to the database."))
   
-  #transformation
-  transformed_pe_data$pe_summarized_effort <- transformed_pe_data$pe_summarized_effort |>
+  #transformation from filtered data
+  transformed_pe_data$pe_summarized_effort <- filtered_data |>
     group_by(analysis_id, project_name, fishery_name, model_type) |>
     summarise(est_sum = sum(est), .groups = "keep") |> 
     pivot_longer(cols = c(est_sum),
@@ -116,33 +116,6 @@ process_estimates_pe <- function(estimates_pe) {
     ungroup() |>
     mutate(estimate_category = "effort") |>
     relocate("estimate_category", .after = "model_type")
-
-  # # Effort transformation - !!! ORIGINAL
-  # transformed_pe_data$pe_summarized_effort <- transformed_pe_data$pe_summarized_effort |>
-  #   group_by(analysis_id, project_name, fishery_name, model_type) |>
-  #   summarise(est_sum = sum(est)
-  #   ) |>
-  #   pivot_longer(cols = c(est_sum),
-  #                names_to = "estimate_type",
-  #                values_to = "value") |> 
-  #   #set min date as start of monitoring period
-  #   mutate(min_event_date = as.Date(params$est_date_start),
-  #   #set max_event_date as sys.date if in-season, set as est_end_date if out of monitoring period 
-  #          max_event_date = as.Date(
-  #            ifelse(
-  #              Sys.Date() <= params$est_date_end, Sys.Date(),
-  #              params$est_date_end
-  #              ))
-  #   )
-  # 
-  # #tidy output
-  # transformed_pe_data$pe_summarized_effort <- transformed_pe_data$pe_summarized_effort |>
-  #   drop_na() |>
-  #   ungroup() |>
-  #   mutate(estimate_category = "effort") |>
-  #   relocate("estimate_category", .after = "model_type")
-
-  ### !!! end of effort transformation ####
     
   # Catch transformation
   transformed_pe_data$pe_summarized_catch <- transformed_pe_data$pe_summarized_catch |>
