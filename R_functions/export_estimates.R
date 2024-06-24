@@ -155,8 +155,8 @@ export_estimates <- function(params, estimates_pe=NULL, estimates_bss=NULL) {
       model_type == "BSS" ~ params$period_bss
     ))
   
-  #assign to global env
-  creel_estimates <<- creel_estimates
+  #assign transformed and strandardized objects to global env
+  assign("creel_estimates", creel_estimates, envir = .GlobalEnv)
   
   #-------------------------------------------------------------------------------------------------------------------#
   ## EXPORTING ESTIMATES ##
