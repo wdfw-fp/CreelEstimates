@@ -1,8 +1,13 @@
-process_estimates_bss <- function(estimates_bss, ...) {
-  ####################################################################################################### #
-  # BSS wrangling ####
-  ####################################################################################################### #
+process_estimates_bss <- function(params, analysis_lut, estimates_bss) {
   
+  transformed_bss_data <- list(
+    bss_stratum = data.frame(),
+    bss_summarized = data.frame(),
+    bss_stratum_catch = data.frame(),
+    bss_stratum_effort = data.frame(),
+    bss_summarized_catch = data.frame(),
+    bss_summarized_effort = data.frame()
+  )
   ############################ Stratified table ##################################
   # 1 - process the daily, strata-specific BSS estimates
   # convert the list of lists into a single dataframe in a for loop
@@ -102,6 +107,30 @@ process_estimates_bss <- function(estimates_bss, ...) {
     filter(estimate %in% "E_sum")
   
   # assign("transformed_bss_data", transformed_bss_data, envir = .GlobalEnv)
+  
+  #Get PE and BSS dataframes to match before binding rows
+  
+  #table 1, stratum_catch
+  transformed_bss_data$bss_stratum_catch <- transformed_bss_data$bss_stratum_catch |> 
+    rename(period = "week", estimate_category = "estimate") |> 
+    select(-c("month", "estimate_index", "day_index", "event_date")) |> 
+    #add day_type to match PE format
+    mutate(day_type = ifelse(weekdays(min_event_date) %in% params$days_wkend, "weekend", "weekday"))
+  
+  #table 2, stratum_effort
+  transformed_bss_data$bss_stratum_effort <- transformed_bss_data$bss_stratum_effort |> 
+    rename(period = "week", estimate_category = "estimate") |> 
+    select(-c("month", "estimate_index", "day_index", "event_date")) |> 
+    #add day_type to match PE format
+    mutate(day_type = ifelse(weekdays(min_event_date) %in% params$days_wkend, "weekend", "weekday"))
+  
+  #table 3, summarized_catch
+  transformed_bss_data$bss_summarized_catch <- transformed_bss_data$bss_summarized_catch |> 
+    rename(estimate_category = "estimate") 
+  
+  #table 4, summarized_effort
+  transformed_bss_data$bss_summarized_effort <- transformed_bss_data$bss_summarized_effort |> 
+    rename(estimate_category = "estimate")
   
   cat("\nBSS standardization transformation complete.")
   

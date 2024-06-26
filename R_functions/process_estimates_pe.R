@@ -1,8 +1,13 @@
-process_estimates_pe <- function(estimates_pe) {
-  
-  ####################################################################################################### #
-  # PE wrangling ####
-  ####################################################################################################### #
+process_estimates_pe <- function(analysis_lut, estimates_pe) {
+
+  transformed_pe_data <- list(
+    pe_effort = data.frame(),
+    pe_catch = data.frame(),
+    pe_stratum_effort = data.frame(),
+    pe_stratum_catch = data.frame(),
+    pe_summarized_effort = data.frame(),
+    pe_summarized_catch = data.frame()
+  )
   
   # Incorporate model_type-specific outputs
   #PE
@@ -149,6 +154,22 @@ process_estimates_pe <- function(estimates_pe) {
     ungroup() |>
     mutate(estimate_category = "catch") |>
     relocate("estimate_category", .after = "model_type")
+  
+  #Get PE and BSS dataframes to match before binding rows
+  
+  #table 1, stratum_catch
+  transformed_pe_data$pe_stratum_catch <- transformed_pe_data$pe_stratum_catch
+  
+  #table 2, stratum_effort
+  transformed_pe_data$pe_stratum_effort <- transformed_pe_data$pe_stratum_effort |> 
+    mutate(est_cg = NA)
+  
+  #table 3, summarized_catch
+  transformed_pe_data$pe_summarized_catch <- transformed_pe_data$pe_summarized_catch
+  
+  #table 4, summarized_effort
+  transformed_pe_data$pe_summarized_effort <- transformed_pe_data$pe_summarized_effort |> 
+    mutate(est_cg = NA)
   
   cat("\nPE standarization transformation complete.")
   
