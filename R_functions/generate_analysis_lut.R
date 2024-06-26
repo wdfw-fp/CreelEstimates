@@ -21,9 +21,11 @@ generate_analysis_lut <- function(params) {
                                                             system("git rev-parse HEAD", intern = TRUE))
                                       )
                            )
-    return(analysis_lut)
+    
+    assign("analysis_lut", analysis_lut, envir = .GlobalEnv)
     
     } else {
     cat("\nanalysis_lut with unique 'analysis_id' already generated in this R session.")
-  }
+    }
+  return(invisible(analysis_lut))
 }
