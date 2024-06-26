@@ -1,168 +1,11 @@
 #This function is the primary control of creel model estimate ETL process
-#It calls upon PE and BSS outputs to indepedently reformat to a standardized format
+#It calls upon PE and BSS outputs to independently reformat to a standardized format
 #The resulting objects are either output locally as a csv or uploaded to the creel database
 
-export_estimates <- function(params, estimates_pe=NULL, estimates_bss=NULL) {
-  
-  # Extract parameters
-  data_grade <- params$data_grade
-  export_data <- params$export
-  
-  #Look up tables (LUTs) from environment
-  analysis_lut <- analysis_lut
-  # estimate_extent <- estimate_extent
-  
-  #format for joining with database table later
-  dwg$fishery_manager$catch_area_code <- as.character(dwg$fishery_manager$catch_area_code)
-
-  #Check that at least one model output is provided
-  if (is.null(estimates_pe) && is.null(estimates_bss)) {
-    stop("At least one of 'estimates_pe' or 'estimates_bss' must be supplied.")
-  }
-  
-  # Process PE estimates to common format with internal function
-  if (!is.null(estimates_pe)) {
-    
-    #call function
-    transformed_pe_data <- process_estimates_pe(estimates_pe)
-    
-    #Get PE and BSS dataframes to match before binding rows
-    
-    #table 1, stratum_catch
-    transformed_pe_data$pe_stratum_catch <- transformed_pe_data$pe_stratum_catch
-    
-    #table 2, stratum_effort
-    transformed_pe_data$pe_stratum_effort <- transformed_pe_data$pe_stratum_effort |> 
-      mutate(est_cg = NA)
-    
-    #table 3, summarized_catch
-    transformed_pe_data$pe_summarized_catch <- transformed_pe_data$pe_summarized_catch
-    
-    #table 4, summarized_effort
-    transformed_pe_data$pe_summarized_effort <- transformed_pe_data$pe_summarized_effort |> 
-      mutate(est_cg = NA)
-  }
-
-  # Process BSS estimates to common format with internal function
-  if (!is.null(estimates_bss)) {
-    
-    #call function
-    transformed_bss_data <- process_estimates_bss(estimates_bss)
-    
-    #Get PE and BSS dataframes to match before binding rows
-    
-    #table 1, stratum_catch
-    transformed_bss_data$bss_stratum_catch <- transformed_bss_data$bss_stratum_catch |> 
-      rename(period = "week", estimate_category = "estimate") |> 
-      select(-c("month", "estimate_index", "day_index", "event_date")) |> 
-      #add day_type to match PE format
-      mutate(day_type = ifelse(weekdays(min_event_date) %in% params$days_wkend, "weekend", "weekday"))
-    
-    #table 2, stratum_effort
-    transformed_bss_data$bss_stratum_effort <- transformed_bss_data$bss_stratum_effort |> 
-      rename(period = "week", estimate_category = "estimate") |> 
-      select(-c("month", "estimate_index", "day_index", "event_date")) |> 
-      #add day_type to match PE format
-      mutate(day_type = ifelse(weekdays(min_event_date) %in% params$days_wkend, "weekend", "weekday"))
-    
-    #table 3, summarized_catch
-    transformed_bss_data$bss_summarized_catch <- transformed_bss_data$bss_summarized_catch |> 
-      rename(estimate_category = "estimate") 
-    
-    #table 4, summarized_effort
-    transformed_bss_data$bss_summarized_effort <- transformed_bss_data$bss_summarized_effort |> 
-      rename(estimate_category = "estimate")
-    
-  }
-  
-  #-----------------------------------------------------------------------------------------------------------------#
-  
-  #Map data_grade column to every table
-  data_grade_lower <- tolower(data_grade) #accept capitalization
-
-  if (data_grade_lower == "approved") {
-
-    transformed_bss_data <- map(transformed_bss_data,
-                                ~{.$data_grade <- rep("Approved", nrow(.)); .})
-    transformed_pe_data <- map(transformed_pe_data,
-                               ~{.$data_grade <- rep("Approved", nrow(.)); .})
-
-  } else if (data_grade_lower == "provisional") {
-
-    transformed_bss_data <- map(transformed_bss_data,
-                               ~{.$data_grade <- rep("Provisional", nrow(.)); .})
-    transformed_pe_data <- map(transformed_pe_data,
-                               ~{.$data_grade <- rep("Provisional", nrow(.)); .})
-
-  } else {
-    stop("Invalid value for data_grade. Use 'approved' or 'provisional'.")
-  }
-  #-----------------------------------------------------------------------------------------------------------------#
-  #Combine PE and BSS standardized objects
-  
-  creel_estimates <- list(
-    #table 1
-    stratum_catch = rbind(transformed_pe_data$pe_stratum_catch, transformed_bss_data$bss_stratum_catch),
-    #table 2
-    stratum_effort = rbind(transformed_pe_data$pe_stratum_effort, transformed_bss_data$bss_stratum_effort),
-    #table 3
-    summarized_catch = rbind(transformed_pe_data$pe_summarized_catch, transformed_bss_data$bss_summarized_catch),
-    #table 4
-    summarized_effort = rbind(transformed_pe_data$pe_summarized_effort, transformed_bss_data$bss_summarized_effort)
-  )
-  
-  #combine catch and effort data
-  creel_estimates$stratum <- rbind(creel_estimates$stratum_catch, creel_estimates$stratum_effort)
-  
-  creel_estimates$total <- rbind(creel_estimates$summarized_catch, creel_estimates$summarized_effort)
-  
-  #bring in fishery manager table
-  fishery_manager_trim <- dwg$fishery_manager |>
-    filter(location_type == "Section") |> 
-    select(section_num, catch_area_code, catch_area_description) |>
-    arrange(section_num) |> 
-    distinct() #assumes no duplicate section_num in fishery manager table
-  
-  #join CRC from fishery manager table to estimate tables
-  creel_estimates$stratum <- left_join(creel_estimates$stratum, fishery_manager_trim, by ="section_num")
-   
-  # fishery_manager_total <- as.vector(fishery_manager_trim$catch_area_code)
-  # fishery_manager_total <- paste(fishery_manager_total, collapse = ",")
-  # #join CRCs from all sections for total strata
-  # creel_estimates$total <- creel_estimates$total |> mutate(catch_area_code = fishery_manager_total)
-  
-  #rename value column to estimate_value
-  creel_estimates$stratum <- creel_estimates$stratum |> rename(estimate_value = value)
-  creel_estimates$total <- creel_estimates$total |> rename(estimate_value = value)  
-  
-  # change angler_final capitalization to match creel database lut
-  creel_estimates$stratum <- creel_estimates$stratum |> 
-    mutate(angler_final = case_when(
-      angler_final == "bank" ~ "Bank",
-      angler_final == "boat" ~ "Boat"
-    ))
-  
-  # add period_timestep field to denote yaml model parameters
-  creel_estimates$stratum <- creel_estimates$stratum |> 
-    mutate(period_timestep = case_when(
-      model_type == "PE" ~ params$period_pe,
-      model_type == "BSS" ~ params$period_bss
-      ))
-  
-  creel_estimates$total <- creel_estimates$total |> 
-    mutate(period_timestep = case_when(
-      model_type == "PE" ~ params$period_pe,
-      model_type == "BSS" ~ params$period_bss
-    ))
-  
-  #assign transformed and strandardized objects to global env
-  assign("creel_estimates", creel_estimates, envir = .GlobalEnv)
-  
-  #-------------------------------------------------------------------------------------------------------------------#
-  ## EXPORTING ESTIMATES ##
+export_estimates <- function(params, analysis_lut, creel_estimates) {
   
   # Connect to database and conditionally export
-  if(export_data == tolower("database")) {
+  if(params$export == tolower("database")) {
     
     estimate_reviewers <- c("holc2477", "booe1477", "bentlktb") #please don't manually modify this list :) 
     
@@ -174,92 +17,13 @@ export_estimates <- function(params, estimates_pe=NULL, estimates_bss=NULL) {
     json_conversion(type = "script")
     json_conversion(type = "r_session")
     
-    #-----------------------------------------------------------------------------------------------------------------#
-    
     #connect to database
     con <- establish_db_con()
-    
-    #-----------------------------------------------------------------------------------------------------------------#
-    
-    #query database tables necessary to get UUIDS
-    cat("\nFetching database uuids.")
-    project_lut <- fetch_db_table(con, "creel", "project_lut") |> select(project_name, project_id)
-    fishery_lut <- fetch_db_table(con, "creel", "fishery_lut") |> select(fishery_name, fishery_id)
-    species_lut <- fetch_db_table(con, "creel", "species_lut") |> select(species_name, species_id)
-    life_stage_lut <- fetch_db_table(con, "creel", "life_stage_lut") |> select(life_stage_name, life_stage_id)
-    fin_mark_lut <- fetch_db_table(con, "creel", "fin_mark_lut") |> select(fin_mark_code, fin_mark_id)
-    fate_lut <- fetch_db_table(con, "creel", "fate_lut") |> select(fate_name, fate_id)
-    angler_type_lut <- fetch_db_table(con, "creel", "angler_type_lut") |> select(angler_type_code, angler_type_id)
-    crc_area_lut <- fetch_db_table(con, "creel", "crc_area_lut") |> select(catch_area_code, crc_area_id)
-    
-    #parse out catch group column into component fields to match with database format and use of UUIDs
-    
-    ##total UUIDs ----------------------------------------------------------------------------------------------
-    creel_estimates$total <- creel_estimates$total |>
-      tidyr::separate(col = est_cg, 
-                      into = c("species_name", "life_stage_name", "fin_mark_code", "fate_name"),
-                      sep = "_")
-      
-    #join UUIDs to appropriate fields
-    creel_estimates$total <- creel_estimates$total |> left_join(project_lut, by = "project_name")
-    creel_estimates$total <- creel_estimates$total |> left_join(fishery_lut, by = "fishery_name")
-    creel_estimates$total <- creel_estimates$total |> left_join(species_lut, by = "species_name")
-    creel_estimates$total <- creel_estimates$total |> left_join(life_stage_lut, by = "life_stage_name")
-    creel_estimates$total <- creel_estimates$total |> left_join(fin_mark_lut, by = "fin_mark_code")
-    creel_estimates$total <- creel_estimates$total |> left_join(fate_lut, by = "fate_name")
-    
-    #reformat, remove common name fields in favor of UUID fields
-    creel_estimates$total <- creel_estimates$total |> 
-      select(-c("project_name", "fishery_name", "species_name", "life_stage_name","fin_mark_code", "fate_name")) |>
-      relocate(c("project_id", "fishery_id")) |> 
-      relocate(c("species_id", "life_stage_id", "fin_mark_id", "fate_id"), .after = "model_type")
-    
-    ##stratum UUIDS --------------------------------------------------------------------------------------------
-    creel_estimates$stratum <- creel_estimates$stratum |>
-      tidyr::separate(col = est_cg, 
-                      into = c("species_name", "life_stage_name", "fin_mark_code", "fate_name"),
-                      sep = "_")
-    
-    #join UUIDs to appropriate fields
-    creel_estimates$stratum <- creel_estimates$stratum |> left_join(project_lut, by = "project_name")
-    creel_estimates$stratum <- creel_estimates$stratum |> left_join(fishery_lut, by = "fishery_name")
-    creel_estimates$stratum <- creel_estimates$stratum |> left_join(species_lut, by = "species_name")
-    creel_estimates$stratum <- creel_estimates$stratum |> left_join(life_stage_lut, by = "life_stage_name")
-    creel_estimates$stratum <- creel_estimates$stratum |> left_join(fin_mark_lut, by = "fin_mark_code")
-    creel_estimates$stratum <- creel_estimates$stratum |> left_join(fate_lut, by = "fate_name")
-    creel_estimates$stratum <- creel_estimates$stratum |> left_join(angler_type_lut, by = c("angler_final" = "angler_type_code"))
-    creel_estimates$stratum <- creel_estimates$stratum |> left_join(crc_area_lut, by = "catch_area_code")
-    
-    #reformat, remove common name fields in favor of UUID fields
-    creel_estimates$stratum <- creel_estimates$stratum |> 
-      select(-c("project_name", "fishery_name","species_name", "life_stage_name","fin_mark_code", "fate_name", 
-                "angler_final", "catch_area_code", "catch_area_description")) |>
-      relocate(c("project_id", "fishery_id")) |> 
-      relocate(c("species_id", "life_stage_id", "fin_mark_id", "fate_id", "angler_type_id"), .after = "model_type") 
 
-    #reformat NaN estimate values in stratum scale to 0 values
-    creel_estimates$stratum <- creel_estimates$stratum |>  
-      mutate(estimate_value = case_when(
-        is.nan(estimate_value) ~ 0,
-        TRUE ~ estimate_value
-      ))
-    
-    creel_estimates <<- creel_estimates
-
-    #function to ask for confirmation
-    # ask_for_confirmation <- function() {
-    #   response <- ""
-    #   while (response != "Y" && response != "N") {
-    #     response <- readline("Would you like to proceed with upload? [Y/N]: ") |> toupper()
-    #     if (response != "Y" && response != "N") {
-    #       cat("Please enter 'Y' for Yes or 'N' for No.\n")
-    #     }
-    #   }
-    #   return(response == "Y")
-    # }
-    
-    
-    ask_for_confirmation <- function() { #could be moved outside to use elsewhere
+    #query database for UUIDs and reformat
+    creel_estimates <- prep_export(con, creel_estimates)
+        
+    ask_for_confirmation <- function() { #bug: repeats prompt twice in console upon call
         response <- ""
         repeat {
           if (response != "") {
@@ -272,7 +36,7 @@ export_estimates <- function(params, estimates_pe=NULL, estimates_bss=NULL) {
         }
     }
     
-    #define functions for writting tables
+    #define functions for writing tables
     #model_analysis_lut
     write_lut <- function() {
       dbWriteTable(
@@ -294,7 +58,6 @@ export_estimates <- function(params, estimates_pe=NULL, estimates_bss=NULL) {
       overwrite = FALSE,
       append = TRUE)
     }
-    
     
     #model_estimates_stratum
     write_stratum <- function() {
@@ -322,7 +85,7 @@ export_estimates <- function(params, estimates_pe=NULL, estimates_bss=NULL) {
       #a pause, option to abort process
       proceed <- ask_for_confirmation()
   
-      if (proceed) {
+      if (proceed) { #Y = TRUE
         cat("Continuing with upload...\n")
         Sys.sleep(3)
         
@@ -394,7 +157,7 @@ export_estimates <- function(params, estimates_pe=NULL, estimates_bss=NULL) {
       stop("\nDisconnecting from database.")
     }
     
-  } else if (export_data == tolower("local")) {
+  } else if (params$export == tolower("local")) {
     #process for exporting ETL output tables locally for inspection prior to uploading to database
     
     #convert metadata to json. Automatically added to analysis_lut
@@ -413,7 +176,7 @@ export_estimates <- function(params, estimates_pe=NULL, estimates_bss=NULL) {
     cat("\n\n")
     cat("Standardized model estimate tables and analysis_lut saved to fishery folder on local computer.")
     
-  } else if (export_data == tolower("No")) {
+  } else if (params$export == tolower("No")) {
     #send message to user that no ETL actions were taken
     cat("\n\n")
     cat("Catch and effort estimates not exported.")

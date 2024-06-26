@@ -3,12 +3,11 @@ title: "Freshwater Creel Estimates"
 date: "`r Sys.Date()`"
 params:
   project_name: "District 14"
-  fishery_name: "Cascade spring Chinook 2022"
-  est_date_start: "2022-06-01"
-  est_date_end: "2022-07-15"
+  fishery_name: "Skagit winter steelhead 2024"
+  est_date_start: "2024-02-01"
+  est_date_end: "2024-04-14"
   est_catch_groups: !r data.frame(rbind(
-    c(species = 'Chinook', life_stage = 'Adult', fin_mark = 'UM', fate = 'Released'),
-    c(species = 'Chinook', life_stage = 'Adult', fin_mark = 'AD', fate = 'Kept')
+    c(species = 'Steelhead', life_stage = 'Adult', fin_mark = 'UM|AD', fate = 'Released')
     ))
   study_design: "Standard"  
   boat_type_collapse: "Yes"
@@ -22,9 +21,9 @@ params:
   min_fishing_time: 0.5
   bss_model_file_name: "BSS_creel_model_02_2024-04-03.stan"
   #ETL parameters
-  export: "local" #options:  "no", "local", "database". -Default: local
+  export: "database" #options:  "no", "local", "database". -Default: local
   export_tables: "both" #options: "total", "stratum", "both". -Default: total
-  model_used: "PE only" #options: "PE only", "BSS only", "Both models". -Default: PE only
+  model_used: "BSS only" #options: "PE only", "BSS only", "Both models". -Default: PE only
   data_grade: "provisional" #options: "provisional", "approved". Note: approved data may only be submitted by FRFM admin
 output:
   html_document:
@@ -812,76 +811,43 @@ map_df(estimates_bss, ~.x$overview) |>
 
 # Save results
 
-```{r write_out_results, eval = FALSE}
-#KB NOTES: the following BSS summary output does not appear to work (I think there is an issue with the cg name)
+```{r transform_estimates, eval = FALSE}
 
-# bss_overview <- estimates_bss$summary_by_catchgroup
-#write out a workbook with results from model runs 
-
-
-## how to write out html to outputs file path??
-
-# data fetched from dwg and summarized data used for PE and BSS (dwg_summ)
-# if(nchar(params$output_location_filepath) > 1) {
-#   writexl::write_xlsx(
-#   c(set_names(dwg, paste0("dwg_", names(dwg))), set_names(dwg_summ, paste0("dwg_summ", names(dwg_summ)))),
-#   path = file.path(here("fishery_analyses", params$project_name, params$fishery_name), paste0("fetch_dwg_", params$fishery_name, ".xlsx"))
-#   )
-# }
-# 
-# # PE output
-# if(nchar(params$output_location_filepath) > 1) {
-#   writexl::write_xlsx(
-#   c(estimates_pe[rev(names(estimates_pe))]),
-#   path = file.path(here("fishery_analyses", params$project_name, params$fishery_name), paste0("pe_output_", params$fishery_name, ".xlsx"))
-#   )
-# }
-
-#KB NOTES: this doesn't work because "bss_overview" doesn't work above
-
-# overview of BSS output
-# if(nchar(params$output_location_filepath) > 1) {
-#   writexl::write_xlsx(bss_overview,
-#   path = file.path(where("fishery_analyses", params$project_name, params$fishery_name), paste0("bss_overview_", params$fishery_name, ".xlsx"))
-#   )
-# }
-
-#Export data from one or both models
+#Extract and transform model estimates into a common format
 if (params$export %in% c("database", "local") && !params$model_used %in% c("PE only", "BSS only", "Both models" )) {
-  cat("Invalid value for model_used parameter. Must select 'PE only', 'BSS only', or 'Both models'.")
+  cat("\nInvalid value for export or model_used parameter.")
 } else {
+  
+  #Check that at least one model output is provided
+  if (is.null(estimates_pe) && is.null(estimates_bss)) {
+    stop("At least one of 'estimates_pe' or 'estimates_bss' must be supplied.")
+  }
+  
+  # Process PE estimates to common format
+  if (!is.null(estimates_pe)) {
+    transformed_pe_data <- process_estimates_pe(analysis_lut, estimates_pe)
+  }
+  
+  # Process BSS estimates to common format
+  if (!is.null(estimates_bss)) {
+    transformed_bss_data <- process_estimates_bss(params, analysis_lut, estimates_bss)
+  }
+  
+  #Combine PE and BSS and perform other transformation steps
+  creel_estimates <- transform_estimates(dwg, transformed_pe_data, transformed_bss_data)  
 
-  # Initialize objects for storing processed data
-  # also serves as placeholder for other model if only one was used
-  transformed_pe_data <- list(
-    pe_effort = data.frame(),
-    pe_catch = data.frame(),
-    pe_stratum_effort = data.frame(),
-    pe_stratum_catch = data.frame(),
-    pe_summarized_effort = data.frame(),
-    pe_summarized_catch = data.frame()
-  )
-  
-  transformed_bss_data <- list(
-    bss_stratum = data.frame(),
-    bss_summarized = data.frame(),
-    bss_stratum_catch = data.frame(),
-    bss_stratum_effort = data.frame(),
-    bss_summarized_catch = data.frame(),
-    bss_summarized_effort = data.frame()
-  )
-  
-  if (params$model_used == "PE only") {
-    export_estimates(params, estimates_pe, estimates_bss = NULL)
-  }
-  
-  if (params$model_used == "BSS only") {
-    export_estimates(params, estimates_pe = NULL, estimates_bss)
-  }
-  
-  if (params$model_used == "Both models") {
-    export_estimates(params, estimates_pe, estimates_bss)
-  }
 }
 
 ```
+
+```{r load_estimates, eval= FALSE}
+
+#Converts metadata to JSON and adds to analysis_lut
+#Connects to database
+#calls prep_export()
+#Defines functions for writing to database tables
+#Performs pre- and post- upload QAQC checks
+export_estimates(params, analysis_lut, creel_estimates)
+
+```
+
