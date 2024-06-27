@@ -122,11 +122,21 @@ process_estimates_pe <- function(analysis_lut, estimates_pe) {
     mutate(estimate_category = "effort") |>
     relocate("estimate_category", .after = "model_type")
     
-  # Catch transformation
+  # Catch 
+  #calculate days open and days surveyed
+  totaldaysopen_totaldayssurveyed <-transformed_pe_data$pe_summarized_catch |> 
+    distinct(period, day_type, n_obs, N_days_open) |> 
+    summarise(
+      totaldaysopen = sum(N_days_open),
+      totalobs = sum(n_obs)
+    )
+  
+  #catch transformation
   transformed_pe_data$pe_summarized_catch <- transformed_pe_data$pe_summarized_catch |>
     group_by(analysis_id, project_name, fishery_name, model_type, est_cg) |> #includes catch group col
-    summarise(n_obs_sum = sum(n_obs),
-              N_days_open_sum = sum(N_days_open),
+    summarise(
+      # n_obs_sum = sum(n_obs),
+      # N_days_open_sum = sum(N_days_open),
               est_sum = {
                 #error handling for NA values in the estimate column
                 if (any(is.na(est))) {
@@ -136,7 +146,7 @@ process_estimates_pe <- function(analysis_lut, estimates_pe) {
                 sum(est)
               }, .groups = "keep"
     ) |>
-    pivot_longer(cols = c(n_obs_sum:est_sum),
+    pivot_longer(cols = c(est_sum),
                  names_to = "estimate_type",
                  values_to = "value") |> 
     #set min date as start of monitoring period
@@ -153,7 +163,9 @@ process_estimates_pe <- function(analysis_lut, estimates_pe) {
   transformed_pe_data$pe_summarized_catch <- transformed_pe_data$pe_summarized_catch |>
     ungroup() |>
     mutate(estimate_category = "catch") |>
-    relocate("estimate_category", .after = "model_type")
+    relocate("estimate_category", .after = "model_type") |> 
+    mutate(totaldaysopen = totaldaysopen_totaldayssurveyed$totaldaysopen,
+           totalobs = totaldaysopen_totaldayssurveyed$totalobs)
   
   #Get PE and BSS dataframes to match before binding rows
   
