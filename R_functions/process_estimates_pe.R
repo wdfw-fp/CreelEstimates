@@ -159,13 +159,34 @@ process_estimates_pe <- function(analysis_lut, estimates_pe) {
              ))
     )
   
+  #prep totaldays object for joining back with pe_summarized_catch
+  totaldaysopen_totaldayssurveyed <- totaldaysopen_totaldayssurveyed |> 
+    pivot_longer(cols = c(totaldaysopen, totalobs),
+                 names_to = "estimate_type",
+                 values_to = "value") |> 
+    mutate(
+      analysis_id = transformed_pe_data$pe_summarized_catch$analysis_id,
+      project_name = transformed_pe_data$pe_summarized_catch$project_name,
+      fishery_name = transformed_pe_data$pe_summarized_catch$fishery_name,
+      model_type = transformed_pe_data$pe_summarized_catch$model_type,
+      est_cg = transformed_pe_data$pe_summarized_catch$est_cg,
+      #same date consideration as above
+      min_event_date = as.Date(params$est_date_start),
+      max_event_date = as.Date(
+        ifelse(
+          Sys.Date() <= params$est_date_end, Sys.Date(),
+          params$est_date_end
+        ))
+    )
+    
+  transformed_pe_data$pe_summarized_catch <- transformed_pe_data$pe_summarized_catch |> 
+    bind_rows(totaldaysopen_totaldayssurveyed)
+  
   #tidy output
   transformed_pe_data$pe_summarized_catch <- transformed_pe_data$pe_summarized_catch |>
     ungroup() |>
     mutate(estimate_category = "catch") |>
-    relocate("estimate_category", .after = "model_type") |> 
-    mutate(totaldaysopen = totaldaysopen_totaldayssurveyed$totaldaysopen,
-           totalobs = totaldaysopen_totaldayssurveyed$totalobs)
+    relocate("estimate_category", .after = "model_type")
   
   #Get PE and BSS dataframes to match before binding rows
   
