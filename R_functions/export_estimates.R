@@ -19,9 +19,11 @@ export_estimates <- function(params, analysis_lut, creel_estimates) {
     
     #connect to database
     con <- establish_db_con()
+    assign("con", con, envir = .GlobalEnv)
 
     #query database for UUIDs and reformat
-    creel_estimates <- prep_export(con, creel_estimates)
+    creel_estimates_db <- prep_export(con, creel_estimates)
+    assign("creel_estimates_db", creel_estimates_db, envir = .GlobalEnv)
         
     ask_for_confirmation <- function() { #bug: repeats prompt twice in console upon call
         response <- ""
@@ -39,7 +41,7 @@ export_estimates <- function(params, analysis_lut, creel_estimates) {
     ### write estimates to database ####
 
     #call function that defines how tables are written to database
-    write_db_tables()
+    write_db_tables(con, analysis_lut, creel_estimates_db)
     
     #model_analysis_lut
     #determine if session analysis_id already exists in database model_analysis_lut table
@@ -63,31 +65,31 @@ export_estimates <- function(params, analysis_lut, creel_estimates) {
           
           #write lut and total
           cat(paste0("Writing to model_analysis_lut table...  ","\u2713", "\n"))
-          write_lut(table = analysis_lut)
+          write_lut(con, analysis_lut)
           
           cat(paste0("Writing to model_estimates_total table...  ","\u2713", "\n"))
-          write_total()
+          write_total(con)
           
         } else if (params$export_tables == "stratum") {
           
           #write lut and stratum
           cat(paste0("Writing to model_analysis_lut table...  ","\u2713", "\n"))
-          write_lut(table = analysis_lut)
+          write_lut(con, analysis_lut)
           
           cat(paste0("Writing to model_estimates_stratum table...  ","\u2713", "\n"))
-          write_stratum()
+          write_stratum(con)
           
         } else if (params$export_tables == "both") {
           
           #write lut, total, and stratum
           cat(paste0("Writing to model_analysis_lut table...  ","\u2713", "\n"))
-          write_lut(table = analysis_lut)
+          write_lut(con, analysis_lut)
           
           cat(paste0("Writing to model_estimates_total table...  ","\u2713", "\n"))
-          write_total()
+          write_total(con)
           
           cat(paste0("Writing to model_estimates_stratum table...  ","\u2713", "\n"))
-          write_stratum()
+          write_stratum(con)
           
         } else {
           cat("\nParameter export_tables must be either 'total', 'stratum', or 'both'.")
@@ -102,7 +104,7 @@ export_estimates <- function(params, analysis_lut, creel_estimates) {
   
   #verify that estimates have been written as expected 
   cat("\nUploading complete. Verifying session 'analysis_id' in database analysis look up table.")
-  confirm_db_upload()
+  confirm_db_upload(con, analysis_lut)
     
   #local export option
   } else if (params$export == tolower("local")) {
