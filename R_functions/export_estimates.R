@@ -9,7 +9,7 @@ export_estimates <- function(params, analysis_lut, creel_estimates) {
     
     estimate_reviewers <- c("holc2477", "booe1477", "bentlktb") #please don't manually modify this list :) 
     
-    if (!Sys.info()["user"] %in% estimate_reviewers && params$data_grade == tolower("provisional")) {
+    if (!Sys.info()["user"] %in% estimate_reviewers && params$data_grade == tolower("approved")) {
       stop("Creel project leads may only upload estimates with a data_grade of 'provisional'.")
     }
     
