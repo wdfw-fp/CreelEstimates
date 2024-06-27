@@ -36,42 +36,11 @@ export_estimates <- function(params, analysis_lut, creel_estimates) {
         }
     }
     
-    #define functions for writing tables
-    #model_analysis_lut
-    write_lut <- function() {
-      dbWriteTable(
-        conn = con, 
-        name = Id(schema = "creel", table = "model_analysis_lut"),
-        value = analysis_lut,
-        row.names = FALSE,
-        overwrite = FALSE,
-        append = TRUE)
-    }
-    
-    #model_estimates_total
-    write_total <- function() {
-      DBI::dbWriteTable(
-      conn = con,
-      name = DBI::Id(schema = "creel", table = "model_estimates_total"),
-      value = creel_estimates$total,
-      row.names = FALSE,
-      overwrite = FALSE,
-      append = TRUE)
-    }
-    
-    #model_estimates_stratum
-    write_stratum <- function() {
-      DBI::dbWriteTable(
-      conn = con,
-      name = DBI::Id(schema = "creel", table = "model_estimates_stratum"),
-      value = creel_estimates$stratum,
-      row.names = FALSE,
-      overwrite = FALSE,
-      append = TRUE)
-    }
-    
     ### write estimates to database ####
 
+    #call function that defines how tables are written to database
+    write_db_tables()
+    
     #model_analysis_lut
     #determine if session analysis_id already exists in database model_analysis_lut table
     cat("\nVerifying that session 'analysis_id' does not exist in database before upload.")
@@ -94,7 +63,7 @@ export_estimates <- function(params, analysis_lut, creel_estimates) {
           
           #write lut and total
           cat(paste0("Writing to model_analysis_lut table...  ","\u2713", "\n"))
-          write_lut()
+          write_lut(table = analysis_lut)
           
           cat(paste0("Writing to model_estimates_total table...  ","\u2713", "\n"))
           write_total()
@@ -103,7 +72,7 @@ export_estimates <- function(params, analysis_lut, creel_estimates) {
           
           #write lut and stratum
           cat(paste0("Writing to model_analysis_lut table...  ","\u2713", "\n"))
-          write_lut()
+          write_lut(table = analysis_lut)
           
           cat(paste0("Writing to model_estimates_stratum table...  ","\u2713", "\n"))
           write_stratum()
@@ -112,7 +81,7 @@ export_estimates <- function(params, analysis_lut, creel_estimates) {
           
           #write lut, total, and stratum
           cat(paste0("Writing to model_analysis_lut table...  ","\u2713", "\n"))
-          write_lut()
+          write_lut(table = analysis_lut)
           
           cat(paste0("Writing to model_estimates_total table...  ","\u2713", "\n"))
           write_total()
@@ -130,33 +99,12 @@ export_estimates <- function(params, analysis_lut, creel_estimates) {
       return(NULL)
       }
     }
-
-    cat("Uploading complete. Verifying session 'analysis_id' in database analysis look up table.\n")
-
-    #verify data has been sent to database
-    # this could be made more comprehensive
-    confirm_upload <- fetch_db_table(con, "creel", "model_analysis_lut") |> select(analysis_id, analysis_name)
-
-    if (analysis_lut$analysis_id %in% confirm_upload$analysis_id) {
-
-      DBI::dbDisconnect(con)
-      cat(paste("Data sucessfully exported.", "\u2713","\n"))
-      cat("Disconnecting from database.\n")
-      
-    } else {
-      #what to do if analysis_id is not in analysis_lut (partial/failed export)
-      cat("\n")
-      message("Unable to confirm upload by checking database for session analysis_id.")
-      
-      cat("\n")
-      message(paste("writing",crayon::red$bgYellow("FAILED_UPLOAD_LOG_analysis_lut.csv") , "to CreelEstimates folder so that analysis_id for partial data upload can be investigated."))
-      
-      readr::write_csv(analysis_lut, file = paste0("FAILED_UPLOAD_LOG_","analysis_lut.csv"), append = TRUE)
-      
-      DBI::dbDisconnect(con)
-      stop("\nDisconnecting from database.")
-    }
+  
+  #verify that estimates have been written as expected 
+  cat("\nUploading complete. Verifying session 'analysis_id' in database analysis look up table.")
+  confirm_db_upload()
     
+  #local export option
   } else if (params$export == tolower("local")) {
     #process for exporting ETL output tables locally for inspection prior to uploading to database
     
@@ -175,7 +123,8 @@ export_estimates <- function(params, analysis_lut, creel_estimates) {
     
     cat("\n\n")
     cat("Standardized model estimate tables and analysis_lut saved to fishery folder on local computer.")
-    
+  
+  #do not write out estimates    
   } else if (params$export == tolower("No")) {
     #send message to user that no ETL actions were taken
     cat("\n\n")
