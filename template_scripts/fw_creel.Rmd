@@ -20,11 +20,11 @@ params:
   day_length_expansion: "night closure"
   min_fishing_time: 0.5
   bss_model_file_name: "BSS_creel_model_02_2024-04-03.stan"
-  #ETL parameters
-  export: "database" #options:  "no", "local", "database". -Default: local
-  export_tables: "both" #options: "total", "stratum", "both". -Default: total
-  model_used: "BSS only" #options: "PE only", "BSS only", "Both models". -Default: PE only
-  data_grade: "provisional" #options: "provisional", "approved". Note: approved data may only be submitted by FRFM admin
+  #ETL parameters           Note: approved data may only be submitted by FRFM admin
+  export: "local"           #Default: local             options:  "no", "local", "database".
+  export_tables: "both"     #Default: total             options: "total", "stratum", "both".
+  model_used: "BSS only"    #Default: PE only           options: "PE only", "BSS only", "Both models".
+  data_grade: "provisional" #Default: provisional       options: "provisional", "approved".
 output:
   html_document:
     fig_caption: yes
