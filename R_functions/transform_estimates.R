@@ -20,13 +20,13 @@ transform_estimates <- function(dwg, transformed_pe_data, transformed_bss_data) 
   dwg$fishery_manager$catch_area_code <- as.character(dwg$fishery_manager$catch_area_code)
   
   fishery_manager_trim <- dwg$fishery_manager |>
-    filter(location_type == "Section") |> 
-    select(section_num, catch_area_code, catch_area_description) |>
-    arrange(section_num) |> 
-    distinct() #assumes no duplicate section_num in fishery manager table
+    dplyr::filter(location_type == "Section") |> 
+    dplyr::select(section_num, catch_area_code, catch_area_description) |>
+    dplyr::arrange(section_num) |> 
+    dplyr::distinct() #assumes no duplicate section_num in fishery manager table
   
   #join CRC from fishery manager table to estimate tables
-  creel_estimates$stratum <- left_join(creel_estimates$stratum, fishery_manager_trim, by ="section_num")
+  creel_estimates$stratum <- dplyr::left_join(creel_estimates$stratum, fishery_manager_trim, by ="section_num")
   
   # fishery_manager_total <- as.vector(fishery_manager_trim$catch_area_code)
   # fishery_manager_total <- paste(fishery_manager_total, collapse = ",")
@@ -34,25 +34,25 @@ transform_estimates <- function(dwg, transformed_pe_data, transformed_bss_data) 
   # creel_estimates$total <- creel_estimates$total |> mutate(catch_area_code = fishery_manager_total)
   
   #rename value column to estimate_value
-  creel_estimates$stratum <- creel_estimates$stratum |> rename(estimate_value = value)
-  creel_estimates$total <- creel_estimates$total |> rename(estimate_value = value)  
+  creel_estimates$stratum <- creel_estimates$stratum |> dplyr::rename(estimate_value = value)
+  creel_estimates$total <- creel_estimates$total |> dplyr::rename(estimate_value = value)  
   
   # change angler_final capitalization to match creel database lut
   creel_estimates$stratum <- creel_estimates$stratum |> 
-    mutate(angler_final = case_when(
+    dplyr::mutate(angler_final = dplyr::case_when(
       angler_final == "bank" ~ "Bank",
       angler_final == "boat" ~ "Boat"
     ))
   
   # add period_timestep field to denote yaml model parameters
   creel_estimates$stratum <- creel_estimates$stratum |> 
-    mutate(period_timestep = case_when(
+    dplyr::mutate(period_timestep = dplyr::case_when(
       model_type == "PE" ~ params$period_pe,
       model_type == "BSS" ~ params$period_bss
     ))
   
   creel_estimates$total <- creel_estimates$total |> 
-    mutate(period_timestep = case_when(
+    dplyr::mutate(period_timestep = dplyr::case_when(
       model_type == "PE" ~ params$period_pe,
       model_type == "BSS" ~ params$period_bss
     ))

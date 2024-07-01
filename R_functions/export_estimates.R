@@ -119,9 +119,9 @@ export_estimates <- function(params, analysis_lut, creel_estimates) {
     write_directory <- paste0(getwd(), "/fishery_analyses/", params$project_name, "/", params$fishery_name,"/")
     
     #write csv files to local working directory
-    write_csv(analysis_lut, file = paste0(write_directory,"analysis_lut.csv"))
-    write_csv(creel_estimates$stratum, file = paste0(write_directory,"model_estimates_stratum.csv"))
-    write_csv(creel_estimates$total, file = paste0(write_directory, "model_estimates_total.csv"))  
+    readr::write_csv(analysis_lut, file = paste0(write_directory,"analysis_lut.csv"))
+    readr::write_csv(creel_estimates$stratum, file = paste0(write_directory,"model_estimates_stratum.csv"))
+    readr::write_csv(creel_estimates$total, file = paste0(write_directory, "model_estimates_total.csv"))  
     
     cat("\n\n")
     cat("Standardized model estimate tables and analysis_lut saved to fishery folder on local computer.")

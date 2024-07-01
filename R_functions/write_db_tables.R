@@ -26,9 +26,9 @@ write_db_tables <- function(con, analysis_lut, creel_estimates_db) {
     #attempt to write table, retrying if any NOT NULL constraints are violated
     while (attempt <= max_retries && !success) {
       tryCatch({
-        dbWriteTable(
+        DBI::dbWriteTable(
           conn = con, 
-          name = Id(schema = "creel", table = "model_analysis_lut"),
+          name = DBI::Id(schema = "creel", table = "model_analysis_lut"),
           value = analysis_lut,
           row.names = FALSE,
           overwrite = FALSE,

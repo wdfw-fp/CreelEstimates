@@ -4,16 +4,16 @@ map_data_grade <- function(params, transformed_bss_data=NULL, transformed_pe_dat
   
   if (data_grade_lower == "approved") {
     
-    transformed_bss_data <- map(transformed_bss_data,
+    transformed_bss_data <- purrr::map(transformed_bss_data,
                                 ~{.$data_grade <- rep("Approved", nrow(.)); .})
-    transformed_pe_data <- map(transformed_pe_data,
+    transformed_pe_data <- purrr::map(transformed_pe_data,
                                ~{.$data_grade <- rep("Approved", nrow(.)); .})
     
   } else if (data_grade_lower == "provisional") {
     
-    transformed_bss_data <- map(transformed_bss_data,
+    transformed_bss_data <- purrr::map(transformed_bss_data,
                                 ~{.$data_grade <- rep("Provisional", nrow(.)); .})
-    transformed_pe_data <- map(transformed_pe_data,
+    transformed_pe_data <- purrr::map(transformed_pe_data,
                                ~{.$data_grade <- rep("Provisional", nrow(.)); .})
     
   } else {

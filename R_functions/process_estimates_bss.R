@@ -24,7 +24,7 @@ process_estimates_bss <- function(params, analysis_lut, estimates_bss) {
   
   #prep for database export by removing '%' symbols from BSS outputs
   all_data <- all_data |> 
-    rename(
+    dplyr::rename(
       "2.5_pct" = `2.5%`,
       "25_pct" = `25%`,
       "50_pct" = `50%`,
@@ -40,10 +40,10 @@ process_estimates_bss <- function(params, analysis_lut, estimates_bss) {
   
   # perform the data wrangling 
   transformed_bss_data$bss_stratum <- all_data |> 
-    pivot_longer(
+    tidyr::pivot_longer(
       cols = c(mean:Rhat), 
       names_to = "estimate_type", values_to = "value")  |>  
-    mutate(
+    dplyr::mutate(
       analysis_id = analysis_id,
       project_name = project_name,
       fishery_name = fishery_name,
@@ -51,7 +51,7 @@ process_estimates_bss <- function(params, analysis_lut, estimates_bss) {
       max_event_date = event_date,
       model_type = model_type,
     )  |>  
-    relocate(analysis_id, project_name, fishery_name, min_event_date,
+    dplyr::relocate(analysis_id, project_name, fishery_name, min_event_date,
              max_event_date, model_type, est_cg)
   
   ############################# Rolled up table ##################################    
@@ -59,7 +59,7 @@ process_estimates_bss <- function(params, analysis_lut, estimates_bss) {
   # convert the list of lists into a single dataframe in a for loop
   for (i in catch_groups){
     sub_list <- estimates_bss[[i]]
-    table_bind <- bind_rows(sub_list[1]) #overview
+    table_bind <- dplyr::bind_rows(sub_list[1]) #overview
     all_frames[[i]] <- table_bind
   }
   
@@ -68,7 +68,7 @@ process_estimates_bss <- function(params, analysis_lut, estimates_bss) {
   
   #prep for database export by removing '%' symbols from BSS outputs
   all_data_summ <- all_data_summ |> 
-    rename(
+    dplyr::rename(
       "2.5_pct" = `2.5%`,
       "25_pct" = `25%`,
       "50_pct" = `50%`,
@@ -78,10 +78,10 @@ process_estimates_bss <- function(params, analysis_lut, estimates_bss) {
   
   #transform into standardized table format
   transformed_bss_data$bss_summarized <- all_data_summ |> 
-    pivot_longer(
+    tidyr::pivot_longer(
       cols = c(mean:n_div), 
       names_to = "estimate_type", values_to = "value")  |>  
-    mutate(
+    dplyr::mutate(
       analysis_id = analysis_id,
       project_name = project_name,
       fishery_name = fishery_name,
@@ -89,22 +89,22 @@ process_estimates_bss <- function(params, analysis_lut, estimates_bss) {
       max_event_date = max(all_data$event_date), #Apply Bss daily max value as end date
       model_type = model_type,
     )  |>  
-    relocate(analysis_id, project_name, fishery_name, min_event_date,
+    dplyr::relocate(analysis_id, project_name, fishery_name, min_event_date,
              max_event_date, model_type, est_cg)
   
   #divide bss into catch and effort tables to match PE
   transformed_bss_data$bss_stratum_catch <- transformed_bss_data$bss_stratum  |>  
-    filter(estimate %in% c("C_daily","CPUE_daily"))
+    dplyr::filter(estimate %in% c("C_daily","CPUE_daily"))
   
   transformed_bss_data$bss_stratum_effort <- transformed_bss_data$bss_stratum  |>  
-    filter(estimate %in% "E_daily")   
+    dplyr::filter(estimate %in% "E_daily")   
   
   
   transformed_bss_data$bss_summarized_catch <- transformed_bss_data$bss_summarized  |>  
-    filter(estimate %in% "C_sum")
+    dplyr::filter(estimate %in% "C_sum")
   
   transformed_bss_data$bss_summarized_effort <- transformed_bss_data$bss_summarized  |>  
-    filter(estimate %in% "E_sum")
+    dplyr::filter(estimate %in% "E_sum")
   
   # assign("transformed_bss_data", transformed_bss_data, envir = .GlobalEnv)
   
@@ -112,25 +112,25 @@ process_estimates_bss <- function(params, analysis_lut, estimates_bss) {
   
   #table 1, stratum_catch
   transformed_bss_data$bss_stratum_catch <- transformed_bss_data$bss_stratum_catch |> 
-    rename(period = "week", estimate_category = "estimate") |> 
-    select(-c("month", "estimate_index", "day_index", "event_date")) |> 
+    dplyr::rename(period = "week", estimate_category = "estimate") |> 
+    dplyr::select(-c("month", "estimate_index", "day_index", "event_date")) |> 
     #add day_type to match PE format
-    mutate(day_type = ifelse(weekdays(min_event_date) %in% params$days_wkend, "weekend", "weekday"))
+    dplyr::mutate(day_type = ifelse(weekdays(min_event_date) %in% params$days_wkend, "weekend", "weekday"))
   
   #table 2, stratum_effort
   transformed_bss_data$bss_stratum_effort <- transformed_bss_data$bss_stratum_effort |> 
-    rename(period = "week", estimate_category = "estimate") |> 
-    select(-c("month", "estimate_index", "day_index", "event_date")) |> 
+    dplyr::rename(period = "week", estimate_category = "estimate") |> 
+    dplyr::select(-c("month", "estimate_index", "day_index", "event_date")) |> 
     #add day_type to match PE format
-    mutate(day_type = ifelse(weekdays(min_event_date) %in% params$days_wkend, "weekend", "weekday"))
+    dplyr::mutate(day_type = ifelse(weekdays(min_event_date) %in% params$days_wkend, "weekend", "weekday"))
   
   #table 3, summarized_catch
   transformed_bss_data$bss_summarized_catch <- transformed_bss_data$bss_summarized_catch |> 
-    rename(estimate_category = "estimate") 
+    dplyr::rename(estimate_category = "estimate") 
   
   #table 4, summarized_effort
   transformed_bss_data$bss_summarized_effort <- transformed_bss_data$bss_summarized_effort |> 
-    rename(estimate_category = "estimate")
+    dplyr::rename(estimate_category = "estimate")
   
   cat("\nBSS standardization transformation complete.")
   

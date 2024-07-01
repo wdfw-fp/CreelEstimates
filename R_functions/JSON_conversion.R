@@ -61,7 +61,7 @@ json_conversion <- function(type, ...) {
     
     #record user and R session info
     user <- paste("User:", Sys.info()["user"])
-    r_session <- sessioninfo::session_info() |> capture.output()
+    r_session <- sessioninfo::session_info() |> utils::capture.output()
     r_session[1] <- paste(user, r_session[1])
     
     #convert to json and validate

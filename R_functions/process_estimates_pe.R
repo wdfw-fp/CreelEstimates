@@ -17,15 +17,15 @@ process_estimates_pe <- function(analysis_lut, estimates_pe) {
   # Add UUID and model_type columns
   #PE effort
   transformed_pe_data$pe_effort <- transformed_pe_data$pe_effort |>
-    mutate(analysis_id = analysis_lut$analysis_id,
+    dplyr::mutate(analysis_id = analysis_lut$analysis_id,
            model_type = "PE") |>
-    relocate(analysis_id)
+    dplyr::relocate(analysis_id)
   
   #PE catch
   transformed_pe_data$pe_catch <- transformed_pe_data$pe_catch |>
-    mutate(analysis_id = analysis_lut$analysis_id,
+    dplyr::mutate(analysis_id = analysis_lut$analysis_id,
            model_type = "PE") |>
-    relocate(analysis_id)
+    dplyr::relocate(analysis_id)
   ############################ Stratified table ##################################
   
   #create tables for stratified table intermediates
@@ -34,31 +34,31 @@ process_estimates_pe <- function(analysis_lut, estimates_pe) {
   
   # Effort transformation
   transformed_pe_data$pe_stratum_effort <- transformed_pe_data$pe_stratum_effort |>
-    select(-c(var, l95,u95)) |>
-    pivot_longer(cols = c(n_obs:est),
+    dplyr::select(-c(var, l95,u95)) |>
+    tidyr::pivot_longer(cols = c(n_obs:est),
                  names_to = "estimate_type",
                  values_to = "value")
   
   #tidy output
   transformed_pe_data$pe_stratum_effort <- transformed_pe_data$pe_stratum_effort |>
-    drop_na() |>
-    ungroup() |>
-    mutate(estimate_category = "effort") |>
-    relocate("estimate_category", .after = "model_type")
+    tidyr::drop_na() |>
+    dplyr::ungroup() |>
+    dplyr::mutate(estimate_category = "effort") |>
+    dplyr::relocate("estimate_category", .after = "model_type")
   
   # Catch transformation
   transformed_pe_data$pe_stratum_catch <- transformed_pe_data$pe_stratum_catch |>
-    select(-c(var,l95,u95)) |>
-    pivot_longer(cols = c(n_obs:est),
+    dplyr::select(-c(var,l95,u95)) |>
+    tidyr::pivot_longer(cols = c(n_obs:est),
                  names_to = "estimate_type",
                  values_to = "value")
   
   #tidy output
   transformed_pe_data$pe_stratum_catch <- transformed_pe_data$pe_stratum_catch |>
-    drop_na() |>
-    ungroup() |>
-    mutate(estimate_category = "catch") |>
-    relocate("estimate_category", .after = "model_type")
+    tidyr::drop_na() |>
+    dplyr::ungroup() |>
+    dplyr::mutate(estimate_category = "catch") |>
+    dplyr::relocate("estimate_category", .after = "model_type")
   
   
   ############################# Rolled up table ##################################
@@ -91,7 +91,7 @@ process_estimates_pe <- function(analysis_lut, estimates_pe) {
   rows_pre <- nrow(transformed_pe_data$pe_summarized_effort)
   
   filtered_data <- transformed_pe_data$pe_summarized_effort |> 
-    filter(!is.nan(ang_hrs_mean) & !is.nan(ang_hrs_var) & 
+    dplyr::filter(!is.nan(ang_hrs_mean) & !is.nan(ang_hrs_var) & 
              !is.nan(est) & !is.nan(var) & !is.nan(l95) & !is.nan(u95))
   
   rows_post <- nrow(filtered_data)
@@ -101,13 +101,13 @@ process_estimates_pe <- function(analysis_lut, estimates_pe) {
   
   #transformation from filtered data
   transformed_pe_data$pe_summarized_effort <- filtered_data |>
-    group_by(analysis_id, project_name, fishery_name, model_type) |>
-    summarise(est_sum = sum(est), .groups = "keep") |> 
-    pivot_longer(cols = c(est_sum),
+    dplyr::group_by(analysis_id, project_name, fishery_name, model_type) |>
+    dplyr::summarise(est_sum = sum(est), .groups = "keep") |> 
+    tidyr::pivot_longer(cols = c(est_sum),
                  names_to = "estimate_type",
                  values_to = "value") |> 
     #set min date as start of monitoring period
-    mutate(min_event_date = as.Date(params$est_date_start),
+    dplyr::mutate(min_event_date = as.Date(params$est_date_start),
            #set max_event_date as sys.date if in-season, set as est_end_date if out of monitoring period 
            max_event_date = as.Date(
              ifelse(
@@ -118,23 +118,23 @@ process_estimates_pe <- function(analysis_lut, estimates_pe) {
   
   #tidy output
   transformed_pe_data$pe_summarized_effort <- transformed_pe_data$pe_summarized_effort |>
-    ungroup() |>
-    mutate(estimate_category = "effort") |>
-    relocate("estimate_category", .after = "model_type")
+    dplyr::ungroup() |>
+    dplyr::mutate(estimate_category = "effort") |>
+    dplyr::relocate("estimate_category", .after = "model_type")
     
   # Catch 
   #calculate days open and days surveyed
   totaldaysopen_totaldayssurveyed <-transformed_pe_data$pe_summarized_catch |> 
-    distinct(period, day_type, n_obs, N_days_open) |> 
-    summarise(
+    dplyr::distinct(period, day_type, n_obs, N_days_open) |> 
+    dplyr::summarise(
       totaldaysopen = sum(N_days_open),
       totalobs = sum(n_obs)
     )
   
   #catch transformation
   transformed_pe_data$pe_summarized_catch <- transformed_pe_data$pe_summarized_catch |>
-    group_by(analysis_id, project_name, fishery_name, model_type, est_cg) |> #includes catch group col
-    summarise(
+    dplyr::group_by(analysis_id, project_name, fishery_name, model_type, est_cg) |> #includes catch group col
+    dplyr::summarise(
       # n_obs_sum = sum(n_obs),
       # N_days_open_sum = sum(N_days_open),
               est_sum = {
@@ -146,11 +146,11 @@ process_estimates_pe <- function(analysis_lut, estimates_pe) {
                 sum(est)
               }, .groups = "keep"
     ) |>
-    pivot_longer(cols = c(est_sum),
+    tidyr::pivot_longer(cols = c(est_sum),
                  names_to = "estimate_type",
                  values_to = "value") |> 
     #set min date as start of monitoring period
-    mutate(min_event_date = as.Date(params$est_date_start),
+    dplyr::mutate(min_event_date = as.Date(params$est_date_start),
     #set max_event_date as sys.date if in-season, set as est_end_date if out of monitoring period 
            max_event_date = as.Date(
              ifelse(
@@ -161,10 +161,10 @@ process_estimates_pe <- function(analysis_lut, estimates_pe) {
   
   #prep totaldays object for joining back with pe_summarized_catch
   totaldaysopen_totaldayssurveyed <- totaldaysopen_totaldayssurveyed |> 
-    pivot_longer(cols = c(totaldaysopen, totalobs),
+    tidyr::pivot_longer(cols = c(totaldaysopen, totalobs),
                  names_to = "estimate_type",
                  values_to = "value") |> 
-    mutate(
+    dplyr::mutate(
       analysis_id = transformed_pe_data$pe_summarized_catch$analysis_id,
       project_name = transformed_pe_data$pe_summarized_catch$project_name,
       fishery_name = transformed_pe_data$pe_summarized_catch$fishery_name,
@@ -180,13 +180,13 @@ process_estimates_pe <- function(analysis_lut, estimates_pe) {
     )
     
   transformed_pe_data$pe_summarized_catch <- transformed_pe_data$pe_summarized_catch |> 
-    bind_rows(totaldaysopen_totaldayssurveyed)
+    dplyr::bind_rows(totaldaysopen_totaldayssurveyed)
   
   #tidy output
   transformed_pe_data$pe_summarized_catch <- transformed_pe_data$pe_summarized_catch |>
-    ungroup() |>
-    mutate(estimate_category = "catch") |>
-    relocate("estimate_category", .after = "model_type")
+    dplyr::ungroup() |>
+    dplyr::mutate(estimate_category = "catch") |>
+    dplyr::relocate("estimate_category", .after = "model_type")
   
   #Get PE and BSS dataframes to match before binding rows
   
@@ -195,14 +195,14 @@ process_estimates_pe <- function(analysis_lut, estimates_pe) {
   
   #table 2, stratum_effort
   transformed_pe_data$pe_stratum_effort <- transformed_pe_data$pe_stratum_effort |> 
-    mutate(est_cg = NA)
+    dplyr::mutate(est_cg = NA)
   
   #table 3, summarized_catch
   transformed_pe_data$pe_summarized_catch <- transformed_pe_data$pe_summarized_catch
   
   #table 4, summarized_effort
   transformed_pe_data$pe_summarized_effort <- transformed_pe_data$pe_summarized_effort |> 
-    mutate(est_cg = NA)
+    dplyr::mutate(est_cg = NA)
   
   cat("\nPE standarization transformation complete.")
   
