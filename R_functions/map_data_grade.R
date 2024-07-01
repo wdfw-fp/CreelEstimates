@@ -19,4 +19,8 @@ map_data_grade <- function(params, transformed_bss_data=NULL, transformed_pe_dat
   } else {
     stop("Invalid value for data_grade. Use 'approved' or 'provisional'.")
   }
+  
+  #return both objects
+  assign("transformed_bss_data", transformed_bss_data, envir = .GlobalEnv)
+  assign("transformed_pe_data", transformed_pe_data, envir = .GlobalEnv)
 }
