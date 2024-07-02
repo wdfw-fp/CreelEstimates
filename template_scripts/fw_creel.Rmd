@@ -3,14 +3,11 @@ title: "Freshwater Creel Estimates"
 date: "`r Sys.Date()`"
 params:
   project_name: "District 14"
-  fishery_name: "Skagit fall salmon 2021"
-  est_date_start: "2021-09-01"
-  est_date_end: "2021-11-30"
+  fishery_name: "Skagit winter steelhead 2024"
+  est_date_start: "2024-02-01"
+  est_date_end: "2024-04-14"
   est_catch_groups: !r data.frame(rbind(
-    c(species = 'Chinook', life_stage = 'Adult', fin_mark = 'UM', fate = 'Released'),
-    c(species = 'Chinook', life_stage = 'Adult', fin_mark = 'AD', fate = 'Kept'),
-    c(species = 'Chinook', life_stage = 'Adult', fin_mark = 'AD|UM', fate = 'Released|Kept'),
-    c(species = 'Coho', life_stage = 'Adult', fin_mark = 'UM', fate = 'Kept')
+    c(species = 'Steelhead', life_stage = 'Adult', fin_mark = 'UM|AD', fate = 'Released')
     ))
   study_design: "Standard"  
   boat_type_collapse: "Yes"
@@ -22,8 +19,12 @@ params:
   days_wkend: !r c('Saturday', 'Sunday')
   day_length_expansion: "night closure"
   min_fishing_time: 0.5
-  output_location_filepath: "local"
   bss_model_file_name: "BSS_creel_model_02_2024-04-03.stan"
+  #ETL parameters           Note: approved data may only be submitted by FRFM admin
+  export: "local"           #Default: local             options:  "no", "local", "database".
+  export_tables: "both"     #Default: total             options: "total", "stratum", "both".
+  model_used: "PE only"    #Default: PE only           options: "PE only", "BSS only", "Both models".
+  data_grade: "provisional" #Default: provisional       options: "provisional", "approved".
 output:
   html_document:
     fig_caption: yes
@@ -59,24 +60,24 @@ if (!dir.exists(here("fishery_analyses", params$project_name, params$fishery_nam
   paste(here("fishery_analyses", params$project_name, params$fishery_name), "folder created")
 }
 
-# evaluate if analysis .Rmd already exists, if not then generate new file 
-if (file.exists(here("fishery_analyses", params$project_name, params$fishery_name, 
+# evaluate if analysis .Rmd already exists, if not then generate new file
+if (file.exists(here("fishery_analyses", params$project_name, params$fishery_name,
        paste0("fw_creel_", params$fishery_name, ".Rmd")))) {
-  
+
   print("Analysis .Rmd file already exists")
-  
+
 } else {
 #save the master template with new params arguments for the fishery
 rstudioapi::documentSave(rstudioapi::getActiveDocumentContext()$id)
 #make an appropriately renamed copy
 file.copy(
   here("template_scripts/fw_creel.Rmd"),
-  here("fishery_analyses", params$project_name, params$fishery_name, 
+  here("fishery_analyses", params$project_name, params$fishery_name,
        paste0("fw_creel_", params$fishery_name, ".Rmd"))
 )
 #open the new copy
 rstudioapi::documentOpen(
-  here("fishery_analyses", params$project_name, params$fishery_name, 
+  here("fishery_analyses", params$project_name, params$fishery_name,
        paste0("fw_creel_", params$fishery_name, ".Rmd"))
 )
 }
@@ -88,6 +89,9 @@ library("suncalc")
 library("tidyverse")
 library("patchwork")
 library("gt")
+library("dbplyr")
+library("DBI")
+library("sessioninfo")
 theme_set(theme_light())
 
 library("rstan")
@@ -95,6 +99,12 @@ rstan_options(auto_write = TRUE)
 
 purrr::walk(list.files(here("R_functions"), full.names = T), source)
 ```
+
+```{r generate_analysis_id}
+#Establishes a unique 'analysis_id' for each session and populates an 'analysis_lut'.
+generate_analysis_lut(params)
+```
+
 
 # `r paste(params$fishery_name)`
 
@@ -801,37 +811,53 @@ map_df(estimates_bss, ~.x$overview) |>
 
 # Save results
 
-```{r write_out_results, eval = FALSE}
-#KB NOTES: the following BSS summary output does not appear to work (I think there is an issue with the cg name)
-
-# bss_overview <- estimates_bss$summary_by_catchgroup
-#write out a workbook with results from model runs 
+```{r transform_estimates, eval = FALSE}
 
 
-## how to write out html to outputs file path??
+#Extract and transform model estimates into a common format
+if (params$export %in% c("database", "local") && !params$model_used %in% c("PE only", "BSS only", "Both models" )) {
+  cat("\nInvalid value for export or model_used parameter.")
+} else {
+  
+  #Check that at least one model output is provided
+  if (exists("estimates_pe") == "FALSE" && exists("estimates_bss") == "FALSE") {
+    stop("At least one of 'estimates_pe' or 'estimates_bss' must be supplied.")
+  }
+  
+  # Process PE estimates to common format
+  if (exists("estimates_pe") == "TRUE" && params$model_used == "PE only") {
+    transformed_pe_data <- process_estimates_pe(analysis_lut, estimates_pe)
+  } else {print("PE model not used.")}
+  
+  # Process BSS estimates to common format
+  if (exists("estimates_bss") == "TRUE" && params$model_used == "BSS only") {
+    transformed_bss_data <- process_estimates_bss(params, analysis_lut, estimates_bss)
+  } else {print("BSS model not used.")}
+  
+  # Process PE and BSS model estimates to common format
+  if (exists("estimates_pe") == "TRUE" && exists("estimates_bss") == "TRUE" && params$model_used == "Both models") {
+    transformed_pe_data <- process_estimates_pe(analysis_lut, estimates_pe)
+    transformed_bss_data <- process_estimates_bss(params, analysis_lut, estimates_bss)
+  } else {print("Only one model transformed as one model output does not exist or params$model_used does not equal `Both models`.")}
+  
+  #add parameter data_grade as a field on all tables
+  map_data_grade(params, transformed_bss_data, transformed_pe_data)
+  
+  #Combine PE and BSS and perform other transformation steps
+  creel_estimates <- transform_estimates(dwg, transformed_pe_data, transformed_bss_data)  
 
-# data fetched from dwg and summarized data used for PE and BSS (dwg_summ)
-if(nchar(params$output_location_filepath) > 1) {
-  writexl::write_xlsx(
-  c(set_names(dwg, paste0("dwg_", names(dwg))), set_names(dwg_summ, paste0("dwg_summ", names(dwg_summ)))),
-  path = file.path(here("fishery_analyses", params$project_name, params$fishery_name), paste0("fetch_dwg_", params$fishery_name, ".xlsx"))
-  )
 }
 
-# PE output
-if(nchar(params$output_location_filepath) > 1) {
-  writexl::write_xlsx(
-  c(estimates_pe[rev(names(estimates_pe))]),
-  path = file.path(here("fishery_analyses", params$project_name, params$fishery_name), paste0("pe_output_", params$fishery_name, ".xlsx"))
-  )
-}
-
-#KB NOTES: this doesn't work because "bss_overview" doesn't work above
-
-# overview of BSS output
-# if(nchar(params$output_location_filepath) > 1) {
-#   writexl::write_xlsx(bss_overview,
-#   path = file.path(where("fishery_analyses", params$project_name, params$fishery_name), paste0("bss_overview_", params$fishery_name, ".xlsx"))
-#   )
-# }
 ```
+
+```{r load_estimates, eval= FALSE}
+
+#Converts metadata to JSON and adds to analysis_lut
+#Connects to database
+#calls prep_export()
+#Defines functions for writing to database tables
+#Performs pre- and post- upload QAQC checks
+export_estimates(params, analysis_lut, creel_estimates)
+
+```
+
