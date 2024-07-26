@@ -14,30 +14,29 @@ est_pe_effort <- function(
     ...
 ){
   
-  est_effort <- 
-    dplyr::left_join(
+  est_effort <- dplyr::left_join(
     #dates expanded to sections * angler_final * opendays
-      days |>
-        dplyr::select(period, day_type, event_date, starts_with("open_section")) |>
-        tidyr::pivot_longer(
-          cols = starts_with("open_section"), 
-          names_to = "section_num", 
-          values_to = "is_open"
-          ) |>
-        dplyr::filter(is_open) |>
-        dplyr::mutate(
-          section_num = as.numeric(gsub("^.*_", "", section_num)), 
-          is_open = NULL,
-          angler_final = list(unique(pe_inputs_list$ang_hrs_daily_mean$angler_final)) 
-        ) |> 
-        tidyr::unnest(angler_final)
-      ,
-      #estimates of fishing_time possible to calculate for sampled dates-sections-angler_final 
-      pe_inputs_list$ang_hrs_daily_mean |> 
-        dplyr::select(section_num, event_date, angler_final, ang_hrs_daily_mean_TI_expan)
-      ,
-      by = c("section_num", "event_date", "angler_final")
-    ) |>
+    days |>
+      dplyr::select(period, day_type, event_date, starts_with("open_section")) |>
+      tidyr::pivot_longer(
+        cols = starts_with("open_section"), 
+        names_to = "section_num", 
+        values_to = "is_open"
+        ) |>
+      dplyr::filter(is_open) |>
+      dplyr::mutate(
+        section_num = as.numeric(gsub("^.*_", "", section_num)), 
+        is_open = NULL,
+        angler_final = list(unique(pe_inputs_list$ang_hrs_daily_mean$angler_final)) 
+      ) |> 
+      tidyr::unnest(angler_final)
+    ,
+    #estimates of fishing_time possible to calculate for sampled dates-sections-angler_final 
+    pe_inputs_list$ang_hrs_daily_mean |> 
+      dplyr::select(section_num, event_date, angler_final, ang_hrs_daily_mean_TI_expan)
+    ,
+    by = c("section_num", "event_date", "angler_final")
+  ) |>
     dplyr::group_by(section_num, period, day_type, angler_final) |>
     dplyr::summarize(
       n_obs = sum(!is.na(ang_hrs_daily_mean_TI_expan)), 
@@ -82,7 +81,7 @@ est_pe_effort <- function(
       l95 = est - qt(1-(0.05/2),df)*(var^0.5),
       u95 = est + qt(1-(0.05/2),df)*(var^0.5)
     ) |>
-    dplyr::left_join( # add back matching date information for stratum estimates
+    left_join( # add back matching date information for stratum estimates
       days |>
                 select(event_date, period, year) |> 
                 group_by(period) |> 

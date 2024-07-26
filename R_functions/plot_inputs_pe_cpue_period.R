@@ -10,13 +10,12 @@ plot_inputs_pe_cpue_period <- function(
     ...
 ){
   
-  cpue_period <- 
-    dplyr::left_join(
-      dwg_summarized$interview
-      , 
-      days |> dplyr::select(event_date, day_type, period)
-      ,
-      by=c("event_date")
+  cpue_period <- dplyr::left_join(
+    dwg_summarized$interview
+    , 
+    days |> dplyr::select(event_date, day_type, period)
+    ,
+    by=c("event_date")
   ) |>
     dplyr::filter(est_cg == est_catch_group) |> 
     dplyr::group_by(section_num, period, day_type, angler_final, est_cg) |> #day_type dropped to simplify plot 
