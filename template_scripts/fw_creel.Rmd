@@ -17,21 +17,18 @@ params:
   census_expansion: "Direct"
   day_length_expansion: "night closure"
   min_fishing_time: 0.5
-<<<<<<< HEAD
   bss_model_file_name: "BSS_creel_model_02_2024-04-03.stan"
   #ETL parameters           Note: approved data may only be submitted by FRFM admin
   export: "local"           #Default: local             options:  "no", "local", "database".
   export_tables: "both"     #Default: total             options: "total", "stratum", "both".
   model_used: "PE only"    #Default: PE only           options: "PE only", "BSS only", "Both models".
   data_grade: "provisional" #Default: provisional       options: "provisional", "approved".
-=======
   output_location_filepath: "local" #can remove param with new ETL
   #ETL parameters
   export: "local" #options:  "no", "local", "database". -Default: local
   export_tables: "both" #options: "total", "stratum", "both". -Default: total
   model_used: "PE only" #options: "PE only", "BSS only", "Both models". -Default: PE only
   data_grade: "provisional" #options: "provisional", "approved". Note: approved data may only be submitted by FRFM admin
->>>>>>> parent of 0e83b90 (Merge branch 'estimate_storage' of https://github.com/wdfw-fp/CreelEstimates into estimate_storage)
 output:
   html_document:
     fig_caption: yes
@@ -715,12 +712,12 @@ map_df(estimates_bss, ~.x$overview) |>
 
 # Save results
 
-<<<<<<< HEAD
 ```{r transform_estimates, eval = FALSE}
 
 
 #Extract and transform model estimates into a common format
-=======
+```
+
 ```{r write_out_results, eval = FALSE}
 # bss_overview <- estimates_bss$summary_by_catchgroup
 #write out a workbook with results from model runs 
@@ -752,7 +749,6 @@ map_df(estimates_bss, ~.x$overview) |>
 # }
 
 #Export data from one or both models
->>>>>>> parent of 0e83b90 (Merge branch 'estimate_storage' of https://github.com/wdfw-fp/CreelEstimates into estimate_storage)
 if (params$export %in% c("database", "local") && !params$model_used %in% c("PE only", "BSS only", "Both models" )) {
   cat("\nInvalid value for export or model_used parameter.")
 } else {
