@@ -3,11 +3,11 @@ title: "Freshwater Creel Estimates"
 date: "`r Sys.Date()`"
 params:
   project_name: "District 14"
-  fishery_name: "Skagit winter steelhead 2024"
-  est_date_start: "2024-02-01"
-  est_date_end: "2024-04-14"
+  fishery_name: "Skagit winter steelhead 2023"
+  est_date_start: "2023-03-25"
+  est_date_end: "2023-04-30"
   est_catch_groups: !r data.frame(rbind(
-    c(species = 'Steelhead', life_stage = 'Adult', fin_mark = 'UM|AD', fate = 'Released')
+    c(species = 'Steelhead', life_stage = 'Adult', fin_mark = 'UM', fate = 'Released')
     ))
   person_count_type: "group"
   period_pe: "week"
@@ -17,18 +17,11 @@ params:
   census_expansion: "Direct"
   day_length_expansion: "night closure"
   min_fishing_time: 0.5
-  bss_model_file_name: "BSS_creel_model_02_2024-04-03.stan"
   #ETL parameters           Note: approved data may only be submitted by FRFM admin
   export: "local"           #Default: local             options:  "no", "local", "database".
   export_tables: "both"     #Default: total             options: "total", "stratum", "both".
-  model_used: "PE only"    #Default: PE only           options: "PE only", "BSS only", "Both models".
+  model_used: "Both models"    #Default: PE only           options: "PE only", "BSS only", "Both models".
   data_grade: "provisional" #Default: provisional       options: "provisional", "approved".
-  output_location_filepath: "local" #can remove param with new ETL
-  #ETL parameters
-  export: "local" #options:  "no", "local", "database". -Default: local
-  export_tables: "both" #options: "total", "stratum", "both". -Default: total
-  model_used: "PE only" #options: "PE only", "BSS only", "Both models". -Default: PE only
-  data_grade: "provisional" #options: "provisional", "approved". Note: approved data may only be submitted by FRFM admin
 output:
   html_document:
     fig_caption: yes
@@ -534,7 +527,7 @@ for(ecg in names(inputs_bss)) {
   
   ecg_fit <- fit_bss(
     bss_inputs_list = inputs_bss[[ecg]],
-    n_iter = 2000
+    n_iter = 500
   )
   
   ecg_keep <- list()
@@ -713,40 +706,7 @@ map_df(estimates_bss, ~.x$overview) |>
 # Save results
 
 ```{r transform_estimates, eval = FALSE}
-
-
 #Extract and transform model estimates into a common format
-```
-
-```{r write_out_results, eval = FALSE}
-# bss_overview <- estimates_bss$summary_by_catchgroup
-#write out a workbook with results from model runs 
-
-
-## how to write out html to outputs file path??
-
-# data fetched from dwg and summarized data used for PE and BSS (dwg_summ)
-# if(nchar(params$output_location_filepath) > 1) {
-#   writexl::write_xlsx(
-#   c(set_names(dwg, paste0("dwg_", names(dwg))), set_names(dwg_summ, paste0("dwg_summ", names(dwg_summ)))),
-#   path = file.path(here("fishery_analyses", params$project_name, params$fishery_name), paste0("fetch_dwg_", params$fishery_name, ".xlsx"))
-#   )
-# }
-# 
-# # PE output
-# if(nchar(params$output_location_filepath) > 1) {
-#   writexl::write_xlsx(
-#   c(estimates_pe[rev(names(estimates_pe))]),
-#   path = file.path(here("fishery_analyses", params$project_name, params$fishery_name), paste0("pe_output_", params$fishery_name, ".xlsx"))
-#   )
-# }
-
-# overview of BSS output
-# if(nchar(params$output_location_filepath) > 1) {
-#   writexl::write_xlsx(bss_overview,
-#   path = file.path(where("fishery_analyses", params$project_name, params$fishery_name), paste0("bss_overview_", params$fishery_name, ".xlsx"))
-#   )
-# }
 
 #Export data from one or both models
 if (params$export %in% c("database", "local") && !params$model_used %in% c("PE only", "BSS only", "Both models" )) {
