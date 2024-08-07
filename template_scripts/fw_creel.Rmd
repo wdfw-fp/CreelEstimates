@@ -3,11 +3,11 @@ title: "Freshwater Creel Estimates"
 date: "`r Sys.Date()`"
 params:
   project_name: "District 14"
-  fishery_name: "Skagit winter steelhead 2023"
-  est_date_start: "2023-03-25"
-  est_date_end: "2023-04-30"
+  fishery_name: "Skagit summer sockeye 2022"
+  est_date_start: "2022-06-16"
+  est_date_end: "2022-07-23"
   est_catch_groups: !r data.frame(rbind(
-    c(species = 'Steelhead', life_stage = 'Adult', fin_mark = 'UM', fate = 'Released')
+    c(species = 'Sockeye', life_stage = 'Adult', fin_mark = 'UM|AD', fate = 'Kept')
     ))
   person_count_type: "group"
   period_pe: "week"
@@ -475,7 +475,7 @@ Estimated catch grouped by catch group, period, section, angler type,and day typ
 
 # BSS estimation
 
-```{r prep_inputs_bss, eval=FALSE}
+```{r prep_inputs_bss, eval=TRUE}
 #either a single element list for a single catch_group
 #or a list of bss-input-lists, one for each catch_group
 inputs_bss <- unique(dwg_summ$interview$est_cg) |> 
@@ -518,46 +518,56 @@ inputs_bss <- unique(dwg_summ$interview$est_cg) |>
 
 ```
 
-```{r estimates_bss, eval=FALSE}
+```{r estimates_bss, eval=TRUE}
 #should work for either single or multiple catch_group 
 estimates_bss <- list()
 
 for(ecg in names(inputs_bss)) {
   gc(verbose = T)
-  
-  ecg_fit <- fit_bss(
-    bss_inputs_list = inputs_bss[[ecg]],
-    n_iter = 500
-  )
+
+  ecg_fit <-
+    fit_bss(
+      #model_file_name = params$bss_model_file_name,
+      bss_inputs_list = inputs_bss[[ecg]],
+      n_chain = 2,  
+      n_cores = 4,
+      n_iter = 300,
+      n_warmup = 150,
+      n_thin = 1,
+      adapt_delta = 0.95,
+      max_treedepth = 12,
+      init = "0"
+    )
   
   ecg_keep <- list()
-  
   ecg_keep$overview <- get_bss_overview(bss_fit = ecg_fit, ecg = ecg)
-  
   ecg_keep$cpue_daily <- get_bss_cpue_daily(bss_fit = ecg_fit, ecg = ecg)
-  
   ecg_keep$catch_daily <- get_bss_catch_daily(bss_fit = ecg_fit, ecg = ecg)
-  
   ecg_keep$effort_daily <- get_bss_effort_daily(bss_fit = ecg_fit, ecg = ecg)
-  
   ecg_keep$draws <- extract(ecg_fit)
-  
-  # #can write wrapper on tidybayes::spread_draws or write our own
-  # #to repackage full posterior of key estimated quantities
-  # #such as daily catch or something else?
-  # ecg_keep$catch_daily_draws <- ecg_fit |> tidybayes::spread_draws(C[s][d,g]) #long, each index still a col 
-  # ecg_keep$catch_daily_draws <- ecg_fit |> tidybayes::spread_draws(C[s][d,g] | g) #a bit wider, bank/boat pivoted wide 
+  ecg_keep$summary<-summary(ecg_fit)$summary #KB check to make sure this is working correctly
+  #ecg_keep$summary<- ecg_fit |>  summary() |>  pluck("summary") #try this though not sure if it works
+
+  # if(nchar(params$output_location_filepath) > 1) {
+  #   writexl::write_xlsx(
+  #     x = ecg_keep$summary|> as.data.frame() |> tibble::rownames_to_column(var = "parameter"),  
+  #     path = file.path(here("fishery_analyses", params$project_name, params$fishery_name), paste0("bss_summary of ecg_fit_", names(inputs_bss)[ecg], ".xlsx"))
+  #   )
+  # }  
 
   estimates_bss[[ecg]] <- ecg_keep
-    
-  rm(ecg_fit, ecg_keep); gc()
+
+  if(length(names(inputs_bss))>1){  
+    rm(ecg_fit, ecg_keep); gc()
+  }
+ 
 }
 
 ```
 
 ## summary BSS
 
-```{r BSS_summary, eval= FALSE}
+```{r BSS_summary, eval= TRUE}
 
 # effort by section_num
 
@@ -575,7 +585,7 @@ map_df(estimates_bss, ~.x$overview) |>
 
 ## plot probability density function of effort and catch 
 
-```{r, eval=FALSE}
+```{r, eval=TRUE}
 
 season_results <- map_df(estimates_bss, ~.x$draws$C_sum) |> 
   mutate(iter = row_number()) |> 
@@ -601,7 +611,7 @@ theme(legend.title = element_blank())
 
 ## plot daily catch BSS
 
-```{r, eval=FALSE}
+```{r, eval=TRUE}
 
 map_df(estimates_bss, ~.x$catch_daily) |> 
     ggplot(aes(x = event_date, y = `50%`, fill = angler_final, color = angler_final)) +
@@ -619,7 +629,7 @@ map_df(estimates_bss, ~.x$catch_daily) |>
 
 ## plot daily effort BSS
 
-```{r,  eval=FALSE}
+```{r,  eval=TRUE}
 
 estimates_bss[[1]]$effort_daily |> 
     ggplot(aes(x = event_date, y = `50%`, fill = angler_final, color = angler_final)) +
@@ -638,7 +648,7 @@ estimates_bss[[1]]$effort_daily |>
 
 ## plot daily CPUE BSS
 
-```{r, eval=FALSE}
+```{r, eval=TRUE}
 
 map_df(estimates_bss, ~.x$cpue_daily) |> 
     ggplot(aes(x = event_date, y = `50%`, fill = angler_final, color = angler_final)) +
@@ -658,7 +668,7 @@ map_df(estimates_bss, ~.x$cpue_daily) |>
 
 # PE/BSS combined summary
 
-```{r combo_overview, eval=FALSE}
+```{r combo_overview, eval=TRUE}
 #per-est_cg summary of total effort hours and catch/encounters, showing results of both PE and BSS estimation methods
 
 map_df(estimates_bss, ~.x$overview) |> 
