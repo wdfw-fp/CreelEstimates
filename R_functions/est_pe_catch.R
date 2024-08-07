@@ -4,29 +4,28 @@ est_pe_catch <- function(
     ...
 ){
   
-  est_catch <- 
-    dplyr::left_join(
+  est_catch <- dplyr::left_join(
     #dates expanded to sections * angler_final * opendays
-      days |>
-        dplyr::select(period, day_type, event_date, starts_with("open_section")) |>
-        tidyr::pivot_longer(
-          cols = starts_with("open_section"), 
-          names_to = "section_num", 
-          values_to = "is_open"
-        ) |>
-        dplyr::filter(is_open) |>
-        dplyr::mutate(
-          section_num = as.numeric(gsub("^.*_", "", section_num)), 
-          is_open = NULL,
-          angler_final = list(unique(pe_inputs_list$ang_hrs_daily_mean$angler_final)) 
-        ) |> 
-        tidyr::unnest(angler_final)
-      ,
-      pe_inputs_list$daily_cpue_catch_est |> 
-        dplyr::select(section_num, event_date, angler_final, est_cg, catch_estimate)
-      ,
-      by = c("section_num", "event_date", "angler_final")
-    ) |> 
+    days |>
+      dplyr::select(period, day_type, event_date, starts_with("open_section")) |>
+      tidyr::pivot_longer(
+        cols = starts_with("open_section"), 
+        names_to = "section_num", 
+        values_to = "is_open"
+      ) |>
+      dplyr::filter(is_open) |>
+      dplyr::mutate(
+        section_num = as.numeric(gsub("^.*_", "", section_num)), 
+        is_open = NULL,
+        angler_final = list(unique(pe_inputs_list$ang_hrs_daily_mean$angler_final)) 
+      ) |> 
+      tidyr::unnest(angler_final)
+    ,
+    pe_inputs_list$daily_cpue_catch_est |> 
+      dplyr::select(section_num, event_date, angler_final, est_cg, catch_estimate)
+    ,
+    by = c("section_num", "event_date", "angler_final")
+  ) |> 
     dplyr::group_by(section_num, period, day_type, angler_final, est_cg) |>
     dplyr::summarize(
       n_obs = sum(!is.na(catch_estimate)), 

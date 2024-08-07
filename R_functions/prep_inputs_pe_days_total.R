@@ -1,9 +1,4 @@
-# Calculate total days the fishery was open per strata (strata = period, day_type, and section_num)
-
-prep_inputs_pe_days_total <- function(
-    days, # tibble of dates and corresponding fields (e.g., year, month, period, open/close fishery by section)
-    ...
-){
+prep_inputs_pe_days_total <- function(days, ...){
   
   days |>
     tidyr::pivot_longer(

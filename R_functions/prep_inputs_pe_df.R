@@ -1,10 +1,16 @@
-# calculate degrees of freedom based on number of creel survey days
-
 prep_inputs_pe_df <- function(
+    days,
     angler_hours_daily_mean,
     ...
 ){
-  angler_hours_daily_mean |>  #KB addition
+  
+  dplyr::left_join(
+    angler_hours_daily_mean
+    , 
+    days |> dplyr::select(event_date, period)
+    ,
+    by = "event_date"
+    ) |> 
     dplyr::count(section_num, period, day_type, angler_final, name = "n_days_samp") |> 
     dplyr::group_by(section_num, angler_final) |>
     dplyr::mutate(
