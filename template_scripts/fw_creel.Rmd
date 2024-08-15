@@ -3,11 +3,11 @@ title: "Freshwater Creel Estimates"
 date: "`r Sys.Date()`"
 params:
   project_name: "District 14"
-  fishery_name: "Skagit summer sockeye 2022"
-  est_date_start: "2022-06-16"
-  est_date_end: "2022-07-23"
+  fishery_name: "Skagit winter steelhead 2024"
+  est_date_start: "2024-02-01"
+  est_date_end: "2024-04-17"
   est_catch_groups: !r data.frame(rbind(
-    c(species = 'Sockeye', life_stage = 'Adult', fin_mark = 'UM|AD', fate = 'Kept')
+    c(species = 'Steelhead', life_stage = 'Adult', fin_mark = 'UM', fate = 'Released')
     ))
   person_count_type: "group"
   period_pe: "week"
@@ -18,7 +18,7 @@ params:
   day_length_expansion: "night closure"
   min_fishing_time: 0.5
   #ETL parameters           Note: approved data may only be submitted by FRFM admin
-  export: "local"           #Default: local             options:  "no", "local", "database".
+  export: "no"           #Default: local             options:  "no", "local", "database".
   export_tables: "both"     #Default: total             options: "total", "stratum", "both".
   model_used: "Both models"    #Default: PE only           options: "PE only", "BSS only", "Both models".
   data_grade: "provisional" #Default: provisional       options: "provisional", "approved".
@@ -730,22 +730,31 @@ if (params$export %in% c("database", "local") && !params$model_used %in% c("PE o
   
   # Process PE estimates to common format
   if (exists("estimates_pe") == "TRUE" && params$model_used == "PE only") {
+    cat("Performing 'PE only' transformation.")
     transformed_pe_data <- process_estimates_pe(analysis_lut, estimates_pe)
-  } else {print("PE model not used.")}
+    
+    #add parameter data_grade as a field on all tables
+    map_data_grade(params, transformed_bss_data=NULL, transformed_pe_data)
+  }
   
   # Process BSS estimates to common format
   if (exists("estimates_bss") == "TRUE" && params$model_used == "BSS only") {
+    cat("Performing 'BSS only' transformation.")
     transformed_bss_data <- process_estimates_bss(params, analysis_lut, estimates_bss)
-  } else {print("BSS model not used.")}
+    
+    #add parameter data_grade as a field on all tables
+    map_data_grade(params, transformed_bss_data, transformed_pe_data=NULL)
+  }
   
   # Process PE and BSS model estimates to common format
   if (exists("estimates_pe") == "TRUE" && exists("estimates_bss") == "TRUE" && params$model_used == "Both models") {
+    cat("Performing 'Both models' transformation.")
     transformed_pe_data <- process_estimates_pe(analysis_lut, estimates_pe)
     transformed_bss_data <- process_estimates_bss(params, analysis_lut, estimates_bss)
-  } else {print("Only one model transformed as one model output does not exist or params$model_used does not equal `Both models`.")}
-  
-  #add parameter data_grade as a field on all tables
-  map_data_grade(params, transformed_bss_data, transformed_pe_data)
+    
+    #add parameter data_grade as a field on all tables
+    map_data_grade(params, transformed_bss_data, transformed_pe_data)
+  }
   
   #Combine PE and BSS and perform other transformation steps
   creel_estimates <- transform_estimates(dwg, transformed_pe_data, transformed_bss_data)  
