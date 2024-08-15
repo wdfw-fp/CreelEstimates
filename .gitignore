@@ -43,9 +43,5 @@ vignettes/*.pdf
 /project_outputs
 /project_scripts
 
-# RDS file with parameters supplied to analysis-specific render.analysis.R script
+# RDS file with parameters supplied to analysis-specific render.analysis.R script 
 /input_files/params_list.rds
-# ETL output file
-FAILED_UPLOAD_LOG_analysis_lut.csv
-# Database connection
-config.yml
