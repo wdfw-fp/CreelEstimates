@@ -20,7 +20,7 @@ params:
   #ETL parameters           Note: approved data may only be submitted by FRFM admin
   export: "no"           #Default: local             options:  "no", "local", "database".
   export_tables: "both"     #Default: total             options: "total", "stratum", "both".
-  model_used: "Both models"    #Default: PE only           options: "PE only", "BSS only", "Both models".
+  model_used: "BSS only"    #Default: PE only           options: "PE only", "BSS only", "Both models".
   data_grade: "provisional" #Default: provisional       options: "provisional", "approved".
 output:
   html_document:
@@ -720,16 +720,16 @@ map_df(estimates_bss, ~.x$overview) |>
 
 #Export data from one or both models
 if (params$export %in% c("database", "local") && !params$model_used %in% c("PE only", "BSS only", "Both models" )) {
-  cat("\nInvalid value for export or model_used parameter.")
+  stop("\nInvalid value for export or model_used parameter.")
 } else {
   
   #Check that at least one model output is provided
-  if (exists("estimates_pe") == "FALSE" && exists("estimates_bss") == "FALSE") {
+  if (!exists("estimates_pe") && !exists("estimates_bss")) {
     stop("At least one of 'estimates_pe' or 'estimates_bss' must be supplied.")
   }
   
   # Process PE estimates to common format
-  if (exists("estimates_pe") == "TRUE" && params$model_used == "PE only") {
+  if (exists("estimates_pe") && params$model_used == "PE only") {
     cat("Performing 'PE only' transformation.")
     transformed_pe_data <- process_estimates_pe(analysis_lut, estimates_pe)
     
@@ -738,7 +738,7 @@ if (params$export %in% c("database", "local") && !params$model_used %in% c("PE o
   }
   
   # Process BSS estimates to common format
-  if (exists("estimates_bss") == "TRUE" && params$model_used == "BSS only") {
+  if (exists("estimates_bss") && params$model_used == "BSS only") {
     cat("Performing 'BSS only' transformation.")
     transformed_bss_data <- process_estimates_bss(params, analysis_lut, estimates_bss)
     
@@ -747,7 +747,7 @@ if (params$export %in% c("database", "local") && !params$model_used %in% c("PE o
   }
   
   # Process PE and BSS model estimates to common format
-  if (exists("estimates_pe") == "TRUE" && exists("estimates_bss") == "TRUE" && params$model_used == "Both models") {
+  if (exists("estimates_pe") && exists("estimates_bss") && params$model_used == "Both models") {
     cat("Performing 'Both models' transformation.")
     transformed_pe_data <- process_estimates_pe(analysis_lut, estimates_pe)
     transformed_bss_data <- process_estimates_bss(params, analysis_lut, estimates_bss)
