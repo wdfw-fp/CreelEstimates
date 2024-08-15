@@ -19,7 +19,7 @@ params:
   min_fishing_time: 0.5
   #ETL parameters            Note: approved data may only be submitted by FRFM admin
   model_used: "PE only"      #Default: PE only           options: "PE only", "BSS only", "Both models".
-  data_grade: "approved"     #Default: provisional       options: "provisional", "approved".
+  data_grade: "provisional"     #Default: provisional       options: "provisional", "approved".
   export: "no"               #Default: no                options:  "no", "local", "database".
   export_tables: "total"     #Default: total             options: "total", "stratum", "both".
 output:
