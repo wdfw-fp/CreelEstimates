@@ -621,10 +621,10 @@ for(ecg in names(inputs_bss)) {
     fit_bss(
       #model_file_name = params$bss_model_file_name,
       bss_inputs_list = inputs_bss[[ecg]],
-      n_chain = 2,  
+      n_chain = 4,  
       n_cores = 4,
-      n_iter = 300,
-      n_warmup = 150,
+      n_iter = 500,
+      n_warmup = 200,
       n_thin = 1,
       adapt_delta = 0.95,
       max_treedepth = 12,
