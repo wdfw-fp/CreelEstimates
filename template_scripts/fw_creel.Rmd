@@ -5,7 +5,7 @@ params:
   project_name: "District 14"
   fishery_name: "Skagit spring Chinook 2022 upper"
   est_date_start: "2022-06-01"
-  est_date_end: "	2022-07-15"
+  est_date_end: "2022-07-15"
   est_catch_groups: !r data.frame(rbind(
     c(species = 'Chinook', life_stage = 'Adult', fin_mark = 'AD', fate = 'Kept')
     ))
