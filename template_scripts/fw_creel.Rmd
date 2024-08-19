@@ -2,14 +2,14 @@
 title: "Freshwater Creel Estimates"
 date: "`r Sys.Date()`"
 params:
-  project_name: "CRM - Roving Creel Project"
-  fishery_name: "Drano Lake salmon and steelhead 2023"
-  est_date_start: "2023-03-01"
-  est_date_end: "2023-11-15"
+  project_name: "District 14"
+  fishery_name: "Skagit spring Chinook 2022 upper"
+  est_date_start: "2022-06-01"
+  est_date_end: "	2022-07-15"
   est_catch_groups: !r data.frame(rbind(
     c(species = 'Chinook', life_stage = 'Adult', fin_mark = 'AD', fate = 'Kept')
     ))
-  study_design: "Drano"  
+  study_design: "Standard"  
   boat_type_collapse: "Yes"
   fish_location_determines_type: "No"
   angler_type_kayak_pontoon: "bank" 
@@ -20,12 +20,11 @@ params:
   day_length_expansion: "night closure"
   min_fishing_time: 0.5
   bss_model_file_name: "BSS_creel_model_02_2024-04-03.stan"
-  #ETL parameters            Note: approved data may only be submitted by FRFM admin
+#ETL parameters               Note: "approved" data may only be submitted by FRFM admin
   model_used: "Both models"      #Default: PE only           options: "PE only", "BSS only", "Both models".
-  data_grade: "provisional"     #Default: provisional       options: "provisional", "approved".
-  export: "yes"               #Default: no                options:  "no", "local", "database".
-  export_tables: "both"     #Default: total             options: "total", "stratum", "both".
-  
+  data_grade: "provisional"      #Default: provisional       options: "provisional", "approved".
+  export: "local"                #Default: no                options:  "no", "local", "database".
+  export_tables: "both"          #Default: total             options: "total", "stratum", "both".
 output:
   html_document:
     fig_caption: yes
@@ -859,15 +858,20 @@ if (params$export %in% c("database", "local") && !params$model_used %in% c("PE o
 ```{r ETL_KNIT_OPTION, eval=TRUE}
 #write out standardized creel_estimates object to project file directory
 #this saves the estimates produces from an HTML render which can later be loaded into R and exported locally or to creel database.
+file_path <- paste0(here::here(),"/fishery_analyses/", params$project_name, "/", params$fishery_name, "/")
+
 if (exists("creel_estimates")) {
-  saveRDS(creel_estimates, file = paste0(here::here(),"/fishery_analyses/", params$project_name, "/", params$fishery_name, "/creel_estimates.R"))
+  save(analysis_lut, creel_estimates, file = paste0(file_path, "creel_estimates.RData"))
 }
+
 #Bring object back in after knit / render. Then proceed to database export as necessary.
-#creel_estimates <- readRDS(file = paste0(here::here(),"/fishery_analyses/", params$project_name, "/", params$fishery_name, "/creel_estimates.R"))
+
+# file_path <- paste0(here::here(),"/fishery_analyses/", params$project_name, "/", params$fishery_name, "/")
+# load(file = paste0(file_path, "creel_estimates.RData"))
 ```
 
 
-```{r load_estimates, eval= TRUE}
+```{r load_estimates, eval= FALSE}
 
 #Converts metadata to JSON and adds to analysis_lut
 #Connects to database
