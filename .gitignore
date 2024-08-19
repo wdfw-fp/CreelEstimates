@@ -45,3 +45,6 @@ vignettes/*.pdf
 
 # RDS file with parameters supplied to analysis-specific render.analysis.R script 
 /input_files/params_list.rds
+
+# Database configuration file
+config.yml
