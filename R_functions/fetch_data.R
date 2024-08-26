@@ -1,4 +1,12 @@
-fetch_data <- function(fishery_name, ...){
+fetch_data <- function(fishery_name, data_source,...){
+  
+  #validate and format data_source input
+  valid_sources <- c("dwg", "public", "internal", "direct") 
+  data_source <- trimws(tolower(data_source))
+  
+  if (!data_source %in% valid_sources) {
+    stop("Invalid data_source argument. \nMust be either `dwg` or `public` for accessing data.wa.gov. \nMust be either `internal` or `direct` for accessing Postgres database.")
+  }
   
   dwg_base <- list(
     #event = "https://data.wa.gov/resource/ui95-axtn.csv",
