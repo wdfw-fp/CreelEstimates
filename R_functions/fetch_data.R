@@ -118,6 +118,9 @@ fetch_data <- function(fishery_name, data_source = "dwg", ...){
       tidyr::drop_na(count_type) |>   
       dplyr::select(-created_datetime, -modified_datetime)
     
+    #format column type to match dwg
+    data$effort$count_sequence <- as.double(data$effort$count_sequence)
+    
     #interview
     data$interview <- fetch_db_table(con, "creel", "vw_analysis_interview", filter = filter_condition) |> 
       dplyr::select(-created_datetime, -modified_datetime)
@@ -138,6 +141,10 @@ fetch_data <- function(fishery_name, data_source = "dwg", ...){
     
     data$ll <- fetch_db_table(con, "creel", "water_body_lut", filter = filter_condition2)
     
+    #arrange to match dwg order
+    dwg_order <- c("effort", "ll", "interview", "catch", "closures", "fishery_locations")
+    
+    data <- data[dwg_order]
   }
   
   return(data)
@@ -146,10 +153,10 @@ fetch_data <- function(fishery_name, data_source = "dwg", ...){
 #examples
 
 # # a, b, and c are equivalent. Function defaults to data.wa.gov.
-# a <- fetch_data("Hoh winter steelhead 2023-24")
-# b <- fetch_data("Hoh winter steelhead 2023-24", data_source = "dwg")
-# c <- fetch_data("Hoh winter steelhead 2023-24", data_source = "public")
-
+# a <- fetch_data("Snohomish fall salmon 2023")
+# b <- fetch_data("Snohomish fall salmon 2023", data_source = "dwg")
+# c <- fetch_data("Snohomish fall salmon 2023", data_source = "public")
+# 
 # # d and e are equivalent. Queries database directly.
-# d <- fetch_data("Hoh winter steelhead 2023-24", data_source = "internal")
-# e <- fetch_data("Hoh winter steelhead 2023-24", data_source = "direct")
+# d <- fetch_data("Snohomish fall salmon 2023", data_source = "internal")
+# e <- fetch_data("Snohomish fall salmon 2023", data_source = "direct")
