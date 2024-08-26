@@ -1,4 +1,4 @@
-fetch_dwg <- function(fishery_name, ...){
+fetch_data <- function(fishery_name, ...){
   
   dwg_base <- list(
     #event = "https://data.wa.gov/resource/ui95-axtn.csv",

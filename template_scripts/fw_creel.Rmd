@@ -130,8 +130,8 @@ if(params$day_length_expansion == "manual"){
 
 # Fetch raw data
 
-```{r dwg_fetch, echo=FALSE}
-dwg <- fetch_dwg(params$fishery_name)
+```{r data_fetch, echo=FALSE}
+dwg <- fetch_data(params$fishery_name)
 
 dwg$days <- prep_days(
   date_begin = params$est_date_start, 
