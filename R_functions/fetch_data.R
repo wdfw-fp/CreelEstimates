@@ -137,7 +137,9 @@ fetch_data <- function(fishery_name, data_source = "dwg", ...){
       dplyr::select(fishery_name, section_num, event_date)
     
     #water bodies - needs its own filter with outputs from data$effort
-    filter_condition2 <- paste0("water_body_desc %in% ('", unique(data$effort$water_body), "')")
+    water_bodies <- unique(data$effort$water_body)
+    water_bodies <- paste0("'", water_bodies, "'", collapse = ", ")
+    filter_condition2 <- paste0("water_body_desc %in% c(", water_bodies,")")
     
     data$ll <- fetch_db_table(con, "creel", "water_body_lut", filter = filter_condition2)
     
