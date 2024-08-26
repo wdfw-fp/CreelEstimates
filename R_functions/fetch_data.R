@@ -8,7 +8,7 @@ fetch_data <- function(fishery_name, data_source = "dwg", ...){
     stop("Invalid data_source argument. \nMust be either `dwg` or `public` for accessing data.wa.gov. \nMust be either `internal` or `direct` for accessing Postgres database.")
   }
   
-  #public data portal
+  #### public data portal ####
   if (data_source %in% c("dwg", "public")) {
   
     dwg_base <- list(
@@ -90,6 +90,56 @@ fetch_data <- function(fishery_name, data_source = "dwg", ...){
     data <- dwg
   }
   
+  #### Postgres database connection ####
+  if (data_source %in% c("internal", "direct")) {
+    
+    #connect to database
+    con <- establish_db_con()
+    
+    #verify active connection
+    if (!DBI::dbIsValid(con)) {
+      stop("No valid database connection provided.")
+    }
+    
+    #inititalize output
+    data <- list()
+    
+    #define standard filter to fishery name
+    filter_condition <- paste0("fishery_name=='", fishery_name,"'")
+    
+    ##### query database for creel data ####
+    cat("\nQuerying Postgres database...")
+  
+    #fishery_locations_table
+    data$fishery_locations <- fetch_db_table(con, "creel", "vw_fishery_manager", filter = filter_condition) 
+    
+    #effort
+    data$effort <- fetch_db_table(con, "creel", "vw_analysis_effort_count", filter = filter_condition) |> 
+      tidyr::drop_na(count_type) |>   
+      dplyr::select(-created_datetime, -modified_datetime)
+    
+    #interview
+    data$interview <- fetch_db_table(con, "creel", "vw_analysis_interview", filter = filter_condition) |> 
+      dplyr::select(-created_datetime, -modified_datetime)
+    
+    #catch
+    data$catch <- fetch_db_table(con, "creel", "vw_analysis_catch", filter = filter_condition) |> 
+      dplyr::select(interview_id, catch_id, species, run, life_stage, fin_mark, sex, fork_length_cm, fate, fish_count) |> 
+      dplyr::mutate(
+        catch_group = paste(species, life_stage, fin_mark, fate, sep = "_") # fish catch groups to estimate catch of 
+      )
+    
+    #closures
+    data$closures <- fetch_db_table(con, "creel", "vw_fishery_closure", filter = filter_condition) |> 
+      dplyr::select(fishery_name, section_num, event_date)
+    
+    #water bodies - needs its own filter with outputs from data$effort
+    filter_condition2 <- paste0("water_body_desc %in% ('", unique(data$effort$water_body), "')")
+    
+    data$ll <- fetch_db_table(con, "creel", "water_body_lut", filter = filter_condition2)
+    
+  }
+  
   return(data)
 }
 
@@ -100,3 +150,6 @@ fetch_data <- function(fishery_name, data_source = "dwg", ...){
 # b <- fetch_data("Hoh winter steelhead 2023-24", data_source = "dwg")
 # c <- fetch_data("Hoh winter steelhead 2023-24", data_source = "public")
 
+# # d and e are equivalent. Queries database directly.
+# d <- fetch_data("Hoh winter steelhead 2023-24", data_source = "internal")
+# e <- fetch_data("Hoh winter steelhead 2023-24", data_source = "direct")
