@@ -74,21 +74,21 @@ transform_estimates <- function(dwg, transformed_pe_data, transformed_bss_data) 
         estimate_category = dplyr::case_when( 
           estimate_category == "C_daily" ~ "catch",
           estimate_category == "E_daily" ~ "effort",
-          estimate_category == "CPUE_daily" ~ "catch_per_unit_effort",
+          estimate_category == "CPUE_daily" ~ "CPUE",
           TRUE ~ estimate_category,
         ),
         #apply snake_case to estimate_type values
         estimate_type = dplyr::case_when(
           estimate_type == "totalobs" ~ "total_observations", ### consider moving to analysis_lut
-          estimate_type == "N_days_total" ~ "n_days_open", ### consider moving to analysis_lut
+          estimate_type == "N_days_total" ~ "number_days_open", ### consider moving to analysis_lut
           estimate_type == "totaldaysopen" ~ "total_days_open", ### consider moving to analysis_lut
-          estimate_type == "n_obs" ~ "number_of_observations",
-          estimate_type == "Rhat" ~ "r_hat",
-          estimate_type == "n_div" ~ "number_of_divisions",
-          estimate_type == "n_eff" ~ "number_of_draws", #https://mc-stan.org/docs/cmdstan-guide/stansummary.html
-          estimate_type == "df" ~ "degrees_of_freedom",
+          estimate_type == "n_obs" ~ "number_observations",
+          estimate_type == "Rhat" ~ "R_hat",
+          estimate_type == "n_div" ~ "number_divisions",
+          #estimate_type == "n_eff" ~ "number_draws", #https://mc-stan.org/docs/cmdstan-guide/stansummary.html
+          estimate_type == "df" ~ "degrees_freedom",
           estimate_type == "sd" ~ "standard_deviation",
-          estimate_type == "se_mean" ~ "standard_error_of_mean",
+          estimate_type == "se_mean" ~ "standard_error_mean",
           estimate_type == "est" ~ "estimate_stratum", #applies to catch & effort, which are identified by model_type field
           estimate_type == "est_sum" ~ "estimate_sum",
           estimate_type == "catch_est_mean" ~ "catch_estimate_mean",
@@ -101,22 +101,22 @@ transform_estimates <- function(dwg, transformed_pe_data, transformed_bss_data) 
           estimate_type == "75_pct" ~ "upper_quantile_75",
           estimate_type == "97.5_pct" ~ "upper_quantile_97_5",
           TRUE ~ estimate_type
-        ),
+        )
       )
     )
   
   #Modify fields
   creel_estimates$stratum <- creel_estimates$stratum |> 
-    mutate(
+    dplyr::mutate(
       estimate_time_period = period_timestep, #rename
-      reporting_aggregation = "stratum",) |>  #create
-    relocate(reporting_aggregation, .after = "estimate_time_period")
+      reporting_aggregation = "stratum") |>  #create
+    dplyr::relocate(reporting_aggregation, .after = "estimate_time_period")
   
   creel_estimates$total <- creel_estimates$total |> 
-    mutate(
+    dplyr::mutate(
       estimate_time_period = period_timestep, #rename
       reporting_aggregation = "total") |>     #create
-    relocate(reporting_aggregation, .after = "estimate_time_period")
+    dplyr::relocate(reporting_aggregation, .after = "estimate_time_period")
   
   
   
