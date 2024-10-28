@@ -124,14 +124,14 @@ process_estimates_pe <- function(analysis_lut, estimates_pe) {
     
   # Catch 
   #calculate days open and days surveyed
-  totaldaysopen_totaldayssurveyed <-transformed_pe_data$pe_summarized_catch |> 
-    dplyr::distinct(period, day_type, est_cg, n_obs, N_days_open) |> 
-    dplyr::group_by(est_cg) |> 
-    dplyr::summarise(
-      totaldaysopen = sum(N_days_open),
-      totalobs = sum(n_obs),
-      .groups = 'drop'
-    )
+  # totaldaysopen_totaldayssurveyed <-transformed_pe_data$pe_summarized_catch |> 
+  #   dplyr::distinct(period, day_type, est_cg, n_obs, N_days_open) |> 
+  #   dplyr::group_by(est_cg) |> 
+  #   dplyr::summarise(
+  #     totaldaysopen = sum(N_days_open),
+  #     totalobs = sum(n_obs),
+  #     .groups = 'drop'
+  #   )
   
   #catch transformation
   transformed_pe_data$pe_summarized_catch <- transformed_pe_data$pe_summarized_catch |>
@@ -162,26 +162,26 @@ process_estimates_pe <- function(analysis_lut, estimates_pe) {
     )
   
   #prep totaldays object for joining back with pe_summarized_catch
-  totaldaysopen_totaldayssurveyed <- totaldaysopen_totaldayssurveyed |> 
-    tidyr::pivot_longer(cols = c(totaldaysopen, totalobs),
-                 names_to = "estimate_type",
-                 values_to = "value") |> 
-    dplyr::mutate(
-      analysis_id = unique(transformed_pe_data$pe_summarized_catch$analysis_id),
-      project_name = unique(transformed_pe_data$pe_summarized_catch$project_name),
-      fishery_name = unique(transformed_pe_data$pe_summarized_catch$fishery_name),
-      model_type = unique(transformed_pe_data$pe_summarized_catch$model_type),
-      #same date consideration as above
-      min_event_date = as.Date(params$est_date_start),
-      max_event_date = as.Date(
-        ifelse(
-          Sys.Date() <= params$est_date_end, Sys.Date(),
-          params$est_date_end
-        ))
-    )
+  # totaldaysopen_totaldayssurveyed <- totaldaysopen_totaldayssurveyed |> 
+  #   tidyr::pivot_longer(cols = c(totaldaysopen, totalobs),
+  #                names_to = "estimate_type",
+  #                values_to = "value") |> 
+  #   dplyr::mutate(
+  #     analysis_id = unique(transformed_pe_data$pe_summarized_catch$analysis_id),
+  #     project_name = unique(transformed_pe_data$pe_summarized_catch$project_name),
+  #     fishery_name = unique(transformed_pe_data$pe_summarized_catch$fishery_name),
+  #     model_type = unique(transformed_pe_data$pe_summarized_catch$model_type),
+  #     #same date consideration as above
+  #     min_event_date = as.Date(params$est_date_start),
+  #     max_event_date = as.Date(
+  #       ifelse(
+  #         Sys.Date() <= params$est_date_end, Sys.Date(),
+  #         params$est_date_end
+  #       ))
+  #   )
     
-  transformed_pe_data$pe_summarized_catch <- transformed_pe_data$pe_summarized_catch |> 
-    dplyr::bind_rows(totaldaysopen_totaldayssurveyed)
+  # transformed_pe_data$pe_summarized_catch <- transformed_pe_data$pe_summarized_catch |> 
+  #   dplyr::bind_rows(totaldaysopen_totaldayssurveyed)
   
   #tidy output
   transformed_pe_data$pe_summarized_catch <- transformed_pe_data$pe_summarized_catch |>
