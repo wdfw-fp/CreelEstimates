@@ -95,11 +95,11 @@ transform_estimates <- function(dwg, transformed_pe_data, transformed_bss_data) 
           estimate_type == "catch_est_var" ~ "catch_estimate_variance",
           estimate_type == "ang_hrs_mean" ~ "angler_hours_mean", #or mean_angler_hours ?
           estimate_type == "ang_hrs_var" ~ "angler_hours_variance",
-          estimate_type == "2.5_pct" ~ "lower_quantile_2_5", #maybe quantile_lower_2_5 or quantile_2_5_percent
-          estimate_type == "25_pct" ~ "lower_quantile_25",
-          estimate_type == "50_pct" ~ "median_quantile_50",
-          estimate_type == "75_pct" ~ "upper_quantile_75",
-          estimate_type == "97.5_pct" ~ "upper_quantile_97_5",
+          estimate_type == "2.5_pct" ~ "quantile_lower_2_5",
+          estimate_type == "25_pct" ~ "quantile_lower_25",
+          estimate_type == "50_pct" ~ "quantile_median_50",
+          estimate_type == "75_pct" ~ "quantile_upper_75",
+          estimate_type == "97.5_pct" ~ "quantile_upper_97_5",
           TRUE ~ estimate_type
         )
       )
