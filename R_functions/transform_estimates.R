@@ -107,22 +107,14 @@ transform_estimates <- function(dwg, transformed_pe_data, transformed_bss_data) 
   
   #Modify fields
   creel_estimates$stratum <- creel_estimates$stratum |> 
-    dplyr::mutate(
-      estimate_time_period = period_timestep, #rename
-      reporting_aggregation = "stratum") |>  #create
-    dplyr::relocate(reporting_aggregation, .after = "estimate_time_period")
+    dplyr::rename(estimate_time_period = period_timestep)
   
   creel_estimates$total <- creel_estimates$total |> 
-    dplyr::mutate(
-      estimate_time_period = period_timestep, #rename
-      reporting_aggregation = "total") |>     #create
-    dplyr::relocate(reporting_aggregation, .after = "estimate_time_period")
+    dplyr::rename(estimate_time_period = period_timestep)
   
-  
-  
-  
-  
+
   ####################################################################################
+  
   cat("\nTransformed output object 'creel_estimates' created.")
   
   return(creel_estimates)
