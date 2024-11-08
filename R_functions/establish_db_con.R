@@ -34,7 +34,7 @@ establish_db_con<- function(max_attempts = 5, delay_seconds = 3) {
   if (!DBI::dbIsValid(con)) {
     stop("Failed to establish connection after ", max_attempts, " attempts.")
   } else {
-    cat("Database connection established.\n")
+    cat("\nDatabase connection established.\n")
   }
   
   return(con)

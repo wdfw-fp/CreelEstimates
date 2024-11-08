@@ -56,6 +56,64 @@ transform_estimates <- function(dwg, transformed_pe_data, transformed_bss_data) 
       model_type == "PE" ~ params$period_pe,
       model_type == "BSS" ~ params$period_bss
     ))
+
+  ########################################################################################
+  ### Performing standardization procedures. This cleanup is needed to better align
+  ### different model outputs and in preparation for the development of a data dictionary.
+  ### These edits are a post-hoc approach and we plan to implement these changes earlier
+  ### in the pipeline during future development phases. - CH 10/9/2024
+  ########################################################################################
+  
+  tables <- c(5,6) # stratum and total tables location in creel_estimates list
+  
+  creel_estimates <- creel_estimates |> 
+    purrr::map_at(tables, ~.x |> 
+      #Modify values within fields
+      dplyr::mutate(
+        #Make BSS outputs match PE
+        estimate_category = dplyr::case_when( 
+          estimate_category == "C_daily" ~ "catch",
+          estimate_category == "E_daily" ~ "effort",
+          estimate_category == "CPUE_daily" ~ "CPUE",
+          TRUE ~ estimate_category,
+        ),
+        #apply snake_case to estimate_type values
+        estimate_type = dplyr::case_when(
+          # estimate_type == "totalobs" ~ "total_observations", ### consider moving to analysis_lut
+          estimate_type == "N_days_open" ~ "total_days_open", ### consider moving to analysis_lut
+          # estimate_type == "totaldaysopen" ~ "total_days_open", ### consider moving to analysis_lut
+          estimate_type == "n_obs" ~ "number_observations",
+          estimate_type == "Rhat" ~ "R_hat",
+          # estimate_type == "n_div" ~ "number_divisions",
+          #estimate_type == "n_eff" ~ "number_draws", #https://mc-stan.org/docs/cmdstan-guide/stansummary.html
+          estimate_type == "df" ~ "degrees_freedom",
+          estimate_type == "sd" ~ "standard_deviation",
+          estimate_type == "se_mean" ~ "standard_error_mean",
+          estimate_type == "est" ~ "estimate_stratum", #applies to catch & effort, which are identified by model_type field
+          estimate_type == "est_sum" ~ "estimate_sum",
+          estimate_type == "catch_est_mean" ~ "catch_estimate_mean",
+          estimate_type == "catch_est_var" ~ "catch_estimate_variance",
+          estimate_type == "ang_hrs_mean" ~ "angler_hours_mean", #or mean_angler_hours ?
+          estimate_type == "ang_hrs_var" ~ "angler_hours_variance",
+          estimate_type == "2.5_pct" ~ "quantile_lower_2_5",
+          estimate_type == "25_pct" ~ "quantile_lower_25",
+          estimate_type == "50_pct" ~ "quantile_median_50",
+          estimate_type == "75_pct" ~ "quantile_upper_75",
+          estimate_type == "97.5_pct" ~ "quantile_upper_97_5",
+          TRUE ~ estimate_type
+        )
+      )
+    )
+  
+  #Modify fields
+  creel_estimates$stratum <- creel_estimates$stratum |> 
+    dplyr::rename(estimate_time_period = period_timestep)
+  
+  creel_estimates$total <- creel_estimates$total |> 
+    dplyr::rename(estimate_time_period = period_timestep)
+  
+
+  ####################################################################################
   
   cat("\nTransformed output object 'creel_estimates' created.")
   

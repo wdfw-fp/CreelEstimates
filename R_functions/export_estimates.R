@@ -64,31 +64,31 @@ export_estimates <- function(params, analysis_lut, creel_estimates) {
         if (params$export_tables == "total") {
           
           #write lut and total
-          cat(paste0("Writing to model_analysis_lut table...  ","\u2713", "\n"))
+          cat(paste0("Writing to model_analysis_lut table...  ", "\n"))
           write_lut(con, analysis_lut)
           
-          cat(paste0("Writing to model_estimates_total table...  ","\u2713", "\n"))
+          cat(paste0("Writing to model_estimates_total table...  ", "\n"))
           write_total(con)
           
         } else if (params$export_tables == "stratum") {
           
           #write lut and stratum
-          cat(paste0("Writing to model_analysis_lut table...  ","\u2713", "\n"))
+          cat(paste0("Writing to model_analysis_lut table...  ", "\n"))
           write_lut(con, analysis_lut)
           
-          cat(paste0("Writing to model_estimates_stratum table...  ","\u2713", "\n"))
+          cat(paste0("Writing to model_estimates_stratum table...  ", "\n"))
           write_stratum(con)
           
         } else if (params$export_tables == "both") {
           
           #write lut, total, and stratum
-          cat(paste0("Writing to model_analysis_lut table...  ","\u2713", "\n"))
+          cat(paste0("Writing to model_analysis_lut table...  ", "\n"))
           write_lut(con, analysis_lut)
           
-          cat(paste0("Writing to model_estimates_total table...  ","\u2713", "\n"))
+          cat(paste0("Writing to model_estimates_total table...  ", "\n"))
           write_total(con)
           
-          cat(paste0("Writing to model_estimates_stratum table...  ","\u2713", "\n"))
+          cat(paste0("Writing to model_estimates_stratum table...  ", "\n"))
           write_stratum(con)
           
         } else {
