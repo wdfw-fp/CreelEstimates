@@ -79,12 +79,12 @@ transform_estimates <- function(dwg, transformed_pe_data, transformed_bss_data) 
         ),
         #apply snake_case to estimate_type values
         estimate_type = dplyr::case_when(
-          estimate_type == "totalobs" ~ "total_observations", ### consider moving to analysis_lut
-          estimate_type == "N_days_total" ~ "number_days_open", ### consider moving to analysis_lut
-          estimate_type == "totaldaysopen" ~ "total_days_open", ### consider moving to analysis_lut
+          # estimate_type == "totalobs" ~ "total_observations", ### consider moving to analysis_lut
+          estimate_type == "N_days_open" ~ "total_days_open", ### consider moving to analysis_lut
+          # estimate_type == "totaldaysopen" ~ "total_days_open", ### consider moving to analysis_lut
           estimate_type == "n_obs" ~ "number_observations",
           estimate_type == "Rhat" ~ "R_hat",
-          estimate_type == "n_div" ~ "number_divisions",
+          # estimate_type == "n_div" ~ "number_divisions",
           #estimate_type == "n_eff" ~ "number_draws", #https://mc-stan.org/docs/cmdstan-guide/stansummary.html
           estimate_type == "df" ~ "degrees_freedom",
           estimate_type == "sd" ~ "standard_deviation",
