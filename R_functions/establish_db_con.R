@@ -9,6 +9,13 @@ establish_db_con<- function(max_attempts = 5, delay_seconds = 3) {
     stop("Failed to read config file: ", conditionMessage(e))
   })
   
+  #get username and check credentials
+  username <- unname(Sys.info()["user"])
+  
+  if(!username %in% config$users) {
+    cli::cli_alert_danger("System username not found in database credentials configuration.")
+  }
+  
   #retry mechanism
   con <- NULL
   for (attempt in 1:max_attempts) {
@@ -19,8 +26,9 @@ establish_db_con<- function(max_attempts = 5, delay_seconds = 3) {
         host = config$server$host,
         port = config$server$port,
         dbname = config$server$database_FISH,
-        user = config$user$username,
-        password = config$user$password
+        #use system username and prompt user for their password
+        user = username,
+        password = rstudioapi::askForPassword("Please enter your password.")
       )
     }, error = function(e) {
       message(paste("Attempt", attempt, "failed:", conditionMessage(e)))
