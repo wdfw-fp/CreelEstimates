@@ -76,6 +76,18 @@ fetch_dwg <- function(fishery_name, ...){
     utils::URLencode() |>
     readr::read_csv(show_col_types = F)
   
+  #create summary table to show amount of data downloaded
+  summary_table <- tibble::tibble(
+    `Data Component` = names(dwg),
+    Records = purrr::map_int(dwg, nrow)
+  )
+  
+  if(all(summary_table$Records == 0)) {
+    cli::cli_abort("No data downloaded. Please check the fishery name and configuration.")
+  }
+  
+  print(summary_table)
+  
   return(dwg)
 }
 
