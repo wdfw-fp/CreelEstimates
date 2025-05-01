@@ -134,10 +134,6 @@ if(params$day_length_expansion == "manual"){
 ```{r dwg_fetch, echo=FALSE}
 dwg <- fetch_dwg(params$fishery_name)
 
-# remove closures in section 2 now that it has been aggregated with section 1
-dwg$closures <- dwg$closures |> 
-  filter(section_num == 1)
-
 dwg$days <- prep_days(
   date_begin = params$est_date_start, 
   date_end = params$est_date_end, 
