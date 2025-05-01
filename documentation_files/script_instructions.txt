@@ -1,0 +1,15 @@
+Instructions to run analysis with updated configuration
+CH 4/30/25
+
+1. Open the 'CreelEstimates' R project in RStudio.
+
+2. If you are producing a script for the first time for a given fishery, navigate to the 'template_scripts' folder and open the 'fw_creel.Rmd" document. If you have already created a fishery-specific script, skip to step 3.
+
+3. Navigate to the 'input_files' folder and open a second file, _params.yml. The YAML parameters are now separate from the script. This companion file must be updated and saved before running either the template script or a fishery-specific, and when changing catch groups.
+
+4. Scroll down the document and locate the chunk 'estimates_bss' (line 651). Click the "run all chunks above" button at the top right of the chunk.
+
+5. After the BSS model run is complete, step through each of the remaining chunks individually and examine model diagnostics and estimate summaries. Copies of these are saved within each catch group-specific subfolder within the fishery folder.
+
+6. Stop at the 'load_estimates' chunk. This piece of code is ran when estimates have been reviewed and the decision has been made to upload them to the creel database.
+
