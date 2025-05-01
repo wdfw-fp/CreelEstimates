@@ -1141,6 +1141,10 @@ if (params$export %in% c("database", "local") && !params$model_used %in% c("PE o
 saved_r_objects$analysis_lut <- analysis_lut
 saved_r_objects$creel_estimates  <- creel_estimates
 
+```
+
+```{r drop_draws, eval = TRUE}
+
 # Remove`$draws`from each params$est_catch_groups in estimates_bss
 estimates_bss <- purrr::map(estimates_bss, \(x) {
   x$draws <- NULL
