@@ -1,32 +1,8 @@
 ---
 title: "Freshwater Creel Estimates"
 date: "`r Sys.Date()`"
-params:
-  project_name: "District 14"
-  fishery_name: "Skagit spring Chinook 2022 upper"
-  est_date_start: "2022-06-01"
-  est_date_end: "2022-07-15"
-  est_catch_groups: !r data.frame(rbind(
-    c(species = 'Chinook', life_stage = 'Adult', fin_mark = 'AD', fate = 'Kept')
-    ))
-  study_design: "Standard"  
-  boat_type_collapse: "Yes"
-  fish_location_determines_type: "No"
-  angler_type_kayak_pontoon: "bank" 
-  person_count_type: "group"
-  period_pe: "week"
-  period_bss: "day"
-  days_wkend: !r c('Saturday', 'Sunday')
-  day_length_expansion: "night closure"
-  min_fishing_time: 0.5
-  bss_model_file_name: "BSS_creel_model_02_2024-04-03.stan"
-#ETL parameters               Note: "approved" data may only be submitted by FRFM admin
-  model_used: "Both models"      #Default: PE only           options: "PE only", "BSS only", "Both models".
-  data_grade: "provisional"      #Default: provisional       options: "provisional", "approved".
-  export: "local"                #Default: no                options:  "no", "local", "database".
-  export_tables: "both"          #Default: total             options: "total", "stratum", "both".
-output:
-  html_document:
+
+html_document:
     fig_caption: yes
     theme: default
     toc: yes
@@ -37,75 +13,100 @@ editor_options:
   chunk_output_type: console
 ---
 
-```{r setup, include=FALSE}
-#running the 'setup' chunk loads the read-only `params` list
-knitr::opts_chunk$set(warning = FALSE, message = FALSE, fig.width = 10, fig.height = 8)
-library("here") #defines root at working dir of .Rproj
-```
-
-```{r first_time_run, eval=FALSE, include=FALSE}
-# set up file paths
-## top level for scripts and outputs
-if (!dir.exists(here("fishery_analyses"))) {
-  dir.create(here("fishery_analyses")); "fishery_analyses folder created"
-}
-## project level
-if (!dir.exists(here("fishery_analyses", params$project_name))) {
-  dir.create(here("fishery_analyses", params$project_name))
-  paste(here("fishery_analyses", params$project_name), "folder created")
-}
-## fishery-specific
-if (!dir.exists(here("fishery_analyses", params$project_name, params$fishery_name))) {
-  dir.create(here("fishery_analyses", params$project_name, params$fishery_name))
-  paste(here("fishery_analyses", params$project_name, params$fishery_name), "folder created")
-}
-
-# evaluate if analysis .Rmd already exists, if not then generate new file 
-if (file.exists(here("fishery_analyses", params$project_name, params$fishery_name, 
-       paste0("fw_creel_", params$fishery_name, ".Rmd")))) {
-  
-  print("Analysis .Rmd file already exists")
-  
-} else {
-#save the master template with new params arguments for the fishery
-rstudioapi::documentSave(rstudioapi::getActiveDocumentContext()$id)
-#make an appropriately renamed copy
-file.copy(
-  here("template_scripts/fw_creel.Rmd"),
-  here("fishery_analyses", params$project_name, params$fishery_name, 
-       paste0("fw_creel_", params$fishery_name, ".Rmd"))
-)
-#open the new copy
-rstudioapi::documentOpen(
-  here("fishery_analyses", params$project_name, params$fishery_name, 
-       paste0("fw_creel_", params$fishery_name, ".Rmd"))
-)
-}
-
-```
-
-```{r packages_and_functions}
-library("suncalc")
+```{r packages, include=FALSE}
+# Load packages
+library("cli")
+library("here")
+library("yaml")
 library("tidyverse")
+library("glue")
 library("patchwork")
 library("gt")
-theme_set(theme_light())
-
+library("parallel")
 library("rstan")
-rstan_options(auto_write = TRUE)
-
-purrr::walk(list.files(here("R_functions"), full.names = T), source)
+library("posterior")
+library("bayesplot")
 ```
 
-```{r generate_analysis_id}
-#Establishes a unique 'analysis_id' for each session and populates an 'analysis_lut'.
+```{r load}
+# Load input parameters
+params <- yaml::read_yaml(file = here(file.path("input_files/_params.yml")))
+
+# Rebuild old YAML catch group format for backwards compatibility
+params$est_catch_groups <- data.frame(
+  species = params$species,
+  life_stage = params$life_stage,
+  fin_mark = params$fin_mark,
+  fate = params$fate,
+  stringsAsFactors = FALSE
+)
+
+# Load functions (pre-package method)
+walk(list.files(here("R_functions"), full.names = T), source)
+
+# Set options
+# options(mc.cores = parallel::detectCores())
+rstan_options(auto_write = TRUE)
+theme_set(theme_light())
+knitr::opts_chunk$set(warning = FALSE, message = FALSE, fig.width = 10, fig.height = 8)
+```
+
+```{r define, eval=TRUE, include=FALSE}
+## Create empty list to store important R objects
+saved_r_objects <- list() 
+
+## Collapse catch group into one string, e.g., "Coho_Adult_UM_Released"
+catch_group <- params$est_catch_groups |> unite("cg", everything(), sep = "_", remove = TRUE) |> pull(cg)
+saved_r_objects$catch_group <- catch_group
+
+## Base folder
+base_path <- here("fishery_analyses", params$project_name, params$fishery_name, catch_group)
+
+# Define directory structure
+path_components <- list(
+  here("fishery_analyses"),
+  here("fishery_analyses", params$project_name),
+  here("fishery_analyses", params$project_name, params$fishery_name),
+  base_path, # Create subfolders within catch group 
+  file.path(base_path, "diagnostics"),
+  file.path(base_path, "outputs")
+)
+
+# Create directories as needed
+path_components |>
+  walk(~ if (!dir.exists(.x)) {
+    dir.create(.x, recursive = TRUE)
+    message(glue("Folder(s) created: \n{.x}"))
+  })
+
+# Evaluate if analysis .Rmd already exists, if not then generate new file 
+script_path <- here(
+  "fishery_analyses", params$project_name, params$fishery_name, 
+  paste0("script_", params$fishery_name, ".Rmd")
+)
+
+if (file.exists(script_path)) {
+  cli_alert_warning("An analysis script for this fishery already exists at {.path {script_path}}")
+} else {
+# Copy template script to fishery folder
+  file.copy(
+    from = here("template_scripts", "fw_creel.Rmd"),
+    to = script_path
+  )
+  cli::cli_alert_success("New analysis script created at {.path {script_path}}")
+}
+
+# Create an analysis_id
 generate_analysis_lut(params)
+
+saved_r_objects$analysis_lut <- analysis_lut
 ```
 
 # `r paste(params$fishery_name)`
 
 ```{r}
-gt(tibble(param = names(params), value = as.character(params)))
+saved_r_objects$table_params <- tibble(param = names(params), value = as.character(params))
+saved_r_objects$table_params |> gt()
 ```
 
 # Set day length times if using manual option 
@@ -133,6 +134,10 @@ if(params$day_length_expansion == "manual"){
 ```{r dwg_fetch, echo=FALSE}
 dwg <- fetch_dwg(params$fishery_name)
 
+# remove closures in section 2 now that it has been aggregated with section 1
+dwg$closures <- dwg$closures |> 
+  filter(section_num == 1)
+
 dwg$days <- prep_days(
   date_begin = params$est_date_start, 
   date_end = params$est_date_end, 
@@ -141,7 +146,7 @@ dwg$days <- prep_days(
   lat = mean(dwg$ll$centroid_lat), #can/should consider smarter options
   long = mean(dwg$ll$centroid_lon),#can/should consider smarter options 
   period_pe = params$period_pe,
-  sections = unique(dwg$effort$section_num),
+  sections = unique(dwg$fishery_manager$section_num),
   closures = dwg$closures,
   day_length = params$day_length_expansion,
   day_length_inputs = day_length_inputs
@@ -154,57 +159,65 @@ dwg$days <- prep_days(
 
 ```{r table_sections}
 # Summary table of water_body, section_nums, and locations for a given fishery
-dwg$effort |> 
-  filter(location_type == "Section") |> 
-  distinct(water_body, section_num, location) |> 
-  arrange(section_num) |>
-  select(`Water Body` = water_body, `Section Number` = section_num, `Location description` = location) |> 
-  gt()
+saved_r_objects$table_sections <-
+  dwg$effort |> 
+    filter(location_type == "Section") |> 
+    distinct(water_body, section_num, location) |> 
+    arrange(section_num) |>
+    select(`Water Body` = water_body, `Section Number` = section_num, `Location description` = location)
+
+saved_r_objects$table_sections |> gt()
 ```
 
 ## Days
 
 ```{r gt_creel_days}
 # Summary table of all dates (not just surveyed dates) for a given fishery & whether each section_num was open or closed
-dwg$days |> 
-  mutate(across(starts_with("open_"), ~if_else(., "open","closed"))) |> 
-  rename_with(.cols = starts_with("open_"), .fn = ~str_remove_all(., "open_")) |> 
-  gt::gt() |> 
-  gt::data_color(
-    columns = contains("section_"),
-    fn = scales::col_factor(
-      palette = c("#C3C7C3", "#78B574"),
-      domain = c("closed","open")
-    ) 
-  )
+# dwg$days |> 
+#   mutate(across(starts_with("open_"), ~if_else(., "open","closed"))) |> 
+#   rename_with(.cols = starts_with("open_"), .fn = ~str_remove_all(., "open_")) |> 
+#   gt::gt() |> 
+#   gt::data_color(
+#     columns = contains("section_"),
+#     fn = scales::col_factor(
+#       palette = c("#C3C7C3", "#78B574"),
+#       domain = c("closed","open")
+#     ) 
+#   )
 
 ```
 
 ## Period-Dates reference
 ```{r gt_period_dates_reference}
 # Summary table of dates for each period (time_strata)
-dwg$days |> 
-    group_by(period) |> 
-    summarise(
-      min_event_date = min(event_date),
-      max_event_date = max(event_date)) |> 
-  gt::gt(caption = "Reference table containing the first and last date within each time stratum period in the monitoring period.")
+saved_r_objects$table_period_date_reference <-  
+  dwg$days |> 
+      group_by(period) |> 
+      summarise(
+        min_event_date = min(event_date),
+        max_event_date = max(event_date))
 
+saved_r_objects$table_period_date_reference  |> 
+    gt::gt(caption = "Reference table containing the first and last date within each time stratum period in the monitoring period.")
 ```
 
 ## Effort
 
 ```{r gt_creel_effort}
 # Total number of effort surveys by section num, location, and type (aka tie_in_indicator; 1=census, 0=index)
-dwg$effort |>
-  filter(between(event_date, as.Date(params$est_date_start), as.Date(params$est_date_end))) |> 
-  distinct(section_num, location, event_date, tie_in_indicator, count_sequence) |> 
-  count(section_num, location, tie_in_indicator) |> 
-  mutate(tie_in_indicator = case_when(
-    tie_in_indicator == 1 ~ "census",
-    tie_in_indicator == 0 ~ "index"
-  )) |>
-  arrange(section_num, tie_in_indicator, location) |> 
+saved_r_objects$table_effort_counts <-
+  dwg$effort |>
+    filter(between(event_date, as.Date(params$est_date_start), as.Date(params$est_date_end))) |> 
+    distinct(section_num, location, event_date, tie_in_indicator, count_sequence) |> 
+    count(section_num, location, tie_in_indicator) |> 
+    mutate(tie_in_indicator = case_when(
+      tie_in_indicator == 1 ~ "census",
+      tie_in_indicator == 0 ~ "index"
+    )) |>
+    arrange(section_num, tie_in_indicator, location)
+
+# Format table
+saved_r_objects$table_effort_counts |> 
   gt(groupname_col = "section_num", rowname_col = "location") |> 
   tab_style(
     style = list(cell_fill("grey70"), cell_text(weight = "bold")),
@@ -213,21 +226,26 @@ dwg$effort |>
 
 # Total number of census effort surveys by water_body, event_date, and section_num; 
   ## NOTE: NAs in the "effort_type.y" column indicate that a census survey was conducted without the paired index count; if this occurs, the census data without a paired index count needs to be filter out for BSS model to run
-left_join(
-  dwg$effort |>
-    filter(tie_in_indicator == 1, between(event_date, as.Date(params$est_date_start), as.Date(params$est_date_end))) |> 
-    mutate(effort_type = "Census") |> 
-    select(water_body, event_date, section_num, effort_type) |> 
-    distinct() |> 
-    arrange(event_date, section_num),
-  dwg$effort |>
-    filter(tie_in_indicator == 0, between(event_date, as.Date(params$est_date_start), as.Date(params$est_date_end))) |> 
-    mutate(effort_type = "Index") |> 
-    select(water_body, event_date, section_num, effort_type) |> 
-    distinct() |> 
-    arrange(event_date, section_num),
-  by = c("water_body", "event_date", "section_num")
-) |> print(n= Inf)
+
+saved_r_objects$table_effort_paired <- 
+  left_join(
+    dwg$effort |>
+      filter(tie_in_indicator == 1, between(event_date, as.Date(params$est_date_start), as.Date(params$est_date_end))) |> 
+      mutate(effort_type = "Census") |> 
+      select(water_body, event_date, section_num, effort_type) |> 
+      distinct() |> 
+      arrange(event_date, section_num),
+    dwg$effort |>
+      filter(tie_in_indicator == 0, between(event_date, as.Date(params$est_date_start), as.Date(params$est_date_end))) |> 
+      mutate(effort_type = "Index") |> 
+      select(water_body, event_date, section_num, effort_type) |> 
+      distinct() |> 
+      arrange(event_date, section_num),
+    by = c("water_body", "event_date", "section_num")
+  ) |> 
+  mutate(census_total = n_distinct(event_date))
+
+saved_r_objects$table_effort_paired
 
 ```
 
@@ -235,39 +253,41 @@ left_join(
 
 ```{r gt_creel_interview}
 # Total number of angler group interviews by section_num and fishing_location
-dwg$interview |>
-  filter(between(event_date, as.Date(params$est_date_start), as.Date(params$est_date_end))) |>
-  count(section_num, fishing_location) |>
-  arrange(section_num) |>
-  gt(groupname_col = "section_num", caption = "Total number of angler interviews by (analysis/final) section")
+saved_r_objects$table_interview_counts <-
+  dwg$interview |>
+    filter(between(event_date, as.Date(params$est_date_start), as.Date(params$est_date_end))) |>
+    count(section_num, fishing_location) |>
+    arrange(section_num)
+
+saved_r_objects$table_interview_counts  |>
+    gt(groupname_col = "section_num", caption = "Total number of angler interviews by (analysis/final) section")
 
 # Number of angler group interviews by event_date and section_num; 
-dwg$interview |>  
-  filter(between(event_date, as.Date(params$est_date_start), as.Date(params$est_date_end))) |> 
-  count(section_num, event_date) |> 
-  pivot_wider(names_from = section_num, values_from = n) |> 
-  arrange(event_date) |> 
-  gt(rowname_col = "event_date") |> 
-  sub_missing() |> 
-  data_color(
-    columns = where(is.numeric),
-    colors = scales::col_quantile(
-      palette = c("white", "orange"), 
-      reverse = T, na.color = "grey",
-      domain = NULL #c(0, )
-    )
-  )
+saved_r_objects$table_interviews_by_date <-
+  dwg$interview |>  
+    filter(between(event_date, as.Date(params$est_date_start), as.Date(params$est_date_end))) |> 
+    count(section_num, event_date) |> 
+    pivot_wider(names_from = section_num, values_from = n) |> 
+    arrange(event_date)
+
+saved_r_objects$table_interviews_by_date |> 
+    gt(rowname_col = "event_date") |> 
+    sub_missing()
+
 ```
 
 ## Catch
 
 ```{r gt_creel_catch}
 # Total number of "encounters" for each unique catch_group recorded during angler group interviews
-dwg$catch |>
-  left_join(dwg$interview, by = "interview_id") |> 
-  filter(between(event_date, as.Date(params$est_date_start), as.Date(params$est_date_end))) |> 
-  group_by(catch_group) |> 
-  summarise(fish_count = sum(fish_count), .groups = "drop") |> 
+saved_r_objects$table_raw_catch_sum <-
+  dwg$catch |>
+    left_join(dwg$interview, by = "interview_id") |> 
+    filter(between(event_date, as.Date(params$est_date_start), as.Date(params$est_date_end))) |> 
+    group_by(catch_group) |> 
+    summarise(fish_count = sum(fish_count), .groups = "drop")
+
+saved_r_objects$table_raw_catch_sum |> 
   gt(caption = "Total reported encounters in interviews to date for catch groups defined as individual combinations of species, life state, fin mark, and fate")
 ```
 
@@ -366,13 +386,17 @@ dwg$catch |>
         eff = dwg$effort
       ))  
 
+saved_r_objects$dwg_summ <- dwg_summ
 ```
 
 ## Index effort counts
 
 ```{r plot_index_effort_counts, fig.cap= "Index effort counts for each count sequence on surveyed days within the monitoring period."}
 # plot of index effort counts faceted by section and count_type per count sequence and day 
+saved_r_objects$plot_index_effort_counts <-
 plot_inputs_pe_index_effort_counts(effort_index = dwg_summ$effort_index)
+
+saved_r_objects$plot_index_effort_counts
 ```
 
 # PE estimation
@@ -438,6 +462,7 @@ inputs_pe <- list()
       angler_hours_daily_mean = inputs_pe$ang_hrs_daily_mean
     )
 
+saved_r_objects$inputs_pe <- inputs_pe
 ```
 
 ## Paired census and index angler effort count surveys
@@ -445,14 +470,20 @@ inputs_pe <- list()
 ```{r view_paired_census_index_counts, fig.cap= "Scatterplot displaying the effort bias-term ratio (TI_expan_final) for each section and angler type (angler_final), representing the total count from census surveys divided by the total count from index surveys. A 1:1 relationship is shown by the dashed line." }
 
 # table view of census / index surveys and resulting bias term ratio 
+saved_r_objects$table_paired_census_index_counts <-
 inputs_pe$paired_census_index_counts |> 
   select(section_num, angler_final, count_census, count_index, TI_expan_final) |> 
   gt(caption = "The season-long sum of paired census and index angler effort counts and corresponding bias-term ratio (TI_expan_final), indicating the magnitude and direction (postive or negative) of bias in index counts relative to census counts") |> 
   fmt_number(count_index, decimals = 0) |> 
   fmt_number(TI_expan_final, decimals = 2)
 
+saved_r_objects$table_paired_census_index_counts
+
 # scatterplot of total census counts vs. total index counts by angler type and section 
-plot_inputs_pe_census_vs_index(census_TI_expan = inputs_pe$paired_census_index_counts)
+saved_r_objects$plot_paired_census_index_counts <-
+  plot_inputs_pe_census_vs_index(census_TI_expan = inputs_pe$paired_census_index_counts)
+
+saved_r_objects$plot_paired_census_index_counts
 
 ```
 
@@ -473,6 +504,7 @@ estimates_pe$catch <-
     pe_inputs_list = inputs_pe
   )
 
+saved_r_objects$estimates_pe <- estimates_pe
 ```
 
 ## Summary PE
@@ -480,29 +512,36 @@ estimates_pe$catch <-
 ### Effort estimates
 ```{r PE_effort_summary}
 # effort by section_num
+saved_r_objects$table_effort_summary <-
   estimates_pe$effort |>
   group_by(section_num, angler_final) |> 
   summarise(
     E_sum = round(sum(est, na.rm=T), 0),
     .groups = "drop"
   ) |> 
-  pivot_wider(names_from = section_num, values_from = E_sum) |>
+  pivot_wider(names_from = section_num, values_from = E_sum)
+
+saved_r_objects$table_effort_summary |> 
   gt(caption = paste("Estimated effort (angler hours) by fishing section from", params$est_date_start, "to", params$est_date_end))
 
 ```
 
 ```{r plot_pe_effort_estimates, fig.cap= "Estimated effort (angler-hours) grouped by time strata, section and angler type (angler_final)."}
   # barplot of effort estimates by time stratum, section, and angler type
+saved_r_objects$plot_pe_effort_estimates <-
   plot_est_pe_effort(
     estimates_pe_effort = estimates_pe$effort,
     period_pe = params$period_pe
   )
+
+saved_r_objects$plot_pe_effort_estimates
 
 ```
 ### Catch rate (CPUE) estimates
 
 ```{r pe_cpue_period_plots, results = 'hide'}
 # plot of catch rate estimates by catch group, time stratum, section, and angler type
+saved_r_objects$plot_pe_cpue_period <- 
   pe_cpue_period_plots <- 
     unique(na.omit(inputs_pe$daily_cpue_catch_est$est_cg)) |> 
     set_names() |> 
@@ -515,8 +554,8 @@ estimates_pe$catch <-
         period_pe = params$period_pe
       )
     )
-        
-  pe_cpue_period_plots
+
+saved_r_objects$plot_pe_cpue_period
 
 ```
 
@@ -525,19 +564,21 @@ Estimated catch per unit effort (fish/hour) grouped by catch group, period, sect
 ### Catch estimates
 
 ```{r PE_catch_summary}
-
-estimates_pe$catch |> 
-        group_by(est_cg, section_num) |>
-        summarise(
-          C_sum = sum(est),
-          .groups = "drop"
+saved_r_objects$table_pe_catch_summary <-
+  estimates_pe$catch |> 
+          group_by(est_cg, section_num) |>
+          summarise(
+            C_sum = sum(est),
+            .groups = "drop"
+          ) |> 
+        pivot_longer(
+          cols = -c(est_cg, section_num),
+          names_to = "estimate",
+          values_to = "PE"
         ) |> 
-      pivot_longer(
-        cols = -c(est_cg, section_num),
-        names_to = "estimate",
-        values_to = "PE"
-      ) |> 
-  select(est_cg, section_num, estimate, PE, everything()) |> 
+    select(est_cg, section_num, estimate, PE, everything())
+
+saved_r_objects$table_pe_catch_summary |> 
   gt(groupname_col = "est_cg", caption = "Total estimates of catch during the monitoring period for each fish catch group.") |>
   fmt_number(-c(estimate, est_cg, section_num), decimals = 1) |> 
   tab_style(
@@ -551,18 +592,18 @@ estimates_pe$catch |>
 
 ```{r plot_pe_catch_estimates, results = 'hide'}
 # barplot of catch estimates by catch group, time stratum, section, and angler type
+saved_r_objects$plot_pe_catch_estimates <-  
   pe_catch_est_plots <- 
-    unique(na.omit(estimates_pe$catch$est_cg)) |> 
-    set_names() |> 
-    map(
-      ~plot_est_pe_catch(
-        estimates_pe_catch = estimates_pe$catch,
-        est_catch_group = .x,
-        period_pe = params$period_pe)
-    )
-        
-  pe_catch_est_plots
+      unique(na.omit(estimates_pe$catch$est_cg)) |> 
+      set_names() |> 
+      map(
+        ~plot_est_pe_catch(
+          estimates_pe_catch = estimates_pe$catch,
+          est_catch_group = .x,
+          period_pe = params$period_pe)
+      )
 
+saved_r_objects$plot_pe_catch_estimates
 ```
 
 Estimated catch grouped by catch group, period, section, angler type,and day type. 
@@ -606,6 +647,7 @@ inputs_bss <-
     )
   )
 
+saved_r_objects$inputs_bss <- inputs_bss
 ```
 
 ## Generate BSS estimates
@@ -624,9 +666,9 @@ for(ecg in names(inputs_bss)) {
       n_chain = 4,  
       n_cores = 4,
       n_iter = 500,
-      n_warmup = 200,
+      n_warmup = 250,
       n_thin = 1,
-      adapt_delta = 0.95,
+      adapt_delta = 0.9,
       max_treedepth = 12,
       init = "0"
     )
@@ -637,15 +679,7 @@ for(ecg in names(inputs_bss)) {
   ecg_keep$catch_daily <- get_bss_catch_daily(bss_fit = ecg_fit, ecg = ecg)
   ecg_keep$effort_daily <- get_bss_effort_daily(bss_fit = ecg_fit, ecg = ecg)
   ecg_keep$draws <- extract(ecg_fit)
-  ecg_keep$summary<-summary(ecg_fit)$summary #KB check to make sure this is working correctly
-  #ecg_keep$summary<- ecg_fit |>  summary() |>  pluck("summary") #try this though not sure if it works
-
-  # if(nchar(params$output_location_filepath) > 1) {
-  #   writexl::write_xlsx(
-  #     x = ecg_keep$summary|> as.data.frame() |> tibble::rownames_to_column(var = "parameter"),  
-  #     path = file.path(here("fishery_analyses", params$project_name, params$fishery_name), paste0("bss_summary of ecg_fit_", names(inputs_bss)[ecg], ".xlsx"))
-  #   )
-  # }  
+  ecg_keep$summary<-summary(ecg_fit)$summary
 
   estimates_bss[[ecg]] <- ecg_keep
 
@@ -657,73 +691,326 @@ for(ecg in names(inputs_bss)) {
 
 ```
 
-## summary BSS
+```{r}
+# Separate out draws - large file size
+draws_bss <- list()
 
-```{r BSS_summary, eval= TRUE}
+# Convert stanfit object to posterior draws
+draws_array <- posterior::as_draws_array(ecg_fit)
 
-# effort by section_num
+params_keep <- c(
+  "mu_E", "mu_C",
+  "lambda_E_S", "lambda_C_S",
+  "omega_E", "omega_C",
+  "r_E", "r_C",
+  "sigma_eps_E", "sigma_eps_C",
+  "Lcorr_E", "Lcorr_C",
+  "phi_E_scaled", "phi_C_scaled",
+  "sigma_r_E", "sigma_r_C",
+  "p_I",
+  "mu_mu_E", "sigma_mu_E", "eps_mu_E",
+  "mu_mu_C", "sigma_mu_C", "eps_mu_C"
+)
 
-map_df(estimates_bss, ~.x$overview) |> 
-  gt(groupname_col = "est_cg") |>
-  fmt_number(-c(estimate, est_cg), decimals = 1) |> 
-  tab_style(
-    style = cell_fill(), locations = cells_body(columns = "50%")
+# Subset columns down from thousands to parameters of interests
+draws_trimmed <- posterior::subset_draws(draws_array, variable = params_keep)
+
+draws_bss$draws_df <- posterior::as_draws_df(draws_trimmed) |>  #could supply variables of interest to trim (and speed up summary calculation)
+  relocate(c(".draw", ".iteration", ".chain"))
+
+# Summarize draws (inc. Rhat, ESS, etc)
+draws_bss$summary_df <- posterior::summarize_draws(
+  draws_bss$draws_df, 
+  measures = list(mean, sd, mad, posterior::quantile2, rhat, ess_bulk, ess_tail)
+)
+
+colnames(draws_bss$summary_df) <- c("variable", "mean", "sd", "mad", "q5", "q95", "rhat", "ess_bulk", "ess_tail")
+
+saveRDS(
+  draws_bss,
+  file = paste0(file.path(base_path), "/draws_bss.rds")
+)
+```
+
+## Model Diagnostics
+
+```{r summary_and_convergence}
+
+draws_problems <- draws_bss$summary_df |> 
+  filter(rhat > 1.009 | ess_bulk < 400 | ess_tail < 400) |> 
+  mutate(
+    rhat_display = round(rhat, 2),
+    ess_bulk = round(ess_bulk, 0),
+    ess_tail = round(ess_tail, 0),
+    mean = round(mean, 2),
+    sd = round(sd, 2),
+    mad = round(mad, 2),
+    q5 = round(q5, 2),
+    q95 = round(q95, 2)
+  ) |> 
+  rename(
+    "Mean" = mean,
+    "SD" = sd,
+    "MAD" = mad,
+    "5%" = q5,
+    "95%" = q95
+  ) |> 
+  arrange(desc(rhat))
+
+
+# Summary info
+n_problems <- nrow(draws_problems)
+pct_problems <- round(n_problems / nrow(draws_bss$summary_df) * 100, 1)
+
+# gt table
+saved_r_objects$table_bss_convergence <- 
+  draws_problems |> 
+    slice_head(n = 10) |> 
+    select(-rhat) |> 
+    relocate(rhat_display, .after = "variable")
+
+# Add metadata
+attr(saved_r_objects$table_bss_convergence, "analysis_id") <- analysis_lut$analysis_id
+
+# Print
+gt_tab <- saved_r_objects$table_bss_convergence |> 
+  gt() |> 
+  cols_label(variable = "Parameter", rhat_display = "R̂", ess_bulk = "ESS_bulk", ess_tail = "ESS_tail") |> 
+  tab_header(
+    title = "Posterior Summary Statistics and Convergence Diagnostics",
+    subtitle = "Parameters shown meet at least one criteria: R̂ ≥ 1.01 or effective sample size (ESS) < 400"
   ) |> 
   tab_style(
-    style = cell_fill(), locations = cells_body(columns = "50%")
+    style = cell_text(align = "left"),
+    locations = cells_title(groups = "subtitle")
+  ) |> 
+  tab_source_note(
+    source_note = glue::glue(
+    "Magnitude: {n_problems} parameters ({pct_problems}%) flagged from {nrow(draws_bss$summary_df)} total.")
+  ) |> 
+  tab_footnote(
+    footnote = "Filtered to 10 rows, sorted by descending R̂",
+    locations = cells_column_labels(columns = c(rhat_display))
   )
+
+gt_tab
+
+#export table
+gtsave(
+  gt_tab, 
+  filename = "table_bss_convergence_alerts.rtf", 
+  path = file.path(base_path, "diagnostics"),
+  expand = 10
+)
+```
+
+```{r hmc_diagnostics}
+
+## rstan::check_hmc_diagnostics() prints to console and cannot be saved out (even w/ capture.output())
+## reconstructing output here from components
+get_hmc_diagnostics_summary <- function(stan_fit = ecg_fit) {
+  
+  # Extract the number of chains
+  num_chains <- stan_fit@sim$chains
+  
+  # Extract the number of iterations and warmup iterations per chain
+  total_iterations_per_chain <- stan_fit@sim$iter[1]  # Assuming all chains have the same number of iterations
+  warmup_iterations_per_chain <- stan_fit@sim$warmup[1]  # Same assumption for warmup
+  
+  # Calculate the total number of iterations (total samples after warmup)
+  total_iterations <- (total_iterations_per_chain - warmup_iterations_per_chain) * num_chains
+  
+  # Call the necessary diagnostic functions
+  divergences <- rstan::get_num_divergent(stan_fit)
+  divergences_percent <- (divergences / total_iterations) * 100
+  
+  treedepth <- rstan::get_num_max_treedepth(stan_fit)
+  
+  bfmi <- rstan::get_bfmi(stan_fit)
+  
+  # Format the output summary as a string
+  diagnostics_summary <- paste(
+    "HMC Diagnostics Summary:\n\n",
+    "Divergences:\n",
+    paste(divergences, "of", total_iterations, "iterations ended with a divergence (", round(divergences_percent, 2), "%).", "\nTry increasing 'adapt_delta' to remove the divergences.\n\n"),
+    
+    "Tree Depth:\n",
+    paste(treedepth, "of", total_iterations, "iterations saturated the maximum tree depth.\nAdjust 'max_treedepth' to prevent saturation.\n\n"),
+    
+    "Energy:\n",
+    "E-BFMI indicated possible pathological behavior:\n",
+    paste("Chain", 1:length(bfmi), ": E-BFMI =", round(bfmi, 3), collapse = "\n"),
+    "\nE-BFMI below 0.2 indicates you may need to reparameterize your model.\n",
+    sep = ""
+  )
+  
+  # Return the formatted summary as a character string
+  return(diagnostics_summary)
+}
+
+
+saved_r_objects$table_bss_hmc_diagnostics <- get_hmc_diagnostics_summary()
+cat(saved_r_objects$table_bss_hmc_diagnostics)
+
+# Export print out
+writeLines(
+  saved_r_objects$table_bss_hmc_diagnostics,
+  file.path(base_path, "diagnostics", "table_bss_hmc_diagnostics.txt")
+)
 
 ```
 
-## plot probability density function of effort and catch 
+### Trace Plots
+
+```{r trace_plots, eval=FALSE}
+#set color scheme
+color_scheme_set("mix-brightblue-gray")
+
+#plot traceplots
+plot_bss_traceplots <-  mcmc_trace(ecg_fit, pars = c(
+    "C_sum", "E_sum", "phi_C_scaled", "phi_E_scaled", "sigma_r_C", "sigma_r_E", "sigma_eps_C", "sigma_eps_E",
+    "sigma_mu_C", "sigma_mu_E", "phi_C", "phi_E", "r_C", "r_E", "B1", "lp__"),
+    np = nuts_params(ecg_fit)
+  ) +
+  labs(x = "Post-warmup iteration") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ggsave(
+  plot = plot_bss_traceplots,
+  filename = "plot_bss_traceplots.png",
+  path = file.path(base_path, "diagnostics"),
+  dpi = 300, width = 7.5, heigh = 6, units = "in", scale = 1.5
+)
+```
+
+### Probability Density Plot
 
 ```{r, eval=TRUE}
 
-season_results <- map_df(estimates_bss, ~.x$draws$C_sum) |> 
-  mutate(iter = row_number()) |> 
-  pivot_longer(cols = -(iter), names_to = "est_cg", values_to = "C_sum")
+#catch probability density
+catch_season_results <- map_df(estimates_bss, \(x) {
+  x$draws$C_sum |> 
+    as.data.frame() |> 
+    mutate(iter = row_number()) |> 
+    pivot_longer(cols = -iter, names_to = "est_cg", values_to = "C_sum")
+}, .id = "ecg")
 
-map_df(estimates_bss, ~.x$draws$C_sum) |> 
-  mutate(iter = row_number()) |> 
-  pivot_longer(cols = -(iter), names_to = "est_cg", values_to = "C_sum") |> 
-  ggplot(aes(x=C_sum,fill=C_sum)) +
-  facet_wrap(~ est_cg, ncol=1,scales = 'free') +
-  theme_bw() +
-  geom_density() +
+# Create catch quantiles
+catch_quantiles <- catch_season_results |>
+  group_by(est_cg) |>
+  reframe(C_sum = quantile(C_sum, c(0.025, 0.5, 0.975)), q = c(0.025, 0.5, 0.975))
+
+# Catch plot
+plot_catch <- catch_season_results |>
+  ggplot(aes(x = C_sum)) +
+  geom_density(fill = "steelblue", alpha = 0.6) +
+  geom_vline(data = catch_quantiles, aes(xintercept = C_sum, group = est_cg), linetype = "dashed") +
   ylab(NULL) +
-  geom_vline(
-    season_results |> 
-      group_by(est_cg) |> 
-      summarise(C_sum = quantile(C_sum, c(0.025, 0.5, 0.975)), q = c(0.025, 0.5, 0.975)), mapping=aes(xintercept=C_sum,group=est_cg),linetype="dashed") +
-theme(legend.title = element_blank())
-    
+  xlab("Catch (C_sum)") +
+  theme_bw() +
+  theme(legend.position = "none", strip.background = element_blank())
+
+#effort
+effort_season_results <- map_df(estimates_bss, \(x) {
+  x$draws$E_sum |> 
+    as.data.frame() |> 
+    mutate(iter = row_number()) |> 
+    pivot_longer(cols = -iter, names_to = "est_cg", values_to = "E_sum")
+}, .id = "ecg")
+
+# Create effort quantiles
+effort_quantiles <- effort_season_results |>
+  group_by(est_cg) |>
+  reframe(E_sum = quantile(E_sum, c(0.025, 0.5, 0.975)), q = c(0.025, 0.5, 0.975))
+
+# Effort plot
+plot_effort <- effort_season_results |>
+  ggplot(aes(x = E_sum)) +
+  geom_density(fill = "steelblue", alpha = 0.6) +
+  geom_vline(data = effort_quantiles, aes(xintercept = E_sum, group = est_cg), linetype = "dashed") +
+  ylab(NULL) +
+  xlab("Effort (E_sum)") +
+  theme_bw() +
+  theme(legend.position = "none", strip.background = element_blank(), strip.text = element_blank())
+
+plot_bss_probability_densities <- 
+  plot_catch / plot_effort +
+    plot_layout(guides = "collect") +
+    plot_annotation(
+      title = "Posterior Densities of Catch and Effort",
+      subtitle = glue::glue("Catch group: {catch_group}"),
+      tag_levels = 'A'
+  ) &
+    theme(strip.text = element_text(size = 10))
+
+plot_bss_probability_densities
+
+ggsave(
+  plot = plot_bss_probability_densities,
+  filename = "plot_bss_probability_densities.png",
+  path = file.path(base_path, "diagnostics"),
+  dpi = 300, width = 5, heigh = 3, units = "in", scale = 1.8
+)
 ```
 
 
+### Posterior Predictive Check for BSS
+### Posterior Predictive Checks and Interval Coverage
+
+## summary BSS
+
+```{r BSS_summary, eval= TRUE}
+saved_r_objects$table_bss_estimates_summary <-
+  map_df(estimates_bss, ~.x$overview)
+
+saved_r_objects$table_bss_estimates_summary  |> 
+    gt(groupname_col = "est_cg") |>
+    fmt_number(-c(estimate, est_cg), decimals = 1) |> 
+    tab_style(
+      style = cell_fill(), locations = cells_body(columns = "50%")
+    ) |> 
+    tab_style(
+      style = cell_fill(), locations = cells_body(columns = "50%")
+    )
+
+write_csv(
+  saved_r_objects$table_bss_estimates_summary,
+  file = paste0(
+    file.path(base_path, "outputs"), 
+    "/table_bss_estimates_summary.csv")
+)
+```
 
 ## plot daily catch BSS
 
 ```{r, eval=TRUE}
+plot_bss_catch_daily <-
+  map_df(estimates_bss, ~.x$catch_daily) |> 
+      ggplot(aes(x = event_date, y = `50%`, fill = angler_final, color = angler_final)) +
+      geom_ribbon(aes(ymin = `2.5%`, ymax = `97.5%`), alpha = 0.2, color = "transparent") +
+      geom_line(lwd = 1) +
+      ylab("Median (50%) catch") +
+      xlab("Date") +
+      labs(color = "Angler type", fill = "Angler type") +
+      scale_x_date() +
+      theme_bw() +
+      facet_wrap(~section_num + est_cg)
 
-map_df(estimates_bss, ~.x$catch_daily) |> 
-    ggplot(aes(x = event_date, y = `50%`, fill = angler_final, color = angler_final)) +
-    geom_ribbon(aes(ymin = `2.5%`, ymax = `97.5%`), alpha = 0.2, color = "transparent") +
-    geom_line(lwd = 1) +
-    ylab("Median (50%) catch") +
-    xlab("Date") +
-    labs(color = "Angler type", fill = "Angler type") +
-    scale_x_date() +
-    theme_bw() +
-    facet_wrap(~section_num + est_cg)
+plot_bss_catch_daily
 
+ggsave(
+  plot_bss_catch_daily,
+  filename = "plot_bss_catch_daily.png",
+  path = file.path(base_path, "outputs"),
+  dpi = 300, width = 7.5, height = 5, scale = 1
+)
 ```
-
 
 ## plot daily effort BSS
 
-```{r,  eval=TRUE}
-
-estimates_bss[[1]]$effort_daily |> 
+```{r, eval=TRUE}
+plot_bss_effort_daily <-
+  map_df(estimates_bss, ~.x$effort_daily) |> 
     ggplot(aes(x = event_date, y = `50%`, fill = angler_final, color = angler_final)) +
     geom_ribbon(aes(ymin = `2.5%`, ymax = `97.5%`), alpha = 0.2, color = "transparent") +
     geom_line(lwd = 1) +
@@ -734,15 +1021,21 @@ estimates_bss[[1]]$effort_daily |>
     theme_bw() +
     facet_wrap(~section_num, nrow = estimates_bss[[1]]$effort_daily$section_num |> n_distinct())
 
+plot_bss_effort_daily
 
+ggsave(
+  plot_bss_effort_daily,
+  filename = "plot_bss_effort_daily.png",
+  path = file.path(base_path, "outputs"),
+  dpi = 300, width = 7.5, height = 5, scale = 1
+)
 ```
-
 
 ## plot daily CPUE BSS
 
 ```{r, eval=TRUE}
-
-map_df(estimates_bss, ~.x$cpue_daily) |> 
+plot_bss_cpue_daily <-
+  map_df(estimates_bss, ~.x$cpue_daily) |> 
     ggplot(aes(x = event_date, y = `50%`, fill = angler_final, color = angler_final)) +
     geom_ribbon(aes(ymin = `2.5%`, ymax = `97.5%`), alpha = 0.2, color = "transparent") +
     geom_line(lwd = 1) +
@@ -753,57 +1046,52 @@ map_df(estimates_bss, ~.x$cpue_daily) |>
     theme_bw() +
     facet_wrap(~section_num + est_cg)
 
+plot_bss_cpue_daily
+
+ggsave(
+  plot_bss_cpue_daily,
+  filename = "plot_bss_cpue_daily.png",
+  path = file.path(base_path, "outputs"),
+  dpi = 300, width = 7.5, height = 5, scale = 1
+)
 ```
-
-
-
 
 # PE/BSS combined summary
 
 ```{r combo_overview, eval=TRUE}
 #per-est_cg summary of total effort hours and catch/encounters, showing results of both PE and BSS estimation methods
-
-map_df(estimates_bss, ~.x$overview) |> 
-  left_join(
-    bind_cols(
-      estimates_pe$catch |> 
-        group_by(est_cg) |>
-        summarise(
-          C_sum = sum(est),
-          .groups = "drop"
-        ),
-      estimates_pe$effort |> 
-        summarise(
-          E_sum = sum(est, na.rm=T),
-          .groups = "drop"
+saved_r_objects$table_estimate_combined_summary <-
+  map_df(estimates_bss, ~.x$overview) |> 
+    left_join(
+      bind_cols(
+        estimates_pe$catch |> 
+          group_by(est_cg) |>
+          summarise(
+            C_sum = sum(est),
+            .groups = "drop"
+          ),
+        estimates_pe$effort |> 
+          summarise(
+            E_sum = sum(est, na.rm=T),
+            .groups = "drop"
+          )
+      ) |> 
+        pivot_longer(
+          cols = -est_cg,
+          names_to = "estimate",
+          values_to = "PE"
         )
+      ,
+      by = c("estimate", "est_cg")
     ) |> 
-      pivot_longer(
-        cols = -est_cg,
-        names_to = "estimate",
-        values_to = "PE"
-      )
-    ,
-    by = c("estimate", "est_cg")
-  ) |> 
-  select(est_cg, estimate, PE, everything()) |> 
-  gt(groupname_col = "est_cg") |>
-  fmt_number(-c(estimate, est_cg), decimals = 1) |> 
-  tab_style(
-    style = cell_fill(), locations = cells_body(columns = "PE")
-  ) |> 
-  tab_style(
-    style = cell_fill(), locations = cells_body(columns = "PE")
-  ) |> 
-  tab_style(
-    style = cell_fill(), locations = cells_body(columns = "50%")
-  ) |> 
-  tab_style(
-    style = cell_fill(), locations = cells_body(columns = "50%")
-  )
+    select(est_cg, estimate, PE, everything()) |> 
+    gt(groupname_col = "est_cg") |>
+    fmt_number(-c(estimate, est_cg), decimals = 1) |> 
+    tab_style(style = cell_fill(), locations = cells_body(columns = "PE")) |> 
+    tab_style(style = cell_fill(), locations = cells_body(columns = "50%"))
 
+saved_r_objects$table_estimate_combined_summary
 ```
-
 
 # Save results
 
@@ -853,15 +1141,30 @@ if (params$export %in% c("database", "local") && !params$model_used %in% c("PE o
 
 }
 
+#update lut and save out standardized estimates
+saved_r_objects$analysis_lut <- analysis_lut
+saved_r_objects$creel_estimates  <- creel_estimates
+
+# Remove`$draws`from each params$est_catch_groups in estimates_bss
+estimates_bss <- purrr::map(estimates_bss, \(x) {
+  x$draws <- NULL
+  x
+})
+
+saved_r_objects$estimates_bss <- estimates_bss
 ```
 
 ```{r ETL_KNIT_OPTION, eval=TRUE}
 #write out standardized creel_estimates object to project file directory
 #this saves the estimates produces from an HTML render which can later be loaded into R and exported locally or to creel database.
-file_path <- paste0(here::here(),"/fishery_analyses/", params$project_name, "/", params$fishery_name, "/")
 
 if (exists("creel_estimates")) {
-  save(analysis_lut, creel_estimates, file = paste0(file_path, "creel_estimates.RData"))
+
+  save(saved_r_objects, file = paste0(file.path(base_path), "/saved_r_objects.rda"))
+  save(draws_bss, file = paste0(file.path(base_path), "/draws_bss.rds"))
+  
+} else {
+  cli::cli_alert_warning("'creel_estimates.rda' and 'draws_bss.rds' not saved out.")
 }
 
 #Bring object back in after knit / render. Then proceed to database export as necessary.
