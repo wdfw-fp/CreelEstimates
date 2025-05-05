@@ -1,7 +1,29 @@
 ---
 title: "Freshwater Creel Estimates"
 date: "`r Sys.Date()`"
-
+params:
+  project_name: "District 99"
+  fishery_name: "Humptulips salmon 2023"
+  est_date_start: "2023-09-01"
+  est_date_end: "2023-11-30"
+  est_catch_groups: !r data.frame(rbind(
+    c(species = 'Chinook', life_stage = 'Adult', fin_mark = 'AD', fate = 'Kept')
+    ))
+  study_design: "Standard"  
+  boat_type_collapse: "Yes"
+  fish_location_determines_type: "No"
+  angler_type_kayak_pontoon: "boat" 
+  person_count_type: "group"
+  period_pe: "week"
+  period_bss: "day"
+  days_wkend: !r c('Friday', 'Saturday', 'Sunday')
+  day_length_expansion: "night closure"
+  min_fishing_time: 0.5
+  bss_model_file_name: "BSS_creel_model_02_2024-04-03.stan"
+  model_used: "Both models"
+  data_grade: "provisional"
+  export: "no"
+  export_tables: "both"
 html_document:
     fig_caption: yes
     theme: default
@@ -29,18 +51,6 @@ library("bayesplot")
 ```
 
 ```{r load}
-# Load input parameters
-params <- yaml::read_yaml(file = here(file.path("input_files/_params.yml")))
-
-# Rebuild old YAML catch group format for backwards compatibility
-params$est_catch_groups <- data.frame(
-  species = params$species,
-  life_stage = params$life_stage,
-  fin_mark = params$fin_mark,
-  fate = params$fate,
-  stringsAsFactors = FALSE
-)
-
 # Load functions (pre-package method)
 walk(list.files(here("R_functions"), full.names = T), source)
 
@@ -86,7 +96,7 @@ script_path <- here(
 )
 
 if (file.exists(script_path)) {
-  cli_alert_warning("An analysis script for this fishery already exists at {.path {script_path}}")
+  cli_alert_danger("An analysis script for this fishery already exists at {.path {script_path}}")
 } else {
 # Copy template script to fishery folder
   file.copy(
