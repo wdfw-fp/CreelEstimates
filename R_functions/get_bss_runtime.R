@@ -53,5 +53,3 @@ get_bss_runtime <- function(stan_fit, output_file) {
     total_elapsed_min = round(total_elapsed, 1)
   ))
 }
-
-get_bss_runtime(ecg_fit, output_file = "text2.txt")
