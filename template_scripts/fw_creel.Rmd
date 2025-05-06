@@ -866,6 +866,15 @@ writeLines(
 
 ```
 
+```{r model_runtime}
+saved_r_objects$table_bss_runtime <- 
+  get_bss_runtime(
+    ecg_fit, 
+    output_file = paste0(
+      file.path(base_path, "diagnostics"), "/table_bss_runtime.txt")
+  )
+```
+
 ### Trace Plots
 
 ```{r trace_plots, eval=FALSE}
