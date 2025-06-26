@@ -2,12 +2,12 @@
 title: "Freshwater Creel Estimates"
 date: "`r Sys.Date()`"
 params:
-  project_name: "District 99"
-  fishery_name: "Humptulips salmon 2023"
-  est_date_start: "2023-09-01"
-  est_date_end: "2023-11-30"
+  project_name: "District 17 North"
+  fishery_name: "Chehalis winter steelhead 2024-25"
+  est_date_start: "2024-11-01"
+  est_date_end: "2025-02-28"
   est_catch_groups: !r data.frame(rbind(
-    c(species = 'Chinook', life_stage = 'Adult', fin_mark = 'AD', fate = 'Kept')
+    c(species = 'Steelhead', life_stage = 'Adult', fin_mark = 'UM', fate = 'Released')
     ))
   study_design: "Standard"  
   boat_type_collapse: "Yes"
@@ -22,7 +22,7 @@ params:
   bss_model_file_name: "BSS_creel_model_02_2024-04-03.stan"
   model_used: "Both models"
   data_grade: "provisional"
-  export: "no"
+  export: "database"
   export_tables: "both"
 html_document:
     fig_caption: yes
@@ -48,6 +48,11 @@ library("parallel")
 library("rstan")
 library("posterior")
 library("bayesplot")
+
+# Load packages from source
+# devtools::install_github("wdfw-fp/creelutils", force = TRUE)
+library(creelutils)
+
 ```
 
 ```{r load}
@@ -55,7 +60,6 @@ library("bayesplot")
 walk(list.files(here("R_functions"), full.names = T), source)
 
 # Set options
-# options(mc.cores = parallel::detectCores())
 rstan_options(auto_write = TRUE)
 theme_set(theme_light())
 knitr::opts_chunk$set(warning = FALSE, message = FALSE, fig.width = 10, fig.height = 8)
@@ -66,6 +70,7 @@ knitr::opts_chunk$set(warning = FALSE, message = FALSE, fig.width = 10, fig.heig
 saved_r_objects <- list() 
 
 ## Collapse catch group into one string, e.g., "Coho_Adult_UM_Released"
+# assumes one catch group per run
 catch_group <- params$est_catch_groups |> unite("cg", everything(), sep = "_", remove = TRUE) |> pull(cg)
 saved_r_objects$catch_group <- catch_group
 
@@ -92,7 +97,7 @@ path_components |>
 # Evaluate if analysis .Rmd already exists, if not then generate new file 
 script_path <- here(
   "fishery_analyses", params$project_name, params$fishery_name, 
-  paste0("script_", params$fishery_name, ".Rmd")
+  paste0("fw_creel_", params$fishery_name, ".Rmd")
 )
 
 if (file.exists(script_path)) {
@@ -142,7 +147,7 @@ if(params$day_length_expansion == "manual"){
 # Fetch raw data
 
 ```{r dwg_fetch, echo=FALSE}
-dwg <- fetch_dwg(params$fishery_name)
+dwg <- creelutils::fetch_dwg(params$fishery_name)
 
 dwg$days <- prep_days(
   date_begin = params$est_date_start, 
@@ -674,7 +679,7 @@ for(ecg in names(inputs_bss)) {
       n_iter = 500,
       n_warmup = 250,
       n_thin = 1,
-      adapt_delta = 0.9,
+      adapt_delta = 0.8,
       max_treedepth = 12,
       init = "0"
     )
@@ -812,50 +817,7 @@ gtsave(
 
 ```{r hmc_diagnostics}
 
-## rstan::check_hmc_diagnostics() prints to console and cannot be saved out (even w/ capture.output())
-## reconstructing output here from components
-get_hmc_diagnostics_summary <- function(stan_fit = ecg_fit) {
-  
-  # Extract the number of chains
-  num_chains <- stan_fit@sim$chains
-  
-  # Extract the number of iterations and warmup iterations per chain
-  total_iterations_per_chain <- stan_fit@sim$iter[1]  # Assuming all chains have the same number of iterations
-  warmup_iterations_per_chain <- stan_fit@sim$warmup[1]  # Same assumption for warmup
-  
-  # Calculate the total number of iterations (total samples after warmup)
-  total_iterations <- (total_iterations_per_chain - warmup_iterations_per_chain) * num_chains
-  
-  # Call the necessary diagnostic functions
-  divergences <- rstan::get_num_divergent(stan_fit)
-  divergences_percent <- (divergences / total_iterations) * 100
-  
-  treedepth <- rstan::get_num_max_treedepth(stan_fit)
-  
-  bfmi <- rstan::get_bfmi(stan_fit)
-  
-  # Format the output summary as a string
-  diagnostics_summary <- paste(
-    "HMC Diagnostics Summary:\n\n",
-    "Divergences:\n",
-    paste(divergences, "of", total_iterations, "iterations ended with a divergence (", round(divergences_percent, 2), "%).", "\nTry increasing 'adapt_delta' to remove the divergences.\n\n"),
-    
-    "Tree Depth:\n",
-    paste(treedepth, "of", total_iterations, "iterations saturated the maximum tree depth.\nAdjust 'max_treedepth' to prevent saturation.\n\n"),
-    
-    "Energy:\n",
-    "E-BFMI indicated possible pathological behavior:\n",
-    paste("Chain", 1:length(bfmi), ": E-BFMI =", round(bfmi, 3), collapse = "\n"),
-    "\nE-BFMI below 0.2 indicates you may need to reparameterize your model.\n",
-    sep = ""
-  )
-  
-  # Return the formatted summary as a character string
-  return(diagnostics_summary)
-}
-
-
-saved_r_objects$table_bss_hmc_diagnostics <- get_hmc_diagnostics_summary()
+saved_r_objects$table_bss_hmc_diagnostics <- creelutils::get_hmc_diagnostics(stan_fit = ecg_fit)
 cat(saved_r_objects$table_bss_hmc_diagnostics)
 
 # Export print out
@@ -868,7 +830,7 @@ writeLines(
 
 ```{r model_runtime}
 saved_r_objects$table_bss_runtime <- 
-  get_bss_runtime(
+  creelutils::get_bss_runtime(
     ecg_fit, 
     output_file = paste0(
       file.path(base_path, "diagnostics"), "/table_bss_runtime.txt")
@@ -1126,33 +1088,33 @@ if (params$export %in% c("database", "local") && !params$model_used %in% c("PE o
   # Process PE estimates to common format
   if (exists("estimates_pe") && params$model_used == "PE only") {
     cat("Performing 'PE only' transformation.")
-    transformed_pe_data <- process_estimates_pe(analysis_lut, estimates_pe)
+    transformed_pe_data <- creelutils::process_estimates_pe(analysis_lut, estimates_pe, params)
     
     #add parameter data_grade as a field on all tables
-    map_data_grade(params, transformed_bss_data=NULL, transformed_pe_data)
+    creelutils::map_data_grade(params, transformed_bss_data=NULL, transformed_pe_data)
   }
   
   # Process BSS estimates to common format
   if (exists("estimates_bss") && params$model_used == "BSS only") {
     cat("Performing 'BSS only' transformation.")
-    transformed_bss_data <- process_estimates_bss(params, analysis_lut, estimates_bss)
+    transformed_bss_data <- creelutils::process_estimates_bss(params, analysis_lut, estimates_bss)
     
     #add parameter data_grade as a field on all tables
-    map_data_grade(params, transformed_bss_data, transformed_pe_data=NULL)
+    creelutils::map_data_grade(params, transformed_bss_data, transformed_pe_data=NULL)
   }
   
   # Process PE and BSS model estimates to common format
   if (exists("estimates_pe") && exists("estimates_bss") && params$model_used == "Both models") {
     cat("Performing 'Both models' transformation.")
-    transformed_pe_data <- process_estimates_pe(analysis_lut, estimates_pe)
-    transformed_bss_data <- process_estimates_bss(params, analysis_lut, estimates_bss)
+    transformed_pe_data <- creelutils::process_estimates_pe(analysis_lut, estimates_pe, params)
+    transformed_bss_data <- creelutils::process_estimates_bss(params, analysis_lut, estimates_bss)
     
     #add parameter data_grade as a field on all tables
-    map_data_grade(params, transformed_bss_data, transformed_pe_data)
+    creelutils::map_data_grade(params, transformed_bss_data, transformed_pe_data)
   }
   
   #Combine PE and BSS and perform other transformation steps
-  creel_estimates <- transform_estimates(dwg, transformed_pe_data, transformed_bss_data)  
+  creel_estimates <- creelutils::transform_estimates(dwg, transformed_pe_data, transformed_bss_data)  
 
 }
 
@@ -1200,6 +1162,6 @@ if (exists("creel_estimates")) {
 #calls prep_export()
 #Defines functions for writing to database tables
 #Performs pre- and post- upload QAQC checks
-export_estimates(params, analysis_lut, creel_estimates)
+creelutils::export_estimates(params, analysis_lut, creel_estimates)
 
 ```
