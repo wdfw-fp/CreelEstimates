@@ -1,15 +1,15 @@
 Instructions to run analysis with updated configuration
-CH 4/30/25
+CH 6/26/25
 
 1. Open the 'CreelEstimates' R project in RStudio.
 
-2. If you are producing a script for the first time for a given fishery, navigate to the 'template_scripts' folder and open the 'fw_creel.Rmd" document. If you have already created a fishery-specific script, skip to step 3.
+2. If you are producing a script for the first time for a given fishery, navigate to the 'template_scripts' folder and open the 'fw_creel.Rmd" document. If you have already created a fishery-specific script, skip to step 4.
 
-3. Navigate to the 'input_files' folder and open a second file, _params.yml. The YAML parameters are now separate from the script. This companion file must be updated and saved before running either the template script or a fishery-specific, and when changing catch groups.
+3. Within 'fw_creel.Rmd' file and update the YAML parameters at the top of the document to match the fishery of interest. Scroll down the document and locate the code chunk called ''. Click the "run all chunks above" button at the top right of the chunk. This will create new fishery-specific folders as necessary and report the location of the new fishery analysis script copied from the template. You can now close the template without saving any of the changes you made to it.
 
-4. Scroll down the document and locate the chunk 'estimates_bss' (line 651). Click the "run all chunks above" button at the top right of the chunk.
+4. Scroll down the document and locate the code chunk called 'estimates_bss'. Click the "run all chunks above" button at the top right of the chunk. The script with run through the data downloading, pre-processing, the point estimate model, and finally initiate the Bayesian state-space model.
 
-5. After the BSS model run is complete, step through each of the remaining chunks individually and examine model diagnostics and estimate summaries. Copies of these are saved within each catch group-specific subfolder within the fishery folder.
+5. Once the BSS model run is complete, step through each of the remaining chunks individually and examine model diagnostics and estimate summaries. Copies of these are saved within each catch group-specific subfolder within the fishery folder.
 
 6. Stop at the 'load_estimates' chunk. This piece of code is ran when estimates have been reviewed and the decision has been made to upload them to the creel database.
 
