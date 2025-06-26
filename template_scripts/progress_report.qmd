@@ -26,11 +26,13 @@ library(cli)
 library(glue)
 library(gt)
 
+# Temporary solution done manually
 inputs_pe <- readRDS(file.path(paste0(here(),"/template_scripts/inputs_pe.rds")))
 
 ```
 
 ```{r}
+# Requires an established OBDC configuration
 con <- DBI::dbConnect(odbc::odbc(), dsn = "creel_estimates")
 
 fishery_lut <- creelutils::fetch_db_table(
@@ -61,7 +63,7 @@ purrr::walk(list.files(here("R_functions"), full.names = T), source)
 # load temporary creel_fishery_catch_group_lut table
 # copied from project estimation tracker on 6/16/25
 creel_cg_lut <- read_csv(
-  rprojroot::find_rstudio_root_file("creel_fishery_catch_group_lut.csv"),
+  rprojroot::find_rstudio_root_file("input_files/creel_fishery_catch_group_lut.csv"),
   show_col_types = FALSE
 ) |>
   mutate(catch_group = paste(species, life_stage, mark_status, fate, sep = "_")) |> 
