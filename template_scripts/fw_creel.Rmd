@@ -72,22 +72,11 @@ knitr::opts_chunk$set(warning = FALSE, message = FALSE, fig.width = 10, fig.heig
 ## Create empty list to store important R objects
 saved_r_objects <- list() 
 
-## Collapse catch group into one string, e.g., "Coho_Adult_UM_Released"
-# assumes one catch group per run
-catch_group <- params$est_catch_groups |> unite("cg", everything(), sep = "_", remove = TRUE) |> pull(cg)
-saved_r_objects$catch_group <- catch_group
-
-## Base folder
-base_path <- here("fishery_analyses", params$project_name, params$fishery_name, catch_group)
-
 # Define directory structure
 path_components <- list(
   here("fishery_analyses"),
   here("fishery_analyses", params$project_name),
-  here("fishery_analyses", params$project_name, params$fishery_name),
-  base_path, # Create subfolders within catch group 
-  file.path(base_path, "diagnostics"),
-  file.path(base_path, "outputs")
+  here("fishery_analyses", params$project_name, params$fishery_name)
 )
 
 # Create directories as needed
@@ -740,10 +729,10 @@ draws_bss$summary_df <- posterior::summarize_draws(
 
 colnames(draws_bss$summary_df) <- c("variable", "mean", "sd", "mad", "q5", "q95", "rhat", "ess_bulk", "ess_tail")
 
-saveRDS(
-  draws_bss,
-  file = paste0(file.path(base_path), "/draws_bss.rds")
-)
+# saveRDS(
+#   draws_bss,
+#   file = paste0(file.path(base_path), "/draws_bss.rds")
+# )
 ```
 
 ## Model Diagnostics
@@ -810,12 +799,12 @@ gt_tab <- saved_r_objects$table_bss_convergence |>
 gt_tab
 
 #export table
-gtsave(
-  gt_tab, 
-  filename = "table_bss_convergence_alerts.rtf", 
-  path = file.path(base_path, "diagnostics"),
-  expand = 10
-)
+# gtsave(
+#   gt_tab, 
+#   filename = "table_bss_convergence_alerts.rtf", 
+#   path = file.path(base_path, "diagnostics"),
+#   expand = 10
+# )
 ```
 
 ```{r hmc_diagnostics}
@@ -824,19 +813,19 @@ saved_r_objects$table_bss_hmc_diagnostics <- creelutils::get_hmc_diagnostics(sta
 cat(saved_r_objects$table_bss_hmc_diagnostics)
 
 # Export print out
-writeLines(
-  saved_r_objects$table_bss_hmc_diagnostics,
-  file.path(base_path, "diagnostics", "table_bss_hmc_diagnostics.txt")
-)
+# writeLines(
+#   saved_r_objects$table_bss_hmc_diagnostics,
+#   file.path(base_path, "diagnostics", "table_bss_hmc_diagnostics.txt")
+# )
 
 ```
 
 ```{r model_runtime}
 saved_r_objects$table_bss_runtime <- 
   creelutils::get_bss_runtime(
-    ecg_fit, 
-    output_file = paste0(
-      file.path(base_path, "diagnostics"), "/table_bss_runtime.txt")
+    ecg_fit
+    # output_file = paste0(
+    #   file.path(base_path, "diagnostics"), "/table_bss_runtime.txt")
   )
 ```
 
@@ -855,12 +844,12 @@ plot_bss_traceplots <-  mcmc_trace(ecg_fit, pars = c(
   labs(x = "Post-warmup iteration") +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
-ggsave(
-  plot = plot_bss_traceplots,
-  filename = "plot_bss_traceplots.png",
-  path = file.path(base_path, "diagnostics"),
-  dpi = 300, width = 7.5, heigh = 6, units = "in", scale = 1.5
-)
+# ggsave(
+#   plot = plot_bss_traceplots,
+#   filename = "plot_bss_traceplots.png",
+#   path = file.path(base_path, "diagnostics"),
+#   dpi = 300, width = 7.5, heigh = 6, units = "in", scale = 1.5
+# )
 ```
 
 ### Probability Density Plot
@@ -925,12 +914,12 @@ plot_bss_probability_densities <-
 
 plot_bss_probability_densities
 
-ggsave(
-  plot = plot_bss_probability_densities,
-  filename = "plot_bss_probability_densities.png",
-  path = file.path(base_path, "diagnostics"),
-  dpi = 300, width = 5, heigh = 3, units = "in", scale = 1.8
-)
+# ggsave(
+#   plot = plot_bss_probability_densities,
+#   filename = "plot_bss_probability_densities.png",
+#   path = file.path(base_path, "diagnostics"),
+#   dpi = 300, width = 5, heigh = 3, units = "in", scale = 1.8
+# )
 ```
 
 
@@ -953,12 +942,12 @@ saved_r_objects$table_bss_estimates_summary  |>
       style = cell_fill(), locations = cells_body(columns = "50%")
     )
 
-write_csv(
-  saved_r_objects$table_bss_estimates_summary,
-  file = paste0(
-    file.path(base_path, "outputs"), 
-    "/table_bss_estimates_summary.csv")
-)
+# write_csv(
+#   saved_r_objects$table_bss_estimates_summary,
+#   file = paste0(
+#     file.path(base_path, "outputs"), 
+#     "/table_bss_estimates_summary.csv")
+# )
 ```
 
 ## plot daily catch BSS
@@ -978,12 +967,12 @@ plot_bss_catch_daily <-
 
 plot_bss_catch_daily
 
-ggsave(
-  plot_bss_catch_daily,
-  filename = "plot_bss_catch_daily.png",
-  path = file.path(base_path, "outputs"),
-  dpi = 300, width = 7.5, height = 5, scale = 1
-)
+# ggsave(
+#   plot_bss_catch_daily,
+#   filename = "plot_bss_catch_daily.png",
+#   path = file.path(base_path, "outputs"),
+#   dpi = 300, width = 7.5, height = 5, scale = 1
+# )
 ```
 
 ## plot daily effort BSS
@@ -1003,11 +992,11 @@ plot_bss_effort_daily <-
 
 plot_bss_effort_daily
 
-ggsave(
-  plot_bss_effort_daily,
-  filename = "plot_bss_effort_daily.png",
-  path = file.path(base_path, "outputs"),
-  dpi = 300, width = 7.5, height = 5, scale = 1
+# ggsave(
+#   plot_bss_effort_daily,
+#   filename = "plot_bss_effort_daily.png",
+#   path = file.path(base_path, "outputs"),
+#   dpi = 300, width = 7.5, height = 5, scale = 1
 )
 ```
 
@@ -1028,12 +1017,12 @@ plot_bss_cpue_daily <-
 
 plot_bss_cpue_daily
 
-ggsave(
-  plot_bss_cpue_daily,
-  filename = "plot_bss_cpue_daily.png",
-  path = file.path(base_path, "outputs"),
-  dpi = 300, width = 7.5, height = 5, scale = 1
-)
+# ggsave(
+#   plot_bss_cpue_daily,
+#   filename = "plot_bss_cpue_daily.png",
+#   path = file.path(base_path, "outputs"),
+#   dpi = 300, width = 7.5, height = 5, scale = 1
+# )
 ```
 
 # PE/BSS combined summary
@@ -1142,14 +1131,14 @@ saved_r_objects$estimates_bss <- estimates_bss
 #write out standardized creel_estimates object to project file directory
 #this saves the estimates produces from an HTML render which can later be loaded into R and exported locally or to creel database.
 
-if (exists("creel_estimates")) {
-
-  save(saved_r_objects, file = paste0(file.path(base_path), "/saved_r_objects.rda"))
-  save(draws_bss, file = paste0(file.path(base_path), "/draws_bss.rds"))
-  
-} else {
-  cli::cli_alert_warning("'creel_estimates.rda' and 'draws_bss.rds' not saved out.")
-}
+# if (exists("creel_estimates")) {
+# 
+#   save(saved_r_objects, file = paste0(file.path(base_path), "/saved_r_objects.rda"))
+#   save(draws_bss, file = paste0(file.path(base_path), "/draws_bss.rds"))
+#   
+# } else {
+#   cli::cli_alert_warning("'creel_estimates.rda' and 'draws_bss.rds' not saved out.")
+# }
 
 #Bring object back in after knit / render. Then proceed to database export as necessary.
 
