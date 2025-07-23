@@ -12,7 +12,7 @@ params:
   study_design: "Standard"  
   boat_type_collapse: "Yes"
   fish_location_determines_type: "No"
-  angler_type_kayak_pontoon: "boat" 
+  angler_type_kayak_pontoon: "bank" 
   person_count_type: "group"
   period_pe: "week"
   period_bss: "day"
