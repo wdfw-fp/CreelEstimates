@@ -609,6 +609,7 @@ inputs_bss <-
 estimates_bss <- list()
 draws_bss <- list()
 draws_array <- list()
+bss_settings <- list()
 
 for(ecg in names(inputs_bss)) {
   gc(verbose = T)
@@ -622,7 +623,7 @@ for(ecg in names(inputs_bss)) {
       n_iter = 400,
       n_warmup = 200,
       n_thin = 1,
-      adapt_delta = 0.7,
+      adapt_delta = 0.8,
       max_treedepth = 12,
       init = "0"
     )
@@ -673,19 +674,37 @@ for(ecg in names(inputs_bss)) {
     draws_df = draws_df,
     summary_df = summary_df
   )
+  
   cli::cli_alert_success("Model run completed for catch group: {ecg}\n")
   #get bss diagnostics using creelutils package
-  creelutils::get_bss_runtime(ecg_fit)
+  bss_runtime_cg <- creelutils::get_bss_runtime(ecg_fit)
   cat("\n")
   cli::cli_rule()
-  creelutils::get_hmc_diagnostics(stan_fit = ecg_fit) |> cat()
-
+  bss_hmc_diagnostic_cg <- creelutils::get_hmc_diagnostics(stan_fit = ecg_fit) |> cat() |> capture.output()
+  cat(bss_hmc_diagnostic_cg, sep = "\n")
+  cat("\n")
+  cli::cli_rule()
+  bss_settings_cg <- get_bss_settings(ecg, ecg_fit, inputs_bss, print = TRUE) |> capture.output()
+  cat(bss_settings_cg, sep = "\n")
+  
+  
   # store iteration
   estimates_bss[[ecg]] <- ecg_keep
-
+  
+  bss_settings[[ecg]] <- list(
+    runtime = bss_runtime_cg,
+    sampling_diagnostics = bss_hmc_diagnostic_cg,
+    model_settings = bss_settings_cg
+  )
+  
   #remove intermediate objects when looping over multiple catch groups
   if(length(names(inputs_bss))>1){  
-    rm(ecg_fit, ecg_keep, draws_df_full, draws_df, summary_df); gc()
+    rm(
+      ecg_fit, ecg_keep, #stan objects 
+      draws_df_full, draws_df, summary_df, #catch group specific draws
+      bss_runtime_cg, bss_hmc_diagnostic_cg, bss_settings_cg #bss metadata per catch group
+    )
+    gc()
   }
  
 }
@@ -741,7 +760,8 @@ draws_problems_tables <- purrr::map(
       "5%" = q5,
       "95%" = q95
     ) |> 
-    arrange(desc(rhat))
+    arrange(desc(rhat)) |> 
+    slice_head(n = 15)
   }
 ) |> rlang::set_names(names(draws_bss))
 
@@ -770,7 +790,7 @@ for (ecg in names(draws_problems_tables)) {
       locations = gt::cells_title(groups = "subtitle")
     ) |> 
     gt::tab_footnote(
-      footnote = "Filtered to 10 rows, sorted by descending R̂",
+      footnote = "Filtered to 15 rows, sorted by descending R̂",
       locations = gt::cells_column_labels(columns = c("rhat_display"))
     )
 
@@ -833,15 +853,22 @@ effort_quantiles <- effort_season_results |>
   group_by(ecg) |>
   reframe(E_sum = quantile(E_sum, c(0.025, 0.5, 0.975)), q = c(0.025, 0.5, 0.975))
 
+catch_median <- median(catch_season_results$C_sum) |> round(0)
+effort_median <- median(effort_season_results$E_sum) |> round(0)
 
-# Function to create combined plot for one catch group
+# Function to create combined plot 
 plot_catch_effort <- function(cg) {
-  # Filter for this catch group
+  # filter to given catch group
   catch_df <- filter(catch_season_results, ecg == cg)
   catch_q <- filter(catch_quantiles, ecg == cg)
   
   effort_df <- filter(effort_season_results, ecg == cg)
   effort_q <- filter(effort_quantiles, ecg == cg)
+  
+  # calc values for y-axis limit of annotation
+  # find y value at the point in the curve closest to the median
+  # catch_density <- density(catch_df$C_sum)
+  # catch_median_y <- catch_density$y[which.min(abs(catch_density$x - catch_median))]
   
   # Catch plot
   plot_catch <- ggplot(catch_df, aes(x = C_sum)) +
@@ -849,7 +876,23 @@ plot_catch_effort <- function(cg) {
     geom_vline(data = catch_q, aes(xintercept = C_sum, group = q), linetype = "dashed") +
     labs(x = "Catch (number of fish)", y = "Kernel Density", title = glue("{cg}")) +
     theme_bw() +
-    theme(legend.position = "none")
+    theme(legend.position = "none") 
+    # annotate(
+    #   "label",
+    #    x = catch_quantiles$q[[0.500]],
+    #    y = catch_median_y,
+    #    label = round(catch_median),
+    #    fill = "white",
+    #    color = "grey30",
+    #    fontface = "bold",
+    #    size = 4,
+    #    label.size = 0.25
+    #   )  
+  
+  # calc values for y-axis limit of annotation
+  # find y value at the point in the curve closest to the median
+  # effort_density <- density(effort_df$E_sum)
+  # effort_median_y <- effort_density$y[which.min(abs(effort_density$x - effort_median))]
   
   # Effort plot
   plot_effort <- ggplot(effort_df, aes(x = E_sum)) +
@@ -857,9 +900,20 @@ plot_catch_effort <- function(cg) {
     geom_vline(data = effort_q, aes(xintercept = E_sum, group = q), linetype = "dashed") +
     labs(x = "Effort (angler-hours)", y = "Kernel Density") +
     theme_bw() +
-    theme(legend.position = "none")
+    theme(legend.position = "none") 
+    # annotate(
+    #   "label",
+    #    x = effort_median,
+    #    y = effort_median_y,
+    #    label = round(effort_median),
+    #    fill = "white",
+    #    color = "grey30",
+    #    fontface = "bold",
+    #    size = 4,
+    #    label.size = 0.25
+    #   )  
   
-  # Combine catch and effort vertically with patchwork
+  # Combine catch and effort plots
   combined_plot <- plot_catch / plot_effort +
     plot_layout(heights = c(1, 1))
   
@@ -869,10 +923,10 @@ plot_catch_effort <- function(cg) {
 # Create a list of plots, one per catch group
 plots_list <- map(catch_groups, plot_catch_effort)
 
-# Combine all plots vertically (1 column)
+# Combine all plots vertically
 combined_figure <- wrap_plots(plots_list, ncol = 1) +
   plot_annotation(
-    title = "Posterior Densities of Catch and Effort by Catch Group"
+    title = "Posterior Probability Densities of Catch and Effort by Catch Group"
   ) &
   theme(strip.text = element_text(size = 10))
 
@@ -1045,27 +1099,6 @@ if (params$export %in% c("database", "local") && !params$model_used %in% c("PE o
 }
 
 ```
-
-```{r ETL_KNIT_OPTION, eval=TRUE}
-#write out standardized creel_estimates object to project file directory
-#this saves the estimates produces from an HTML render which can later be loaded into R and exported locally or to creel database.
-
-if (exists("creel_estimates")) {
-
-  save(creel_estimates, file = paste0(file.path(here(), params$project_name, params$fishery_name, "creel_estimates.rda")))
-  # save(saved_r_objects, file = paste0(file.path(base_path), "/saved_r_objects.rda"))
-  # save(draws_bss, file = paste0(file.path(base_path), "/draws_bss.rds"))
-
-} else {
-  cli::cli_alert_warning("'creel_estimates.rda' and 'draws_bss.rds' not saved out.")
-}
-
-#Bring object back in after knit / render. Then proceed to database export as necessary.
-
-# file_path <- paste0(here::here(),"/fishery_analyses/", params$project_name, "/", params$fishery_name, "/")
-# load(file = paste0(file_path, "creel_estimates.RData"))
-```
-
 
 ```{r load_estimates, eval= FALSE}
 
