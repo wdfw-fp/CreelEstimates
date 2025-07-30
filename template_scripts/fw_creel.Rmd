@@ -2,12 +2,13 @@
 title: "Freshwater Creel Estimates"
 date: "`r Sys.Date()`"
 params:
-  project_name: "District 17 North"
-  fishery_name: "Chehalis winter steelhead 2024-25"
-  est_date_start: "2024-11-01"
-  est_date_end: "2025-02-28"
+  project_name: "District 99"
+  fishery_name: "Skagit spring Chinook 2025 upper"
+  est_date_start: "2025-05-28"
+  est_date_end: "2025-07-15"
   est_catch_groups: !r data.frame(rbind(
-    c(species = 'Steelhead', life_stage = 'Adult', fin_mark = 'UM', fate = 'Released')
+    c(species = 'Chinook', life_stage = 'Adult', fin_mark = 'AD', fate = 'Kept'),
+    c(species = 'Chinook', life_stage = 'Adult', fin_mark = 'UM', fate = 'Released')
     ))
   study_design: "Standard"  
   boat_type_collapse: "Yes"
@@ -16,7 +17,7 @@ params:
   person_count_type: "group"
   period_pe: "week"
   period_bss: "day"
-  days_wkend: !r c('Friday', 'Saturday', 'Sunday')
+  days_wkend: !r c('Saturday', 'Sunday')
   day_length_expansion: "night closure"
   min_fishing_time: 0.5
   bss_model_file_name: "BSS_creel_model_02_2024-04-03.stan"
@@ -606,6 +607,8 @@ inputs_bss <-
 ```{r estimates_bss, eval=TRUE}
 #should work for either single or multiple catch_group 
 estimates_bss <- list()
+draws_bss <- list()
+draws_array <- list()
 
 for(ecg in names(inputs_bss)) {
   gc(verbose = T)
@@ -632,24 +635,14 @@ for(ecg in names(inputs_bss)) {
   ecg_keep$draws <- extract(ecg_fit)
   ecg_keep$summary<-summary(ecg_fit)$summary
 
-  estimates_bss[[ecg]] <- ecg_keep
-
-  if(length(names(inputs_bss))>1){  
-    rm(ecg_fit, ecg_keep); gc()
-  }
- 
-}
-
-```
-
-```{r}
-# Separate out draws - large file size
-draws_bss <- list()
-
-# Convert stanfit object to posterior draws
-draws_array <- posterior::as_draws_array(ecg_fit)
-
-params_keep <- c(
+  #CH 7/29/25 extract draws, trim, and transform before removing stanfit object when >1 catch groups
+  draws_array[[ecg]] <- posterior::as_draws_array(ecg_fit)
+  
+  # convert array to df for subsetting
+  draws_df_full <- posterior::as_draws_df(draws_array[[ecg]])
+  
+  # subset parameters
+  params_keep <- c(
   "mu_E", "mu_C",
   "lambda_E_S", "lambda_C_S",
   "omega_E", "omega_C",
@@ -661,122 +654,145 @@ params_keep <- c(
   "p_I",
   "mu_mu_E", "sigma_mu_E", "eps_mu_E",
   "mu_mu_C", "sigma_mu_C", "eps_mu_C"
-)
+  )
+  
+  # subset and format
+  draws_df <- posterior::subset_draws(draws_df_full, variable = params_keep) |> 
+    relocate(c(".draw", ".iteration", ".chain"))
+  
+  # summary stats
+  summary_df <- posterior::summarize_draws(
+    draws_df, 
+    measures = list(mean, sd, mad, posterior::quantile2, rhat, ess_bulk, ess_tail)
+  )
+  
+  colnames(summary_df) <- c("variable", "mean", "sd", "mad", "q5", "q95", "rhat", "ess_bulk", "ess_tail")
+  
+  # save results per catch group
+  draws_bss[[ecg]] <- list(
+    draws_df = draws_df,
+    summary_df = summary_df
+  )
+  cli::cli_alert_success("Model run completed for catch group: {ecg}\n")
+  #get bss diagnostics using creelutils package
+  creelutils::get_bss_runtime(ecg_fit)
+  cat("\n")
+  cli::cli_rule()
+  creelutils::get_hmc_diagnostics(stan_fit = ecg_fit) |> cat()
 
-# Subset columns down from thousands to parameters of interests
-draws_trimmed <- posterior::subset_draws(draws_array, variable = params_keep)
+  # store iteration
+  estimates_bss[[ecg]] <- ecg_keep
 
-draws_bss$draws_df <- posterior::as_draws_df(draws_trimmed) |>  #could supply variables of interest to trim (and speed up summary calculation)
-  relocate(c(".draw", ".iteration", ".chain"))
+  #remove intermediate objects when looping over multiple catch groups
+  if(length(names(inputs_bss))>1){  
+    rm(ecg_fit, ecg_keep, draws_df_full, draws_df, summary_df); gc()
+  }
+ 
+}
 
-# Summarize draws (inc. Rhat, ESS, etc)
-draws_bss$summary_df <- posterior::summarize_draws(
-  draws_bss$draws_df, 
-  measures = list(mean, sd, mad, posterior::quantile2, rhat, ess_bulk, ess_tail)
-)
-
-colnames(draws_bss$summary_df) <- c("variable", "mean", "sd", "mad", "q5", "q95", "rhat", "ess_bulk", "ess_tail")
-
-# saveRDS(
-#   draws_bss,
-#   file = paste0(file.path(base_path), "/draws_bss.rds")
-# )
 ```
 
 ## Model Diagnostics
 
 ```{r summary_and_convergence}
-draws_problems <- draws_bss$summary_df |> 
-  filter(rhat > 1.009 | ess_bulk < 400 | ess_tail < 400) |> 
-  mutate(
-    rhat_display = round(rhat, 2),
-    ess_bulk = round(ess_bulk, 0),
-    ess_tail = round(ess_tail, 0),
-    mean = round(mean, 2),
-    sd = round(sd, 2),
-    mad = round(mad, 2),
-    q5 = round(q5, 2),
-    q95 = round(q95, 2)
-  ) |> 
-  rename(
-    "Mean" = mean,
-    "SD" = sd,
-    "MAD" = mad,
-    "5%" = q5,
-    "95%" = q95
-  ) |> 
-  arrange(desc(rhat))
+# create a list object containing lists named after each catch group, each with a
+draws_problems_tables <- purrr::map(
+  .x = names(draws_bss),
+  .f = function(ecg) {
 
-# Summary info
-n_problems <- nrow(draws_problems)
-pct_problems <- round(n_problems / nrow(draws_bss$summary_df) * 100, 1)
+  draws_summary <- draws_bss[[ecg]]$summary_df
 
-# gt table
-draws_problems |> 
-  slice_head(n = 10) |> 
-  select(-rhat) |> 
-  relocate(rhat_display, .after = "variable") |> 
-  gt() |> 
-  cols_label(variable = "Parameter", rhat_display = "R̂", ess_bulk = "ESS_bulk", ess_tail = "ESS_tail") |> 
-  tab_header(
-    title = "Posterior Summary Statistics and Convergence Diagnostics",
-    subtitle = "Parameters shown meet at least one criteria: R̂ ≥ 1.01 or effective sample size (ESS) < 400"
-  ) |> 
-  tab_style(
-    style = cell_text(align = "left"),
-    locations = cells_title(groups = "subtitle")
-  ) |> 
-  tab_source_note(
-    source_note = glue::glue(
-    "Magnitude: {n_problems} parameters ({pct_problems}%) flagged from {nrow(draws_bss$summary_df)} total.")
-  ) |> 
-  tab_footnote(
-    footnote = "Filtered to 10 rows, sorted by descending R̂",
-    locations = cells_column_labels(columns = c(rhat_display)))
-
-#export table
-# gtsave(
-#   gt_tab, 
-#   filename = "table_bss_convergence_alerts.rtf", 
-#   path = file.path(base_path, "diagnostics"),
-#   expand = 10
-# )
-```
-
-```{r hmc_diagnostics}
-
-# creelutils::get_hmc_diagnostics(stan_fit = ecg_fit)
-
-# Export print out
-# writeLines(
-#   saved_r_objects$table_bss_hmc_diagnostics,
-#   file.path(base_path, "diagnostics", "table_bss_hmc_diagnostics.txt")
-# )
+  draws_problems <- draws_summary  |> 
+    filter(rhat > 1.09 | ess_bulk < 100 | ess_tail < 100) 
+  
+  if (nrow(draws_problems) == 0) {
+    return(tibble(
+      variable = character(),
+      rhat = numeric(),
+      rhat_display = numeric(),
+      ess_bulk = numeric(),
+      ess_tail = numeric(),
+      Mean = numeric(),
+      SD = numeric(),
+      MAD = numeric(),
+      `5%` = numeric(),
+      `95%` = numeric(),
+      n_total = integer(),
+      n_problems = integer(),
+      pct_problems = numeric()
+    ))
+  }
+  
+  draws_problems|> 
+    mutate(
+      rhat_display = round(rhat, 2),
+      ess_bulk = round(ess_bulk, 0),
+      ess_tail = round(ess_tail, 0),
+      mean = round(mean, 2),
+      sd = round(sd, 2),
+      mad = round(mad, 2),
+      q5 = round(q5, 2),
+      q95 = round(q95, 2)
+    ) |> 
+    rename(
+      "Mean" = mean,
+      "SD" = sd,
+      "MAD" = mad,
+      "5%" = q5,
+      "95%" = q95
+    ) |> 
+    arrange(desc(rhat))
+  }
+) |> rlang::set_names(names(draws_bss))
 
 ```
 
-```{r model_runtime}
-creelutils::get_bss_runtime(
-  ecg_fit
-  # output_file = paste0(
-  #   file.path(base_path, "diagnostics"), "/table_bss_runtime.txt")
-  )
+```{r bss_convergence}
+# create a formatted bss convergence alerts table for each catch group
+for (ecg in names(draws_problems_tables)) {
+
+  gt_table <- draws_problems_tables[[ecg]] |> 
+    dplyr::select(-rhat) |> 
+    dplyr::relocate(rhat_display, .after = "variable") |> 
+    gt::gt() |> 
+    gt::cols_label(
+      variable = "Parameter", 
+      rhat_display = "R̂", 
+      ess_bulk = "ESS_bulk", 
+      ess_tail = "ESS_tail"
+    ) |> 
+    gt::tab_header(
+      title = glue::glue("Catch Group: {ecg}"),
+      subtitle = "Parameters shown meet at least one criteria: R̂ ≥ 1.09 or ESS < 100"
+    ) |> 
+    gt::tab_style(
+      style = gt::cell_text(align = "left"),
+      locations = gt::cells_title(groups = "subtitle")
+    ) |> 
+    gt::tab_footnote(
+      footnote = "Filtered to 10 rows, sorted by descending R̂",
+      locations = gt::cells_column_labels(columns = c("rhat_display"))
+    )
+
+  print(gt_table)
+}
+
 ```
 
 ### Trace Plots
 
 ```{r trace_plots, eval=FALSE}
 #set color scheme
-color_scheme_set("mix-brightblue-gray")
-
-#plot traceplots
-plot_bss_traceplots <-  mcmc_trace(ecg_fit, pars = c(
-    "C_sum", "E_sum", "phi_C_scaled", "phi_E_scaled", "sigma_r_C", "sigma_r_E", "sigma_eps_C", "sigma_eps_E",
-    "sigma_mu_C", "sigma_mu_E", "phi_C", "phi_E", "r_C", "r_E", "B1", "lp__"),
-    np = nuts_params(ecg_fit)
-  ) +
-  labs(x = "Post-warmup iteration") +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+# color_scheme_set("mix-brightblue-gray")
+# 
+# #plot traceplots
+# plot_bss_traceplots <-  mcmc_trace(ecg_fit, pars = c(
+#     "C_sum", "E_sum", "phi_C_scaled", "phi_E_scaled", "sigma_r_C", "sigma_r_E", "sigma_eps_C", "sigma_eps_E",
+#     "sigma_mu_C", "sigma_mu_E", "phi_C", "phi_E", "r_C", "r_E", "B1", "lp__"),
+#     np = nuts_params(ecg_fit)
+#   ) +
+#   labs(x = "Post-warmup iteration") +
+#   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
 # ggsave(
 #   plot = plot_bss_traceplots,
@@ -789,70 +805,79 @@ plot_bss_traceplots <-  mcmc_trace(ecg_fit, pars = c(
 ### Probability Density Plot
 
 ```{r, eval=TRUE}
-#catch probability density
+catch_groups <- names(estimates_bss)
+
+# Prepare catch data
 catch_season_results <- map_df(estimates_bss, \(x) {
   x$draws$C_sum |> 
     as.data.frame() |> 
     mutate(iter = row_number()) |> 
-    pivot_longer(cols = -iter, names_to = "est_cg", values_to = "C_sum")
+    pivot_longer(cols = -iter, names_to = "est_cg", values_to = "C_sum") |> 
+    select(-"est_cg")
 }, .id = "ecg")
 
-# Create catch quantiles
 catch_quantiles <- catch_season_results |>
-  group_by(est_cg) |>
+  group_by(ecg) |>
   reframe(C_sum = quantile(C_sum, c(0.025, 0.5, 0.975)), q = c(0.025, 0.5, 0.975))
 
-# Catch plot
-plot_catch <- catch_season_results |>
-  ggplot(aes(x = C_sum)) +
-  geom_density(fill = "steelblue", alpha = 0.6) +
-  geom_vline(data = catch_quantiles, aes(xintercept = C_sum, group = est_cg), linetype = "dashed") +
-  ylab(NULL) +
-  xlab("Catch (C_sum)") +
-  theme_bw() +
-  theme(legend.position = "none", strip.background = element_blank())
-
-#effort
+# Prepare effort data
 effort_season_results <- map_df(estimates_bss, \(x) {
   x$draws$E_sum |> 
     as.data.frame() |> 
     mutate(iter = row_number()) |> 
-    pivot_longer(cols = -iter, names_to = "est_cg", values_to = "E_sum")
+    pivot_longer(cols = -iter, names_to = "est_cg", values_to = "E_sum") |> 
+    select(-"est_cg")
 }, .id = "ecg")
 
-# Create effort quantiles
 effort_quantiles <- effort_season_results |>
-  group_by(est_cg) |>
+  group_by(ecg) |>
   reframe(E_sum = quantile(E_sum, c(0.025, 0.5, 0.975)), q = c(0.025, 0.5, 0.975))
 
-# Effort plot
-plot_effort <- effort_season_results |>
-  ggplot(aes(x = E_sum)) +
-  geom_density(fill = "steelblue", alpha = 0.6) +
-  geom_vline(data = effort_quantiles, aes(xintercept = E_sum, group = est_cg), linetype = "dashed") +
-  ylab(NULL) +
-  xlab("Effort (E_sum)") +
-  theme_bw() +
-  theme(legend.position = "none", strip.background = element_blank(), strip.text = element_blank())
 
-plot_bss_probability_densities <- 
-  plot_catch / plot_effort +
-    plot_layout(guides = "collect") +
-    plot_annotation(
-      title = "Posterior Densities of Catch and Effort",
-      subtitle = glue::glue("Catch group: {catch_group}"),
-      tag_levels = 'A'
+# Function to create combined plot for one catch group
+plot_catch_effort <- function(cg) {
+  # Filter for this catch group
+  catch_df <- filter(catch_season_results, ecg == cg)
+  catch_q <- filter(catch_quantiles, ecg == cg)
+  
+  effort_df <- filter(effort_season_results, ecg == cg)
+  effort_q <- filter(effort_quantiles, ecg == cg)
+  
+  # Catch plot
+  plot_catch <- ggplot(catch_df, aes(x = C_sum)) +
+    geom_density(fill = "steelblue", alpha = 0.6) +
+    geom_vline(data = catch_q, aes(xintercept = C_sum, group = q), linetype = "dashed") +
+    labs(x = "Catch (number of fish)", y = "Kernel Density", title = glue("{cg}")) +
+    theme_bw() +
+    theme(legend.position = "none")
+  
+  # Effort plot
+  plot_effort <- ggplot(effort_df, aes(x = E_sum)) +
+    geom_density(fill = "steelblue", alpha = 0.6) +
+    geom_vline(data = effort_q, aes(xintercept = E_sum, group = q), linetype = "dashed") +
+    labs(x = "Effort (angler-hours)", y = "Kernel Density") +
+    theme_bw() +
+    theme(legend.position = "none")
+  
+  # Combine catch and effort vertically with patchwork
+  combined_plot <- plot_catch / plot_effort +
+    plot_layout(heights = c(1, 1))
+  
+  return(combined_plot)
+}
+
+# Create a list of plots, one per catch group
+plots_list <- map(catch_groups, plot_catch_effort)
+
+# Combine all plots vertically (1 column)
+combined_figure <- wrap_plots(plots_list, ncol = 1) +
+  plot_annotation(
+    title = "Posterior Densities of Catch and Effort by Catch Group"
   ) &
-    theme(strip.text = element_text(size = 10))
+  theme(strip.text = element_text(size = 10))
 
-plot_bss_probability_densities
+print(combined_figure)
 
-# ggsave(
-#   plot = plot_bss_probability_densities,
-#   filename = "plot_bss_probability_densities.png",
-#   path = file.path(base_path, "diagnostics"),
-#   dpi = 300, width = 5, heigh = 3, units = "in", scale = 1.8
-# )
 ```
 
 ### Posterior Predictive Check for BSS
@@ -861,25 +886,25 @@ plot_bss_probability_densities
 ## summary BSS
 
 ```{r BSS_summary, eval= TRUE}
-# saved_r_objects$table_bss_estimates_summary <-
-#   map_df(estimates_bss, ~.x$overview)
 
-estimates_bss$overview  |> 
-    gt(groupname_col = "est_cg") |>
-    fmt_number(-c(estimate, est_cg), decimals = 1) |> 
-    tab_style(
-      style = cell_fill(), locations = cells_body(columns = "50%")
-    ) |> 
-    tab_style(
-      style = cell_fill(), locations = cells_body(columns = "50%")
-    )
+overview_combined <- purrr::imap_dfr(
+  estimates_bss,
+  ~ .x$overview |> mutate(catch_group = .y)
+)
 
-# write_csv(
-#   saved_r_objects$table_bss_estimates_summary,
-#   file = paste0(
-#     file.path(base_path, "outputs"), 
-#     "/table_bss_estimates_summary.csv")
-# )
+# Create a gt table with row groups
+overview_combined |> 
+  gt(groupname_col = "catch_group") |>
+  fmt_number(-c(estimate, est_cg, catch_group), decimals = 1) |> 
+  tab_style(
+    style = cell_fill(),
+    locations = cells_body(columns = "50%")
+  ) |> 
+  tab_style(
+    style = cell_fill(),
+    locations = cells_body(columns = "50%")
+  )
+
 ```
 
 ## plot daily catch BSS
@@ -898,13 +923,6 @@ plot_bss_catch_daily <-
       facet_wrap(~section_num + est_cg)
 
 plot_bss_catch_daily
-
-# ggsave(
-#   plot_bss_catch_daily,
-#   filename = "plot_bss_catch_daily.png",
-#   path = file.path(base_path, "outputs"),
-#   dpi = 300, width = 7.5, height = 5, scale = 1
-# )
 ```
 
 ## plot daily effort BSS
@@ -923,13 +941,6 @@ plot_bss_effort_daily <-
     facet_wrap(~section_num, nrow = estimates_bss[[1]]$effort_daily$section_num |> n_distinct())
 
 plot_bss_effort_daily
-
-# ggsave(
-#   plot_bss_effort_daily,
-#   filename = "plot_bss_effort_daily.png",
-#   path = file.path(base_path, "outputs"),
-#   dpi = 300, width = 7.5, height = 5, scale = 1
-# )
 ```
 
 ## plot daily CPUE BSS
@@ -948,13 +959,6 @@ plot_bss_cpue_daily <-
     facet_wrap(~section_num + est_cg)
 
 plot_bss_cpue_daily
-
-# ggsave(
-#   plot_bss_cpue_daily,
-#   filename = "plot_bss_cpue_daily.png",
-#   path = file.path(base_path, "outputs"),
-#   dpi = 300, width = 7.5, height = 5, scale = 1
-# )
 ```
 
 # PE/BSS combined summary
