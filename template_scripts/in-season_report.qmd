@@ -1,5 +1,5 @@
 ---
-title: "Freshwater Creel Progress Report" 
+title: "Freshwater Creel In-season Report" 
 date: last-modified
 params:
   fishery_name: null
@@ -126,7 +126,7 @@ estimates_stratum <- creelutils::fetch_db_table(con, "creel", "vw_model_estimate
 
 ```{r, fetch_dataset, include=FALSE}
 #download empirical data
-raw_data <- fetch_dwg(params$fishery_name)
+raw_data <- creelutils::fetch_dwg(params$fishery_name)
 
 #filter dataset to parameter dates
 raw_data$effort <- raw_data$effort |> 
@@ -242,7 +242,7 @@ date_seq <- tibble(date = seq(min(estimates_stratum$min_event_date), max(estimat
 #   distinct(period) |> 
 #   pull()
 
-weeks_list <- c(23,24)
+weeks_list <- c(23,24, 25, 26)
 
 ```
 
