@@ -54,7 +54,11 @@ library("posterior")
 library("bayesplot")
 
 # Load packages from source
-# devtools::install_github("wdfw-fp/creelutils", force = TRUE)
+
+#installs 'creelutils package'. force enforces newest version
+#if prompted to update packages, at first try "None / 3" and then "All / 1" if you need to
+#once CreelEstimates is turned into a package, these dependencies can be integrated.
+devtools::install_github("wdfw-fp/creelutils", force = TRUE, quiet = TRUE)
 library(creelutils)
 
 ```
