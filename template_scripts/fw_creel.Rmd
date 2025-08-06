@@ -2,7 +2,7 @@
 title: "Freshwater Creel Estimates"
 date: "`r Sys.Date()`"
 params:
-  project_name: "District 99"
+  project_name: "District 14"
   fishery_name: "Skagit spring Chinook 2025 upper"
   est_date_start: "2025-05-28"
   est_date_end: "2025-07-15"
@@ -113,7 +113,7 @@ generate_analysis_lut(params)
 
 # `r paste(params$fishery_name)`
 
-```{r}
+```{r table_params}
 tibble(param = names(params), value = as.character(params)) |> gt()
 
 ```
@@ -173,7 +173,7 @@ dwg$effort |>
 
 ## Days
 
-```{r gt_creel_days}
+```{r creel_days}
 # Summary table of all dates (not just surveyed dates) for a given fishery & whether each section_num was open or closed
 # dwg$days |> 
 #   mutate(across(starts_with("open_"), ~if_else(., "open","closed"))) |> 
@@ -190,7 +190,7 @@ dwg$effort |>
 ```
 
 ## Period-Dates reference
-```{r gt_period_dates_reference}
+```{r period_dates_reference}
 # Summary table of dates for each period (time_strata)
 dwg$days |> 
     group_by(period) |> 
@@ -202,7 +202,7 @@ dwg$days |>
 
 ## Effort
 
-```{r gt_creel_effort}
+```{r creel_effort}
 # Total number of effort surveys by section num, location, and type (aka tie_in_indicator; 1=census, 0=index)
 dwg$effort |>
   filter(between(event_date, as.Date(params$est_date_start), as.Date(params$est_date_end))) |> 
@@ -242,7 +242,7 @@ left_join(
 
 ## Interview
 
-```{r gt_creel_interview}
+```{r creel_interview}
 # Total number of angler group interviews by section_num and fishing_location
 dwg$interview |>
   filter(between(event_date, as.Date(params$est_date_start), as.Date(params$est_date_end))) |>
@@ -263,7 +263,7 @@ dwg$interview |>
 
 ## Catch
 
-```{r gt_creel_catch}
+```{r creel_catch}
 # Total number of "encounters" for each unique catch_group recorded during angler group interviews
 dwg$catch |>
   left_join(dwg$interview, by = "interview_id") |> 
@@ -805,7 +805,7 @@ for (ecg in names(draws_problems_tables)) {
 
 ### Trace Plots
 
-```{r trace_plots, eval=FALSE}
+```{r bss_trace_plots, eval=FALSE}
 #set color scheme
 # color_scheme_set("mix-brightblue-gray")
 # 
@@ -828,7 +828,7 @@ for (ecg in names(draws_problems_tables)) {
 
 ### Probability Density Plot
 
-```{r, eval=TRUE}
+```{r, plot_prob_density, eval=TRUE}
 catch_groups <- names(estimates_bss)
 
 # Prepare catch data
@@ -967,7 +967,7 @@ overview_combined |>
 
 ## plot daily catch BSS
 
-```{r, eval=TRUE}
+```{r plot_bss_catch_daily, eval=TRUE}
 plot_bss_catch_daily <-
   map_df(estimates_bss, ~.x$catch_daily) |> 
       ggplot(aes(x = event_date, y = `50%`, fill = angler_final, color = angler_final)) +
@@ -985,7 +985,7 @@ plot_bss_catch_daily
 
 ## plot daily effort BSS
 
-```{r, eval=TRUE}
+```{r plot_bss_effort_daily, eval=TRUE}
 plot_bss_effort_daily <-
   map_df(estimates_bss, ~.x$effort_daily) |> 
     ggplot(aes(x = event_date, y = `50%`, fill = angler_final, color = angler_final)) +
@@ -1003,7 +1003,7 @@ plot_bss_effort_daily
 
 ## plot daily CPUE BSS
 
-```{r, eval=TRUE}
+```{r plot_bss_cpue_daily, eval=TRUE}
 plot_bss_cpue_daily <-
   map_df(estimates_bss, ~.x$cpue_daily) |> 
     ggplot(aes(x = event_date, y = `50%`, fill = angler_final, color = angler_final)) +
@@ -1021,7 +1021,7 @@ plot_bss_cpue_daily
 
 # PE/BSS combined summary
 
-```{r combo_overview, eval=TRUE}
+```{r estimates_combo_overview, eval=TRUE}
 #per-est_cg summary of total effort hours and catch/encounters, showing results of both PE and BSS estimation methods
 map_df(estimates_bss, ~.x$overview) |> 
   left_join(
