@@ -54,11 +54,7 @@ library("posterior")
 library("bayesplot")
 
 # Load packages from source
-
-#installs 'creelutils package'. force enforces newest version
-#if prompted to update packages, at first try "None / 3" and then "All / 1" if you need to
-#once CreelEstimates is turned into a package, these dependencies can be integrated.
-devtools::install_github("wdfw-fp/creelutils", force = TRUE, quiet = TRUE)
+devtools::install_github("wdfw-fp/creelutils")
 library(creelutils)
 
 ```
@@ -108,6 +104,8 @@ if (file.exists(script_path)) {
 
 # Create an analysis_id
 generate_analysis_lut(params)
+# Capitalize UUID to match database format
+analysis_lut$analysis_id <- toupper(analysis_lut$analysis_id)
 
 ```
 
@@ -1058,7 +1056,8 @@ map_df(estimates_bss, ~.x$overview) |>
 
 ```{r transform_estimates, eval = TRUE}
 #Extract and transform model estimates into a common format
-
+transformed_pe_data <- list()
+transformed_bss_data <- list()
 #Export data from one or both models
 if (params$export %in% c("database", "local") && !params$model_used %in% c("PE only", "BSS only", "Both models" )) {
   stop("\nInvalid value for export or model_used parameter.")
