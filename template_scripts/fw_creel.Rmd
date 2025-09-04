@@ -2,15 +2,13 @@
 title: "Freshwater Creel Estimates"
 date: "`r Sys.Date()`"
 params:
-  project_name: "District 14"
-  fishery_name: "Skagit spring Chinook 2025 upper"
-  est_date_start: "2025-05-28"
-  est_date_end: "2025-07-15"
+  project_name: "Test Drano"
+  fishery_name: "Drano Lake salmon and steelhead 2023"
+  est_date_start: "2023-08-01"
+  est_date_end: "2023-10-31"
   est_catch_groups: !r data.frame(rbind(
-    c(species = 'Chinook', life_stage = 'Adult', fin_mark = 'AD', fate = 'Kept'),
-    c(species = 'Chinook', life_stage = 'Adult', fin_mark = 'UM', fate = 'Released')
-    ))
-  study_design: "Standard"  
+    c(species = 'Chinook', life_stage = 'Adult', fin_mark = 'UM', fate = 'Released')))
+  study_design: "Drano"  
   boat_type_collapse: "Yes"
   fish_location_determines_type: "No"
   angler_type_kayak_pontoon: "bank" 
@@ -149,7 +147,7 @@ dwg$days <- prep_days(
   lat = mean(dwg$ll$centroid_lat), #can/should consider smarter options
   long = mean(dwg$ll$centroid_lon),#can/should consider smarter options 
   period_pe = params$period_pe,
-  sections = unique(dwg$fishery_manager$section_num),
+  sections = unique(dwg$interview$section_num),
   closures = dwg$closures,
   day_length = params$day_length_expansion,
   day_length_inputs = day_length_inputs
