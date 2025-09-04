@@ -2,13 +2,15 @@
 title: "Freshwater Creel Estimates"
 date: "`r Sys.Date()`"
 params:
-  project_name: "Test Drano"
-  fishery_name: "Drano Lake salmon and steelhead 2023"
-  est_date_start: "2023-08-01"
-  est_date_end: "2023-10-31"
+  project_name: "District 13"
+  fishery_name: "Snohomish fall salmon 2025"
+  est_date_start: "2025-08-23"
+  est_date_end: "2025-10-31"
   est_catch_groups: !r data.frame(rbind(
-    c(species = 'Chinook', life_stage = 'Adult', fin_mark = 'UM', fate = 'Released')))
-  study_design: "Drano"  
+    c(species = 'Pink', life_stage = 'Adult', fin_mark = 'UM', fate = 'Kept'),
+    c(species = 'Pink', life_stage = 'Adult', fin_mark = 'UM', fate = 'Released')
+    ))
+  study_design: "Standard"   
   boat_type_collapse: "Yes"
   fish_location_determines_type: "No"
   angler_type_kayak_pontoon: "bank" 
