@@ -1,0 +1,468 @@
+---
+title: "Freshwater Creel In-season Report" 
+date: last-modified
+params:
+  fishery_name: null
+  bss_used: null
+execute: 
+  warning: false
+  echo: false
+format: 
+  html: 
+    page-layout: full 
+    code-tools: true
+    embed-resources: true
+    toc: false
+    title-block-banner: "#1D886E"
+    css: "style.css"
+---
+
+```{r setup, include=FALSE}
+options(scipen=999) # prevent scientific notation
+
+library(tidyverse)
+library(here)
+library(cli)
+library(glue)
+library(gt)
+
+# Temporary solution done manually
+inputs_pe <- readRDS(file.path(paste0(here(),"/template_scripts/inputs_pe.rds")))
+
+```
+
+```{r}
+# Requires an established OBDC configuration
+con <- DBI::dbConnect(odbc::odbc(), dsn = "creel_estimates")
+
+fishery_lut <- creelutils::fetch_db_table(
+  con, "creel", "fishery_lut",
+  filter = "fishery_name %in% params$fishery_name")
+
+fishery_locations_lut <- creelutils::fetch_db_table(
+  con, "creel", "vw_fishery_manager",
+  filter = "fishery_name %in% params$fishery_name"
+)
+
+project_name <- fishery_locations_lut$project_name |> unique()
+est_date_start <- fishery_locations_lut$fishery_start_date |> unique()
+est_date_end <- fishery_locations_lut$fishery_end_date |> unique()
+```
+
+
+**`{r} paste(project_name, "—", params$fishery_name)`**
+
+[*Disclaimer: The information presented here is provisional. This data has not been fully processed or quality assured, and is therefore subject to change.*]{style="font-size: 14px;"}
+
+------------------------------------------------------------------------
+
+```{r}
+#load functions
+purrr::walk(list.files(here("R_functions"), full.names = T), source)
+
+# load temporary creel_fishery_catch_group_lut table
+# copied from project estimation tracker on 6/16/25
+creel_cg_lut <- read_csv(
+  rprojroot::find_rstudio_root_file("input_files/creel_fishery_catch_group_lut.csv"),
+  show_col_types = FALSE
+) |>
+  mutate(catch_group = paste(species, life_stage, mark_status, fate, sep = "_")) |> 
+  filter(fishery_name %in% params$fishery_name)
+
+# query estimates from the database
+analysis_lut <- creelutils::fetch_db_table(con, "creel", "model_analysis_lut") |> 
+  mutate(fishery_name = stringr::str_extract(analysis_name, "^[^_]+")) |> 
+  relocate(fishery_name, .before = "analysis_name") |> 
+  filter(fishery_name %in% params$fishery_name) |> 
+  mutate(upload_date = lubridate::as_date(created_datetime), .after = "created_datetime")
+
+analysis_lut_sub <- analysis_lut |> 
+  select(analysis_id, fishery_name, upload_date)
+
+# total
+estimates_total <- creelutils::fetch_db_table(con, "creel", "vw_model_estimates_total", filter = "analysis_id %in% analysis_lut_sub$analysis_id") |> 
+  mutate(fishery_name = stringr::str_extract(analysis_name, "^[^_]+")) |> 
+  relocate(fishery_name, .before = "analysis_name") |> 
+  mutate(
+    fin_mark_desc = 
+      case_when(
+        fin_mark_desc == "Adclip clip + No other external marks" ~ "AD",
+        fin_mark_desc == "No Adclip + No Other external marks" ~ "UM",
+        fin_mark_desc == "Unknown Adipose + Unknown fin clip" ~ "UNK",
+        TRUE ~ fin_mark_desc
+      ),
+      catch_group = paste(species_name, life_stage_name, fin_mark_desc, fate_name, sep = "_"),
+      catch_group = if_else(is.na(species_name), "effort", catch_group) # sort of funky, but inserting effort into catch group so effort is accounted for 
+  )
+# ids each chatch group
+most_recent_ids <- estimates_total |> 
+  left_join(analysis_lut, by = "analysis_id") |> 
+  filter(!is.na(species_name)) |> 
+  group_by(catch_group) |>
+  slice_max(order_by = upload_date, n = 1, with_ties = FALSE) |> 
+  ungroup() |> 
+  select(analysis_id) |> 
+  pull()
+
+estimates_total <- estimates_total |> filter(analysis_id %in% most_recent_ids)
+
+# stratum
+estimates_stratum <- creelutils::fetch_db_table(con, "creel", "vw_model_estimates_stratum", filter = "analysis_id %in% most_recent_ids") |> 
+  mutate(fishery_name = stringr::str_extract(analysis_name, "^[^_]+")) |> 
+  relocate(fishery_name, .before = "analysis_name") |> 
+  mutate(
+    fin_mark_desc = 
+      case_when(
+        fin_mark_desc == "Adclip clip + No other external marks" ~ "AD",
+        fin_mark_desc == "No Adclip + No Other external marks" ~ "UM",
+        fin_mark_desc == "Unknown Adipose + Unknown fin clip" ~ "UNK",
+        TRUE ~ fin_mark_desc
+      ),
+      catch_group = paste(species_name, life_stage_name, fin_mark_desc, fate_name, sep = "_"),
+      catch_group = if_else(is.na(species_name), "effort", catch_group) # sort of funky, but inserting effort into catch group so effort is accounted for 
+  )
+
+```
+
+```{r, fetch_dataset, include=FALSE}
+#download empirical data
+raw_data <- creelutils::fetch_dwg(params$fishery_name)
+
+#filter dataset to parameter dates
+raw_data$effort <- raw_data$effort |> 
+  dplyr::filter(
+    event_date >= as.Date(est_date_start) & 
+    event_date <= as.Date(est_date_end)
+  )
+
+raw_data$interview <- raw_data$interview |> 
+    dplyr::filter(
+    event_date >= as.Date(est_date_start) & 
+    event_date <= as.Date(est_date_end)
+  )
+
+join <- raw_data$interview |> 
+  dplyr::select(interview_id, event_date)
+
+raw_data$catch <- raw_data$catch |> 
+  dplyr::left_join(join, by = "interview_id") |> 
+  dplyr::filter(
+    event_date >= as.Date(est_date_start) & 
+    event_date <= as.Date(est_date_end)
+  )
+
+```
+
+::: {.callout-warning appearance="simple"}
+## Pre-season Fishery Inputs
+
+```{r}
+#import controls file
+creel_fishery_metrics <- readr::read_csv(here::here("./input_files/creel_fishery_metrics.csv")) |> 
+  dplyr::filter(
+    project == project_name,
+    fishery == params$fishery_name
+  )
+
+creel_fishery_metrics |> 
+  select(-project, -fishery) |> 
+  rename(
+    `Pre-season FRAM harvest impacts` = metric,
+    Value = value,
+    `Catch group` = estimate_catch_group
+  ) |> 
+  relocate(`Catch group`) |> 
+  mutate(
+    `Inputs in expanded catch for released fish` = Value * 10
+  ) |> 
+  gt() |> 
+  tab_header(
+    title = md(glue("Inputs to the FRAM model for the {params$fishery_name} fishery"))
+  ) |> 
+  tab_footnote(
+    footnote = "Assuming a 10% post-release mortality rate",
+    locations = cells_column_labels(columns = `Inputs in expanded catch for released fish`)
+  )
+
+```
+:::
+
+<details>
+
+<summary>Fishery Locations Table (Dropdown)</summary>
+
+::: {style="display: flex; justify-content: center; width: 100%;"}
+```{r, results = "asis"}
+knitr::kable(raw_data$fishery_manager, format = "html") |> 
+kableExtra::row_spec(which(raw_data$fishery_manager$survey_type == "Census"), background = "grey", color = "black") |> 
+kableExtra::kable_styling(font_size = 8) |> 
+kableExtra::scroll_box(width = "100%", height = "500px")
+```
+:::
+
+</details>
+
+::: text-center
+Sampling date range:
+:::
+
+```{r date_range}
+#dates table
+estimates_stratum |>
+  dplyr::filter(estimate_category == "effort") |>
+  summarise(`Start` = min(min_event_date),
+            `End` = max(max_event_date)) |>
+  gt::gt() |>
+  gt::fmt_date(date_style = "yMd")
+```
+
+::: text-center
+Number of angler interviews by section:
+:::
+
+```{r}
+#number of interviews
+raw_data$interview |>
+  filter(between(event_date, as.Date(est_date_start), as.Date(est_date_end))) |>
+  count(section_num) |>
+  arrange(section_num) |> 
+  gt() |> 
+  gt::cols_label(
+    section_num ~ "Section Number",
+    n ~ "Interview Count"
+  )
+```
+
+```{r}
+
+date_seq <- tibble(date = seq(min(estimates_stratum$min_event_date), max(estimates_stratum$max_event_date), by = "1 day"))
+
+# weeks_list <- date_seq |> 
+#   mutate(period = isoweek(date)) |> 
+#   distinct(period) |> 
+#   pull()
+
+weeks_list <- c(23,24, 25, 26)
+
+```
+
+::: columns
+::: column
+
+::: {.panel-tabset}
+
+### Overall
+
+```{r}
+#| echo: false
+# Build overall catch plot
+overall_data <- estimates_stratum |>
+  filter(
+    estimate_category == "catch",
+    estimate_type == if (params$bss_used) "quantile_median_50" else "estimate_stratum"
+  ) |>
+  group_by(period) |>
+  summarise(total = round(sum(estimate_value), 0), .groups = "drop") |>
+  mutate(
+    period = factor(period, levels = weeks_list),
+    cumulative_sum = cumsum(total)
+  ) |>
+  arrange(period)
+
+ylab <- if (params$bss_used) "Cumulative catch (BSS model)" else "Cumulative catch (PE model)"
+
+ggplot(overall_data, aes(x = period)) +
+  geom_col(aes(y = total)) +
+  geom_line(
+    aes(y = cumulative_sum / max(cumulative_sum) * max(total), group = 1)) +
+  scale_y_continuous(
+    name = "Weekly Catch",
+    sec.axis = sec_axis(
+      ~ . * max(overall_data$cumulative_sum) / max(overall_data$total), name = ylab)
+  ) +
+  labs(x = "Week") +
+  theme_classic() +
+  theme(axis.text = element_text(size = 12))
+```
+
+```{r}
+#| echo: false 
+#| results: 'asis'
+
+catch_groups <- estimates_stratum |> 
+  filter(!catch_group == "effort") |> 
+  select(catch_group) |> 
+  unique() |> 
+  pull()
+
+for (cg in catch_groups) {
+  cat(glue::glue("### {cg}\n\n"))
+
+  dat <- estimates_stratum |>
+    filter(
+      catch_group == cg,
+      estimate_category == "catch",
+      estimate_type == if (params$bss_used) "quantile_median_50" else "estimate_stratum"
+    ) |>
+    group_by(period) |>
+    summarise(total = round(sum(estimate_value), 0), .groups = "drop") |>
+    mutate(
+      period = factor(period, levels = weeks_list),
+      cumulative_sum = cumsum(total)
+    ) |>
+    arrange(period)
+
+  ylab <- if (params$bss_used) {
+    glue::glue("Cumulative catch (BSS model)")
+  } else {
+    glue::glue("Cumulative catch (PE model)")
+  }
+
+  print(
+    ggplot(dat, aes(x = period)) +
+      geom_col(aes(y = total)) +
+      geom_line(
+        aes(y = cumulative_sum / max(cumulative_sum) * max(total), group = 1)) +
+      scale_y_continuous(
+        name = "Weekly Catch",
+        sec.axis = sec_axis(~ . * max(overall_data$cumulative_sum) / max(overall_data$total), name = ylab)) +
+      labs(x = "Week") +
+      theme_classic() +
+      theme(axis.text = element_text(size = 12))
+  )
+
+  cat("\n\n")
+}
+
+```
+
+:::
+
+::: text-center
+Estimated total catch aggregated across all sections and dates.
+:::
+
+```{r catch_sum}
+total_catch <- estimates_stratum |>
+  filter(estimate_category == "catch") |>
+  select(catch_group, estimate_type, estimate_value) |>
+  filter(estimate_type == if (params$bss_used) "quantile_median_50" else "estimate_stratum") |>
+  group_by(catch_group) |>
+  summarise(count = sum(round(estimate_value, 0)))
+
+total_catch |>
+  gt::gt() |>
+  cols_label(
+    catch_group ~ "Catch Group",
+    count ~ "Estimated Catch"
+  )
+
+```
+:::
+
+<div class="column" style="width: 50%; padding-top: 7em;">
+
+```{r}
+
+
+effort  <- estimates_stratum |>
+  dplyr::filter(
+    estimate_category == "effort",
+    estimate_type == if (params$bss_used) "quantile_median_50" else "angler_hours_mean"
+  ) |>
+  dplyr::group_by(period) |>
+  dplyr::summarise(total = round(sum(estimate_value), 0), .groups = "drop") |>
+  dplyr::mutate(
+    period = factor(period, levels = weeks_list),   # Reorder periods
+    cumulative_sum = cumsum(total)
+  ) |>
+  dplyr::arrange(period) 
+
+# Label to match effort model
+ylab_effort <- if (params$bss_used) {
+  "Cumulative Effort (BSS model)"
+} else {
+  "Cumulative Effort (PE mean hours)"
+}
+
+max_cumsum <- max(effort$cumulative_sum, na.rm = TRUE)
+
+ggplot(effort, aes(x = period)) +
+  geom_col(aes(y = total), fill = "grey40") +
+  geom_line(aes(y = cumulative_sum, group = 1), color = "black") +
+  geom_blank(aes(y = max_cumsum)) +  # Ensure y-axis reaches the top of cumulative line
+  scale_y_continuous(
+    name = "Weekly Effort",
+    limits = c(0, max_cumsum),
+    expand = c(0,0),
+    sec.axis = sec_axis(~ ., name = "Cumulative Effort (PE mean hours)")
+  ) +
+  labs(x = "Week") +
+  theme_classic() +
+  theme(axis.text = element_text(size = 12))
+```
+
+::: text-center
+Estimated total effort using the point estimate (PE) model, grouped by section.
+:::
+
+```{r effort_sum}
+total_effort <- estimates_stratum |>
+  group_by(section_num) |>
+  filter(estimate_category == "effort") |>
+  filter(estimate_type == "angler_hours_mean") |>
+  summarise(hours = sum(round(estimate_value), 1))
+
+total_effort |>
+  gt::gt() |>
+  grand_summary_rows(
+    columns = hours,
+    fns = "sum"
+  ) |>
+  cols_label(
+    section_num ~ "Section Number",
+    hours ~ "Angler hours"
+  )
+```
+
+::: text-center
+Effort index-census bias correction factors:
+:::
+
+```{r}
+inputs_pe$paired_census_index_counts |>
+  select(section_num, angler_final, count_census, count_index, TI_expan_final) |>
+  gt(caption = "The season-long sum of paired census and index angler effort counts and corresponding bias-term ratio (TI_expan_final), indicating the magnitude and direction (postive or negative) of bias in index counts relative to census counts") |>
+  fmt_number(count_index, decimals = 0) |>
+  fmt_number(TI_expan_final, decimals = 2)
+```
+
+</div>
+
+:::
+:::
+
+------------------------------------------------------------------------
+
+::: text-center
+Total reported encounters in angler interviews to date. <br /> Values represent empirical data and are not expanded estimates of total catch.
+:::
+
+::: {.scroll-container style="overflow-y: auto; height: 500px;"}
+```{r raw_catch_interview}
+#raw catch data
+catch_table <- raw_data$interview |>
+  dplyr::left_join(raw_data$catch, by = "interview_id") |>
+  dplyr::filter(!is.na(fish_count)) |>
+  dplyr::select(catch_group, fish_count) |>
+  dplyr::group_by(catch_group) |>
+  dplyr::summarise(count = sum(fish_count))
+
+catch_table |>
+  gt::gt() |>
+  cols_label(
+    catch_group ~ "Catch group",
+    count ~ "Count"
+  )
+```
+:::

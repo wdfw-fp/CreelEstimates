@@ -1,0 +1,8 @@
+.quarto-title-block .quarto-title-banner {
+  background-image: url(https://wdfw.wa.gov/sites/default/files/wdfw_logo_horizontal_fullcolor.svg);
+  background-size: 300px;
+  background-position: right;
+  background-repeat: no-repeat;
+  padding-right: 20px;
+  background-origin: content-box;
+}

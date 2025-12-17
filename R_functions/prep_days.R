@@ -2,7 +2,6 @@
 prep_days <- function(
     date_begin, date_end,
     weekends = c("Saturday", "Sunday"),
-    holidays, #date/char vector of YYYY-MM-DD dates to categorize as "weekend" strata
     lat, long,
     period_pe,
     sections, #numeric vector of all possible sections to estimate
@@ -13,14 +12,51 @@ prep_days <- function(
   
   date_begin <- as.Date(date_begin, format="%Y-%m-%d")
   date_end <- as.Date(date_end, format="%Y-%m-%d")
-  holidays <- as.Date(holidays, format="%Y-%m-%d")
+  
+  # Create dataframe of holiday dates
+  #date/char vector of YYYY-MM-DD dates to categorize as "weekend" strata
+  years <- 2015:2040
+  
+  ## Define internal function to calculate Native American Heritage day as the day after Thanksgiving each year
+  NativeAmericanHeritageDay <- function(year) {
+    as.Date(USThanksgivingDay(year)) + lubridate::days(1)
+  }
+  
+  # define list of holidays
+  holiday_names <- list(
+    "New Year's Day" = USNewYearsDay,
+    "Martin Luther King Jr Day" = USMLKingsBirthday,
+    "President's Day" = USPresidentsDay,
+    "Memorial Day" = USMemorialDay,
+    "Juneteenth" = USJuneteenthNationalIndependenceDay,
+    "Independence Day" = USIndependenceDay,
+    "Labor Day" = USLaborDay,
+    "Veterans Day" = USVeteransDay,
+    "Thanksgiving Day" = USThanksgivingDay,
+    "Native American Heritage Day" = NativeAmericanHeritageDay,
+    "Christmas Day" = USChristmasDay
+  )
+  
+  # generate list of holiday dates
+  holiday_df <- map_df(years, function(year) {
+    map_df(names(holiday_names), function(holiday_name) {
+      tibble(
+        year = year,
+        date = as.Date(holiday_names[[holiday_name]](year)),
+        holiday = holiday_name
+      )
+    })
+  }) |> 
+  #remove 2015-2020 instances of Juneteenth, which is before the holiday existed
+  filter(!(holiday == "Juneteenth" & year < 2021)) |> 
+  arrange(date)
   
   # create tibble with dates and time period strata 
   
   days <- tibble::tibble(
     event_date = seq.Date(date_begin, date_end, by = "day"),
     day = weekdays(event_date),
-    day_type = if_else(day %in% weekends | event_date %in% holidays, "weekend", "weekday"),
+    day_type = if_else(day %in% weekends | event_date %in% holiday_df$date, "weekend", "weekday"),
     day_type_num = as.integer(c("weekend" = 1, "weekday" = 0)[day_type]),  #if_else(str_detect(day_type, "end"), 1, 0),
     #Monday to Sunday weeks, see ?strptime
     week = as.numeric(format(event_date, "%W")),
