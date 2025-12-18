@@ -94,8 +94,9 @@ stan_list <- list(
   w = days$day_type_num, # int vec; 0/1 denoting Weekday/end for model offset
   L = days$day_length,  # num vec, daylength (model offset; assumption)
   # num mat; open/closed by section; 0 defined as 1E-6 for model
-  O = days |> 
+  O = days |> # only generates closure columns for sections with at least one observation from effort census counts
     select(contains("section_")) |>
+    select(any_of(paste0("open_section_", unique(dwg_summarized$effort_census$section_num)))) |>
     mutate(across(everything(), ~if_else(., 1, 0.000001))) |> 
     as.matrix(),
     

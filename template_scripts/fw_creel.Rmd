@@ -3,21 +3,12 @@ title: "Freshwater Creel Estimates"
 date: "`r Sys.Date()`"
 params:
   project_name: "District 13"
-<<<<<<< HEAD
-  fishery_name: "Skykomish summer Chinook 2021"
-  est_date_start: "2021-05-29"
-  est_date_end: "2021-07-18"
-  est_catch_groups: !r data.frame(rbind(
-    c(species = 'Chinook', life_stage = 'Adult', fin_mark = 'UM', fate = 'Released'),
-    c(species = 'Chinook', life_stage = 'Adult', fin_mark = 'AD', fate = 'Kept')
-=======
   fishery_name: "Snohomish fall salmon 2025"
   est_date_start: "2025-08-23"
   est_date_end: "2025-10-31"
   est_catch_groups: !r data.frame(rbind(
     c(species = 'Pink', life_stage = 'Adult', fin_mark = 'UM', fate = 'Kept'),
     c(species = 'Pink', life_stage = 'Adult', fin_mark = 'UM', fate = 'Released')
->>>>>>> origin/main
     ))
   study_design: "Standard"   
   boat_type_collapse: "Yes"
@@ -63,8 +54,8 @@ library("posterior")
 library("bayesplot")
 
 # Load packages from source
-devtools::install_github("wdfw-fp/creelutils")
-library(creelutils)
+# devtools::install_github("wdfw-fp/creelutils")
+library("creelutils")
 
 ```
 
@@ -209,7 +200,7 @@ dwg$days |>
 
 ## Effort
 
-```{r creel_effort}
+```{r creel_effort, eval = FALSE}
 # Total number of effort surveys by section num, location, and type (aka tie_in_indicator; 1=census, 0=index)
 dwg$effort |>
   filter(between(event_date, as.Date(params$est_date_start), as.Date(params$est_date_end))) |> 
@@ -397,19 +388,15 @@ plot_inputs_pe_index_effort_counts(effort_index = dwg_summ$effort_index)
 
 inputs_pe <- list()
 
-<<<<<<< HEAD
 #derive a table of potentially section-anglerType-specific values to modify census expansions
 inputs_pe$census_expan <- prep_inputs_pe_census_expan(int = dwg$interview, eff = dwg$effort, census_expansion = params$census_expansion)
 
-=======
->>>>>>> origin/main
 # Calculate total days the fishery was open per strata (strata = period, day_type, and section_num)
   (inputs_pe$days_total <- 
     prep_inputs_pe_days_total(
       days = dwg$days
     ))
 
-<<<<<<< HEAD
 # depending on the types of index counts, reach the calc: ang_hrs_daily_mean_TI_expan = angler_hours_daily_mean * TI_expan_final
 # when index counts are already bank & boat, matching census counts,
 #   then angler_hour daily means are just effort index counts of anglers expanded by day length, 
@@ -441,7 +428,6 @@ if(str_detect(params$index_count_types, "Bank|Boat")) {
       census_expan = dwg_summ$census_expan,
       study_design = params$study_design
     ))
->>>>>>> origin/main
   
 # Calculate census-corrected angler effort (mean angler hours) by event_date, angler_type, and section_num
   (inputs_pe$ang_hrs_daily_mean <- 
@@ -470,7 +456,7 @@ if(str_detect(params$index_count_types, "Bank|Boat")) {
     prep_inputs_pe_df(
       angler_hours_daily_mean = inputs_pe$ang_hrs_daily_mean
     )
-<<<<<<< HEAD
+
   
 } else if(str_detect(params$index_count_types, "Vehicle|Trailer")) {
   
@@ -512,8 +498,6 @@ inputs_pe$df <- prep_inputs_pe_df(
   angler_hours_daily_mean = inputs_pe$ang_hrs_daily_mean
 )
 
-=======
->>>>>>> origin/main
 ```
 
 ## Paired census and index angler effort count surveys
@@ -696,12 +680,12 @@ for(ecg in names(inputs_bss)) {
     fit_bss(
       #model_file_name = params$bss_model_file_name,
       bss_inputs_list = inputs_bss[[ecg]],
-      n_chain = 4,  
-      n_cores = 4,
-      n_iter = 400,
-      n_warmup = 200,
+      n_chain = 2,  
+      n_cores = 2,
+      n_iter = 50,
+      n_warmup = 25,
       n_thin = 1,
-      adapt_delta = 0.8,
+      adapt_delta = 0.7,
       max_treedepth = 12,
       init = "0"
     )
@@ -1130,11 +1114,9 @@ map_df(estimates_bss, ~.x$overview) |>
 
 # Save results
 
-<<<<<<< HEAD
 ```{r write_out_results, eval = TRUE}
 # bss_overview <- estimates_bss$summary_by_catchgroup
 #write out a workbook with results from model runs 
-=======
 ```{r transform_estimates, eval = TRUE}
 #Extract and transform model estimates into a common format
 transformed_pe_data <- list()
@@ -1179,7 +1161,6 @@ if (params$export %in% c("database", "local") && !params$model_used %in% c("PE o
   
   #Combine PE and BSS and perform other transformation steps
   creel_estimates <- creelutils::transform_estimates(dwg, transformed_pe_data, transformed_bss_data)  
->>>>>>> origin/main
 
 }
 
