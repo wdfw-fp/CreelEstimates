@@ -74,13 +74,14 @@ generate_ppc_plots <- function(bss_fit, inputs_bss, ecg, dwg, params) {
     theme_bw() +
     scale_colour_manual(values = c("#F8766D", "#00BFC4"), 
                         labels = c("fit", "no fit"), drop = FALSE)
-  
-  ggsave(
-    filename = file.path(here("fishery_analyses", params$project_name, 
-                              params$fishery_name), paste0("V_I_PPC_", ecg, ".png")),
-    plot = V_I_PPC_plt, width = 6.5, height = 6.5, dpi = 300, 
-    limitsize = TRUE, scale = 1.75, units = "in"
-  )
+  # invisible(
+  # ggsave(
+  #   filename = file.path(here("fishery_analyses", params$project_name, 
+  #                             params$fishery_name), paste0("V_I_PPC_", ecg, ".png")),
+  #   plot = V_I_PPC_plt, width = 6.5, height = 6.5, dpi = 300, 
+  #   limitsize = TRUE, scale = 1.75, units = "in"
+  # )
+  # )
   
   # T_I PPC
   T_I_PPC <- extract(bss_fit)$T_I_rep |>
@@ -126,13 +127,14 @@ generate_ppc_plots <- function(bss_fit, inputs_bss, ecg, dwg, params) {
     theme_bw() +
     scale_colour_manual(values = c("#F8766D", "#00BFC4"), 
                         labels = c("fit", "no fit"), drop = FALSE)
-  
-  ggsave(
-    filename = file.path(here("fishery_analyses", params$project_name, 
-                              params$fishery_name), paste0("T_I_PPC_", ecg, ".png")),
-    plot = T_I_PPC_plt, width = 6.5, height = 6.5, dpi = 300, 
-    limitsize = TRUE, scale = 1.75, units = "in"
-  )
+  # invisible(
+  # ggsave(
+  #   filename = file.path(here("fishery_analyses", params$project_name, 
+  #                             params$fishery_name), paste0("T_I_PPC_", ecg, ".png")),
+  #   plot = T_I_PPC_plt, width = 6.5, height = 6.5, dpi = 300, 
+  #   limitsize = TRUE, scale = 1.75, units = "in"
+  # )
+  # )
   
   # E_s PPC
   E_s_PPC <- extract(bss_fit)$E_s_rep |>
@@ -185,13 +187,14 @@ generate_ppc_plots <- function(bss_fit, inputs_bss, ecg, dwg, params) {
     theme_bw() +
     scale_colour_manual(values = c("#F8766D", "#00BFC4"), 
                         labels = c("fit", "no fit"), drop = FALSE)
-  
-  ggsave(
-    filename = file.path(here("fishery_analyses", params$project_name, 
-                              params$fishery_name), paste0("E_s_PPC_", ecg, ".png")),
-    plot = E_s_PPC_plt, width = 6.5, height = 6.5, dpi = 300, 
-    limitsize = TRUE, scale = 1.75, units = "in"
-  )
+  # invisible(
+  # ggsave(
+  #   filename = file.path(here("fishery_analyses", params$project_name, 
+  #                             params$fishery_name), paste0("E_s_PPC_", ecg, ".png")),
+  #   plot = E_s_PPC_plt, width = 6.5, height = 6.5, dpi = 300, 
+  #   limitsize = TRUE, scale = 1.75, units = "in"
+  # )
+  # )
   
   # c PPC
   c_PPC <- extract(bss_fit)$c_rep |>
@@ -241,12 +244,14 @@ generate_ppc_plots <- function(bss_fit, inputs_bss, ecg, dwg, params) {
     scale_x_continuous(breaks = seq(1, 10, by = 1)) +
     theme_bw()
   
-  ggsave(
-    filename = file.path(here("fishery_analyses", params$project_name, 
-                              params$fishery_name), paste0("c_PPC_", ecg, ".png")),
-    plot = c_PPC_plt, width = 6.5, height = 6.5, dpi = 300, 
-    limitsize = TRUE, scale = 1.75, units = "in"
-  )
+  # invisible(
+  # ggsave(
+  #   filename = file.path(here("fishery_analyses", params$project_name, 
+  #                             params$fishery_name), paste0("c_PPC_", ecg, ".png")),
+  #   plot = c_PPC_plt, width = 6.5, height = 6.5, dpi = 300, 
+  #   limitsize = TRUE, scale = 1.75, units = "in"
+  # )
+  # )
   
   # V_A PPC
   V_A_PPC <- extract(bss_fit)$V_A_rep |>
@@ -292,14 +297,14 @@ generate_ppc_plots <- function(bss_fit, inputs_bss, ecg, dwg, params) {
     theme_bw() +
     scale_colour_manual(values = c("#F8766D", "#00BFC4"), 
                         labels = c("fit", "no fit"), drop = FALSE)
-  
-  ggsave(
-    filename = file.path(here("fishery_analyses", params$project_name, 
-                              params$fishery_name), paste0("V_A_PPC_", ecg, ".png")),
-    plot = V_A_PPC_plt, width = 6.5, height = 6.5, dpi = 300, 
-    limitsize = TRUE, scale = 1.75, units = "in"
-  )
-  
+  # invisible(
+  # ggsave(
+  #   filename = file.path(here("fishery_analyses", params$project_name, 
+  #                             params$fishery_name), paste0("V_A_PPC_", ecg, ".png")),
+  #   plot = V_A_PPC_plt, width = 6.5, height = 6.5, dpi = 300, 
+  #   limitsize = TRUE, scale = 1.75, units = "in"
+  # )
+  # )
   # T_A PPC
   T_A_PPC <- extract(bss_fit)$T_A_rep |>
     apply(2, \(x) quantile(x, c(0.025, 0.975))) |>
@@ -344,48 +349,53 @@ generate_ppc_plots <- function(bss_fit, inputs_bss, ecg, dwg, params) {
     theme_bw() +
     scale_colour_manual(values = c("#F8766D", "#00BFC4"), 
                         labels = c("fit", "no fit"), drop = FALSE)
-  
-  ggsave(
-    filename = file.path(here("fishery_analyses", params$project_name, 
-                              params$fishery_name), paste0("T_A_PPC_", ecg, ".png")),
-    plot = T_A_PPC_plt, width = 6.5, height = 6.5, dpi = 300, 
-    limitsize = TRUE, scale = 1.75, units = "in"
-  )
+  # invisible(
+  # ggsave(
+  #   filename = file.path(here("fishery_analyses", params$project_name, 
+  #                             params$fishery_name), paste0("T_A_PPC_", ecg, ".png")),
+  #   plot = T_A_PPC_plt, width = 6.5, height = 6.5, dpi = 300, 
+  #   limitsize = TRUE, scale = 1.75, units = "in"
+  # )
+  # )
   
   # Combined plots
-  p_combined <- gridExtra::grid.arrange(V_I_PPC_plt, T_I_PPC_plt, nrow = 2)
-  p_combined2 <- gridExtra::grid.arrange(V_A_PPC_plt, T_A_PPC_plt, nrow = 2)
+  p_combined <- gridExtra::arrangeGrob(V_I_PPC_plt, T_I_PPC_plt, nrow = 2)
+  p_combined2 <- gridExtra::arrangeGrob(V_A_PPC_plt, T_A_PPC_plt, nrow = 2)
   
-  ggsave(
-    filename = file.path(here("fishery_analyses", params$project_name, 
-                              params$fishery_name), paste0("VI_TI_PPC_", ecg, ".png")),
-    plot = p_combined, width = 6.5, height = 6.5, dpi = 300, 
-    limitsize = TRUE, scale = 1.75, units = "in"
-  )
-  
-  ggsave(
-    filename = file.path(here("fishery_analyses", params$project_name, 
-                              params$fishery_name), paste0("VA_TA_PPC_", ecg, ".png")),
-    plot = p_combined2, width = 6.5, height = 6.5, dpi = 300, 
-    limitsize = TRUE, scale = 1.75, units = "in"
-  )
+  # invisible(
+  # ggsave(
+  #   filename = file.path(here("fishery_analyses", params$project_name, 
+  #                             params$fishery_name), paste0("VI_TI_PPC_", ecg, ".png")),
+  #   plot = p_combined, width = 6.5, height = 6.5, dpi = 300, 
+  #   limitsize = TRUE, scale = 1.75, units = "in"
+  # )
+  # )
+  # 
+  # invisible(
+  # ggsave(
+  #   filename = file.path(here("fishery_analyses", params$project_name, 
+  #                             params$fishery_name), paste0("VA_TA_PPC_", ecg, ".png")),
+  #   plot = p_combined2, width = 6.5, height = 6.5, dpi = 300, 
+  #   limitsize = TRUE, scale = 1.75, units = "in"
+  # )
+  # )
   
   # Save p_fit table
-  p_fit |>
-    select(
-      Parameter,
-      Section = section,
-      Gear = gear,
-      `Fit count` = fit_count,
-      `No fit count` = no_fit_count,
-      `Total n` = total_count,
-      `2.5% Q > Pr.(obs) < 97.5% Q` = p_fit
-    ) |>
-    write.csv(
-      file.path(here("fishery_analyses", params$project_name, 
-                     params$fishery_name), paste0("p_fit_", ecg, ".csv")), 
-      row.names = FALSE
-    )
+  # p_fit |>
+  #   select(
+  #     Parameter,
+  #     Section = section,
+  #     Gear = gear,
+  #     `Fit count` = fit_count,
+  #     `No fit count` = no_fit_count,
+  #     `Total n` = total_count,
+  #     `2.5% Q > Pr.(obs) < 97.5% Q` = p_fit
+  #   ) |>
+  #   write.csv(
+  #     file.path(here("fishery_analyses", params$project_name, 
+  #                    params$fishery_name), paste0("p_fit_", ecg, ".csv")), 
+  #     row.names = FALSE
+  #   )
   
   # Return list of results
   list(

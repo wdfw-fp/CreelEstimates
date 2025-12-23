@@ -1,6 +1,6 @@
 # Function 1: Calculate p-values for posterior predictive checks
 calculate_ppc_pvalues <- function(bss_fit, inputs_bss, ecg) {
-  
+  ecg_fit <- bss_fit
   # V_I p-value
   V_I_pvalue <- extract(ecg_fit)$V_I_rep |>
     as_tibble() |>

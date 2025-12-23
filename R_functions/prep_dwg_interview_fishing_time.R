@@ -1,12 +1,13 @@
 # calcs fishing_time & total time conditional on use angler vs group counts
 
 prep_dwg_interview_fishing_time <- function(
+    params,
     dwg_interview,          # interview data from dwg filtered using start & end dates passed from params
     min_fishing_time,       # numeric passed from params to filter fishing_time at least as long as this per-person duration
     study_design,           # string passed from params denoting which study design was followed during data collection
     ...
     ){
-
+params <- params
 if(str_detect(study_design, "tandard" ) | study_design == "Drano"){ # If Study design in the YAML is specified as [S]tandard or Drano proceed with running this function...  
   
   # Define person_count_final based on study_design and, if needed, user designated person_count_type   

@@ -1,13 +1,14 @@
 #Aggregate census (tie in) effort counts, associating to closest-in-time index count.
 
 prep_dwg_effort_census <- function(
+    params,
     eff,                                # effort data from dwg filtered using start & end dates passed from params
     study_design,                       # string passed from params denoting which study design was followed during data collection
     boat_type_collapse = NA,            # string passed from params that controls whether all (potential) boat types (e.g., motor_boat, drift_boat) are collapsed (i.e., boat_type_collapse: "Yes") into a single boat type or kept separate (boat_type_collapse: "No"). 
     fish_location_determines_type = NA, # string passed from params that controls whether the observed fishing location for a given angler group during an effort count determines their angler type. 
     angler_type_kayak_pontoon = NA,     # string passed from params that controls whether a boat designated as a kayak, pontoon, or kick during an effort count or angler group interview should be designated as a boat or bank angler.
     ...){
-  
+  params <- params
   eff_cen <- dplyr::filter(eff, tie_in_indicator == 1) #Filter for effort census (aka tie-in) data
   eff_ind <- dplyr::filter(eff, tie_in_indicator == 0) #Filter for effort index data
   

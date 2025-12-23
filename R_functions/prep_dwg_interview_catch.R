@@ -2,12 +2,14 @@
 # ...iii.) creates output based on study_design and corresponding interview fields needed for angler effort calculations  
 
 prep_dwg_interview_catch <- function(
+    params,
     interview_plus_angler_types, # output from preceding functions that created calculated fishing time and defined angler_final 
     dwg_catch,                   # catch data from dwg 
     study_design,                # string passed from params denoting which study design was followed during data collection
     est_catch_groups,            # data.frame passed from params of aggregated catch groups of interest to estimate
     ...){
 
+  params <- params
   #coerce missing values to actual strings to allow params$est_catch_groups to include NAs alongside non-NA
   #to allow 'run' specification in params, add 'run' within across()
   dwg_catch_group <- 
