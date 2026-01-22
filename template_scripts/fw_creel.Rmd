@@ -408,7 +408,7 @@ inputs_pe$census_expan <- prep_inputs_pe_census_expan(int = dwg$interview, eff =
 #   and then TI-expanded counts similarly require splitting, re-leveling and rebinding census to boat/total to allow join with effort_index
 #   and THEN generating a final object with total, boat and derived-bank, including dealing with case of only-bank (e.g., Cascade)
 if(str_detect(params$index_count_types, "Bank|Boat")) {
-=======
+
 # Calculate anglers per count_type object by angler_final 
   #NOTE: these estimates are used to expand index counts of objects to number of angler; e.g., trailer counts to boat anglers)
   #NOTE: these estimate are derived using interview data and calculated as a single, season-long, weighted average
