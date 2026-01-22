@@ -366,7 +366,8 @@ gt(caption = "Total reported encounters in interviews to date for catch groups d
 # 4.) Generate summary table of "p_census" 
     (dwg_summ$census_expan <- 
       prep_dwg_census_expan(
-        eff = dwg$effort
+        eff = dwg$effort,
+        days = dwg$days
       ))  
 
 ```
