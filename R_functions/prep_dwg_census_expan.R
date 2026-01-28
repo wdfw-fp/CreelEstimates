@@ -6,10 +6,15 @@
 
 prep_dwg_census_expan <- function(
     eff, # effort data from dwg filtered using start & end dates passed from params
+    days,
     ...){
-
+  
   eff |> 
-    dplyr::filter(location_type == "Section") |> 
+    dplyr::filter( # filter to only dates specified in params and described in dwg$days object
+      location_type == "Section",
+      event_date >= min(days$event_date),
+      event_date <= max(days$event_date)
+    ) |> 
     dplyr::distinct(section_num, p_census_bank, p_census_boat) |>
     tidyr::pivot_longer(
       cols = starts_with("p_census_"), 
@@ -18,9 +23,7 @@ prep_dwg_census_expan <- function(
       values_to = "p_census"
     ) |> 
     dplyr::mutate(
-      p_census = replace_na(p_census, 1) #,
-      # census_indir = 1,
-      # cen_exp_meth = census_expansion
+      p_census = replace_na(p_census, 1)
     ) |> 
     dplyr::arrange(angler_final, section_num)
   
