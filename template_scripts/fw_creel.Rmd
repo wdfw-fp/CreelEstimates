@@ -54,8 +54,8 @@ library("posterior")
 library("bayesplot")
 
 # Load packages from source
-# devtools::install_github("wdfw-fp/creelutils")
-library("creelutils")
+devtools::install_github("wdfw-fp/creelutils")
+library(creelutils)
 
 ```
 
@@ -200,7 +200,7 @@ dwg$days |>
 
 ## Effort
 
-```{r creel_effort, eval = FALSE}
+```{r creel_effort}
 # Total number of effort surveys by section num, location, and type (aka tie_in_indicator; 1=census, 0=index)
 dwg$effort |>
   filter(between(event_date, as.Date(params$est_date_start), as.Date(params$est_date_end))) |> 
@@ -258,9 +258,6 @@ dwg$interview |>
   sub_missing()
 
 ```
-
-
-
 
 ## Catch
 
@@ -366,12 +363,10 @@ gt(caption = "Total reported encounters in interviews to date for catch groups d
 # 4.) Generate summary table of "p_census" 
     (dwg_summ$census_expan <- 
       prep_dwg_census_expan(
-        eff = dwg$effort,
-        days = dwg$days
+        eff = dwg$effort
       ))  
 
 ```
-
 
 ## Index effort counts
 
@@ -389,25 +384,11 @@ plot_inputs_pe_index_effort_counts(effort_index = dwg_summ$effort_index)
 
 inputs_pe <- list()
 
-#derive a table of potentially section-anglerType-specific values to modify census expansions
-inputs_pe$census_expan <- prep_inputs_pe_census_expan(int = dwg$interview, eff = dwg$effort, census_expansion = params$census_expansion)
-
 # Calculate total days the fishery was open per strata (strata = period, day_type, and section_num)
   (inputs_pe$days_total <- 
     prep_inputs_pe_days_total(
       days = dwg$days
     ))
-
-# depending on the types of index counts, reach the calc: ang_hrs_daily_mean_TI_expan = angler_hours_daily_mean * TI_expan_final
-# when index counts are already bank & boat, matching census counts,
-#   then angler_hour daily means are just effort index counts of anglers expanded by day length, 
-#   which are multiplied against tie-in expanded census counts of anglers by type (per section_num)
-# but when index counts are trailers & vehicles,
-#   then angler_hour daily means require first using interviews to estimate anglers_per_vhcl_trlr by angler_final total & boat 
-#   so anglers_per_vhcl_trlr can be multiplied against the trailer & vehicle counts in effort_index, releveled to boat/total
-#   and then TI-expanded counts similarly require splitting, re-leveling and rebinding census to boat/total to allow join with effort_index
-#   and THEN generating a final object with total, boat and derived-bank, including dealing with case of only-bank (e.g., Cascade)
-if(str_detect(params$index_count_types, "Bank|Boat")) {
 
 # Calculate anglers per count_type object by angler_final 
   #NOTE: these estimates are used to expand index counts of objects to number of angler; e.g., trailer counts to boat anglers)
@@ -457,48 +438,6 @@ if(str_detect(params$index_count_types, "Bank|Boat")) {
     prep_inputs_pe_df(
       angler_hours_daily_mean = inputs_pe$ang_hrs_daily_mean
     )
-
-  
-} else if(str_detect(params$index_count_types, "Vehicle|Trailer")) {
-  
-  #could skip retaining as list element and just pass as inline call in arg to next function
-  inputs_pe$interview_ang_per_vhcl_trlr <- prep_inputs_pe_int_ang_per_vhcl_trlr(dwg_summarized = dwg_summ)
-  
-  # returns season-long total of counts for paired census and index counts
-  inputs_pe$paired_census_index_counts <- prep_inputs_pe_paired_census_index_counts(
-  days = dwg$days,
-  dwg_summarized = dwg_summ,
-  interview_ang_per_vehic = inputs_pe$interview_ang_per_vhcl_trlr,
-  census_expan = inputs_pe$census_expan)
-  
-  # returns census-corrected daily mean angler hours 
-  inputs_pe$ang_hrs_daily_mean <- prep_inputs_pe_ang_hrs_vhcl_trlr(
-    days = dwg$days, 
-    dwg_summarized = dwg_summ,
-    interview_ang_per_vehic = inputs_pe$interview_ang_per_vhcl_trlr,
-    paired_census_index_counts = inputs_pe$paired_census_index_counts,
-    census_param = params$census_expansion,
-    census_expan = inputs_pe$census_expan
-    )
-  
-}
-
-#aggregate interviews per day per strata of [week/month-weekend/day-section_num-bank/boat-est_cg]
-#then multiply by TI-expanded effort estimate
-#dropping any date-section_num-angler_final-catch_groups for which only interview-based CPUE is available
-#but census-corrected effort estimates are not (various reasons why a day-section_num-angler_final hours could be NA)
-inputs_pe$daily_cpue_catch_est <- prep_inputs_pe_daily_cpue_catch_est(
-  days = dwg$days,
-  dwg_summarized = dwg_summ,
-  angler_hours_daily_mean = inputs_pe$ang_hrs_daily_mean
-)
-
-#THIS SEEMS WRONG/MISSING STRATA:  dplyr::group_by(section_num, angler_final)
-inputs_pe$df <- prep_inputs_pe_df(
-  days = dwg$days,
-  angler_hours_daily_mean = inputs_pe$ang_hrs_daily_mean
-)
-
 ```
 
 ## Paired census and index angler effort count surveys
@@ -681,12 +620,12 @@ for(ecg in names(inputs_bss)) {
     fit_bss(
       #model_file_name = params$bss_model_file_name,
       bss_inputs_list = inputs_bss[[ecg]],
-      n_chain = 2,  
-      n_cores = 2,
-      n_iter = 50,
-      n_warmup = 25,
+      n_chain = 4,  
+      n_cores = 4,
+      n_iter = 400,
+      n_warmup = 200,
       n_thin = 1,
-      adapt_delta = 0.7,
+      adapt_delta = 0.8,
       max_treedepth = 12,
       init = "0"
     )
@@ -1115,9 +1054,6 @@ map_df(estimates_bss, ~.x$overview) |>
 
 # Save results
 
-```{r write_out_results, eval = TRUE}
-# bss_overview <- estimates_bss$summary_by_catchgroup
-#write out a workbook with results from model runs 
 ```{r transform_estimates, eval = TRUE}
 #Extract and transform model estimates into a common format
 transformed_pe_data <- list()
