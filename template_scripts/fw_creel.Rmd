@@ -2,13 +2,13 @@
 title: "Freshwater Creel Report <br>`r params$fishery_name`"
 date: "`r Sys.Date()`"
 params:
-  project_name: "District 17 North"
-  fishery_name: "Humptulips salmon 2022"
-  est_date_start: "2022-09-15"
-  est_date_end: "2022-09-30"
+  project_name: "District 14"
+  fishery_name: "Skagit winter steelhead 2025"
+  est_date_start: "2025-02-15"
+  est_date_end: "2025-03-15"
   est_catch_groups: !r data.frame(rbind(
-    c(species = 'Chinook', life_stage = 'Adult', fin_mark = 'UM', fate = 'Kept'),
-    c(species = 'Chinook', life_stage = 'Adult', fin_mark = 'UM', fate = 'Released')
+    c(species = 'Steelhead', life_stage = 'Adult', fin_mark = 'UM', fate = 'Released'),
+    c(species = 'Bull Trout|Dolly Varden', life_stage = 'Adult|NA|UNK', fin_mark = 'UM|UNK|NA', fate = 'Released')
     ))
   study_design: "Standard"   
   boat_type_collapse: "Yes"
@@ -39,14 +39,13 @@ editor_options:
   chunk_output_type: console
 ---
 
-<!-- `r paste(params$fishery_name)`{.unnumbered .unlisted} -->
-
 This report is intended to communicate preliminary results of freshwater salmon and steelhead roving creel surveys, which are implemented and managed through coordination with WDFW regional staff and the Freshwater Recreational Fisheries Monitoring team of the Statewide Salmon and Steelhead Management Unit. 
 
 Please note that the data provided has not yet undergone complete Quality Assurance/Quality Control (QA/QC) procedures and may be subject to revision.
 
 # Setup code chunks
-```{r packages, include=FALSE}
+#### Load packages
+```{r packages, results='hide'}
 # Load packages
 library("cli")
 library("here")
@@ -67,8 +66,10 @@ library("digest")
 library(creelutils)
 ```
 
-```{r setup, include=FALSE}
+#### Script setup
+```{r setup, results='hide'}
 # Setup 
+
 # knitr options
 knitr::opts_chunk$set(
   # echo = FALSE,           # Hide code by default (you have code_folding anyway)
@@ -89,33 +90,48 @@ theme_set(theme_light()) #ggplot theme
 
 # Create hash for cache invalidation when params change
 param_hash <- digest::digest(params)
-```
 
-```{r load_functions, cache=TRUE, dependson="setup"}
 # Load functions (pre-package method)
 walk(list.files(here("R_functions"), full.names = T), source)
-```
 
-#### Establish fishery folder
-```{r define_fishery_folder, eval=TRUE}
-# Define directory structure
+# adjust day_length inputs
+day_length_inputs <- list()
+
+if(params$day_length_expansion == "manual"){
+# Step #1: Select general strategy for [earliest] start and [latest] end time
+    day_length_inputs$start_time<-c("manual") # enter either "sunrise" or "manual" 
+    day_length_inputs$end_time<-c("sunset")    # enter either "sunset"  or "manual" 
+  # Step #2A: If necessary, specify an offset (in hours) to the start and end times
+    # (e.g., if legal fishing occurs 1 hr. prior to sunrise & sunset, enter 1 
+    # below for both); enter 0 if no offset needed
+    day_length_inputs$start_adj<-c(1) # Specify an offset for the start time (in hours);    
+    day_length_inputs$end_adj<-c(1)   # Specify an offset for the end time (in hours);  
+  # Step #2B: If "manual" entered for "ui_start_time" or "ui_end_time", enter the
+    # earliest start and/or latest end time for a creel survey event
+    day_length_inputs$start_manual<-c("06:00:00") # Specify manual start time 
+    # (format "HH:MM:SS", e.g., 6 AM = "06:00:00")
+    day_length_inputs$end_manual<-  c() # Specify manual end time (format "HH:MM:SS")  
+}
+
+# Establish directory structure
+
+## Define directory structure
 path_components <- list(
   here("fishery_analyses"),
   here("fishery_analyses", params$project_name),
   here("fishery_analyses", params$project_name, params$fishery_name)
 )
 
-# Create directories as needed
+## Create directories as needed
 path_components |>
   walk(~ if (!dir.exists(.x)) {
     dir.create(.x, recursive = TRUE)
     message(glue("Folder(s) created: \n{.x}"))
   })
-```
 
-#### Generate analysis metadata
-```{r analysis_metadata, eval=TRUE}
-# Get current file path for analysis folder detection
+# Generate analyis metadata 
+
+## Get current file path for analysis folder detection
 current_file <- tryCatch({
   # CASE 1: Knitting
   if (!is.null(knitr::current_input())) {
@@ -128,17 +144,14 @@ current_file <- tryCatch({
   }
 }, error = function(e) NULL)
 
-# Generate or load analysis_lut (uses existing function as-is)
+## Generate or load analysis_lut (uses existing function as-is)
 generate_analysis_lut(params, current_file_path = current_file)
 
 # Display analysis metadata
 cli_alert_info("Analysis ID: {.val {analysis_lut$analysis_id}}")
 cli_alert_info("Analysis Folder: {.val {analysis_lut$analysis_folder}}")
 cli_alert_info("Identifier: {.val {analysis_lut$identifier}}")
-```
 
-#### Establish file structure for outputs and cache
-```{r establish_file_structure, cache=TRUE, cache.extra=param_hash}
 # Create analysis folder structure and configure knitr
 analysis_structure <- setup_analysis_structure(params, analysis_lut)
 
@@ -146,10 +159,20 @@ analysis_structure <- setup_analysis_structure(params, analysis_lut)
 analysis_folder_path <- analysis_structure$analysis_folder_path
 outputs_folders <- analysis_structure$outputs_folders
 cache_path <- analysis_structure$cache_path
+
+# Copy current Rmd file to analysis folder and save metadata files
+save_analysis_metadata(
+  params = params,
+  analysis_lut = analysis_lut,
+  analysis_folder_path = analysis_folder_path,
+  current_file_path = current_file
+)
 ```
 
-#### Helper functions to save plots/tables
+#### Load helper functions to save plots/tables
 ```{r helper_functions, cache=FALSE}
+# Helper functions loaded in global environment to make save functions work with knitr
+
 # Helper function to save plots to the figures folder
 save_plot <- function(plot_obj, filename, width = 10, height = 8, ...) {
   if (!exists("outputs_folders")) {
@@ -206,41 +229,10 @@ save_gt_table <- function(gt_obj, filename) {
 }
 ```
 
-#### Save analysis file and metadata
-```{r copy_rmd_and_save_metadata}
-# Copy current Rmd file to analysis folder and save metadata files
-save_analysis_metadata(
-  params = params,
-  analysis_lut = analysis_lut,
-  analysis_folder_path = analysis_folder_path,
-  current_file_path = current_file
-)
-```
-
-#### Adjust day length setting
-
-```{r day_length_inputs}
-
-day_length_inputs <- list()
-
-if(params$day_length_expansion == "manual"){
-# Step #1: Select general strategy for [earliest] start and [latest] end time
-    day_length_inputs$start_time<-c("manual") # enter either "sunrise" or "manual" 
-    day_length_inputs$end_time<-c("sunset")    # enter either "sunset"  or "manual" 
-  # Step #2A: If necessary, specify an offset (in hours) to the start and end times
-    # (e.g., if legal fishing occurs 1 hr. prior to sunrise & sunset, enter 1 below for both); enter 0 if no offset needed
-    day_length_inputs$start_adj<-c(1) # Specify an offset for the start time (in hours);    
-    day_length_inputs$end_adj<-c(1)   # Specify an offset for the end time (in hours);  
-  # Step #2B: If "manual" entered for "ui_start_time" or "ui_end_time", enter the earliest start and/or latest end time for a creel survey event
-    day_length_inputs$start_manual<-c("06:00:00") # Specify manual start time (format "HH:MM:SS", e.g., 6 AM = "06:00:00")
-    day_length_inputs$end_manual<-  c() # Specify manual end time (format "HH:MM:SS")  
-}
-```
-
 # Fetch and review data
 
 ## Download data
-```{r dwg_fetch, cache=TRUE, results='hide', dependson="establish_file_structure", cache.extra=param_hash}
+```{r dwg_fetch, cache=TRUE, results='hide', dependson="setup", cache.extra=param_hash}
 dwg <- creelutils::fetch_dwg(params$fishery_name)
 
 # Save raw data
@@ -322,10 +314,11 @@ dwg$effort |>
     style = list(cell_fill("grey70"), cell_text(weight = "bold")),
     locations = cells_body(rows = tie_in_indicator == "census")
   )
+```
 
+```{r effort_census_index_check, include=FALSE}
 # Total number of census effort surveys by water_body, event_date, and section_num; 
   ## NOTE: NAs in the "effort_type.y" column indicate that a census survey was conducted without the paired index count; if this occurs, the census data without a paired index count needs to be filter out for BSS model to run
-
 left_join(
   dwg$effort |>
     filter(tie_in_indicator == 1, between(event_date, as.Date(params$est_date_start), as.Date(params$est_date_end))) |> 
@@ -352,7 +345,9 @@ dwg$interview |>
   count(section_num, fishing_location) |>
   arrange(section_num) |>
   gt(groupname_col = "section_num", caption = "Total number of angler interviews by (analysis/final) section")
+```
 
+```{r interviews_date_section, include=FALSE}
 # Number of angler group interviews by event_date and section_num; 
 dwg$interview |>  
   filter(between(event_date, as.Date(params$est_date_start), as.Date(params$est_date_end))) |> 
@@ -640,7 +635,7 @@ map(
     est_catch_group = .x,
     period_pe = params$period_pe,
     outputs_folders = outputs_folders,
-    filename = paste0("pe_cpue_estimates_", .x)
+    filename = paste0("pe_cpue_estimates_", stringr::str_replace_all(.x, "[^[:alnum:]]", "_")) #safe name when using | operator in catch group
   )
 )
 ```
@@ -680,7 +675,7 @@ map(
     est_catch_group = .x,
     period_pe = params$period_pe,
     outputs_folders = outputs_folders,
-    filename = paste0("pe_catch_estimates_", .x))
+    filename = paste0("pe_catch_estimates_", stringr::str_replace_all(.x, "[^[:alnum:]]", "_"))) #safe name when using | operator in catch group
 )
 ```
 

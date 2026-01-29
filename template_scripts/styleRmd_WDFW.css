@@ -330,7 +330,7 @@ a:focus, button:focus {
    Table of Contents - Fix text wrapping alignment
    ============================================ */
 #TOC ul li {
-  padding-left: 0;
+  padding-left: 0.5em;
   text-indent: 0;
   /* Prevent awkward wrapping */
   overflow-wrap: break-word;

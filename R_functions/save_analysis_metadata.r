@@ -1,6 +1,6 @@
-# Save analysis metadata files (Rmd, analysis_lut, params) to analysis folder
+# Save analysis metadata files (Rmd, analysis_lut, params, css) to analysis folder
 
-#' Copy Rmd file and save metadata to analysis folder
+#' Copy Rmd file, CSS style, and save metadata to analysis folder
 #' 
 #' @param params List of parameters from Rmd YAML header
 #' @param analysis_lut Analysis lookup table
@@ -45,6 +45,25 @@ save_analysis_metadata <- function(params, analysis_lut, analysis_folder_path,
       }
     } else {
       cli::cli_alert_warning("Could not determine current file path - manual copy may be required")
+    }
+    
+    # ---------------------------------------------------------
+    # Copy CSS style file to analysis folder
+    # ---------------------------------------------------------
+    css_filename <- "styleRmd_WDFW.css"
+    # Assuming project structure: CreelEstimates/template_scripts/styleRmd_WDFW.css
+    css_source <- here::here("template_scripts", css_filename)
+    css_dest <- file.path(analysis_folder_path, css_filename)
+    
+    if (file.exists(css_source)) {
+      if (!file.exists(css_dest)) {
+        file.copy(from = css_source, to = css_dest, overwrite = FALSE)
+        cli::cli_alert_success("CSS style file copied to {.path {css_dest}}")
+      } else {
+        cli::cli_alert_info("CSS style file already exists: {.path {css_dest}}")
+      }
+    } else {
+      cli::cli_alert_warning("Could not find CSS file at {.path {css_source}}")
     }
     
     # Save analysis_lut.rds to analysis folder root with folder name
