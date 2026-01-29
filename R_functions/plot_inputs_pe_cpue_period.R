@@ -7,6 +7,11 @@ plot_inputs_pe_cpue_period <- function(
     daily_cpue_catch_est,
     est_catch_group,
     period_pe,
+    outputs_folders = NULL,
+    save = TRUE,
+    filename = NULL,
+    width = 10,
+    height = 8,
     ...
 ){
   
@@ -28,7 +33,7 @@ plot_inputs_pe_cpue_period <- function(
       .groups = "drop"
     ) |>
     left_join( # add back matching date information for stratum estimates
-      dwg$days |>
+      days |>
         select(event_date, period, year) |> 
         group_by(period) |> 
         summarise(
@@ -38,7 +43,7 @@ plot_inputs_pe_cpue_period <- function(
     )
   
   if(period_pe == "week"){
-    cpue_period |> 
+    p <- cpue_period |> 
       ggplot(aes(min_event_date, cpue_rom_period, fill = interaction(day_type, angler_final))) +
       geom_point(aes(fill = interaction(day_type, angler_final)), color = "black", pch = 21, size = 3.25) +
       scale_x_date(date_breaks = "1 week", labels = scales::date_format("%W"),
@@ -52,7 +57,7 @@ plot_inputs_pe_cpue_period <- function(
   }
   else if(period_pe == "month"){
     
-    cpue_period |> 
+    p <- cpue_periodcpue_period |> 
       ggplot(aes(min_event_date, cpue_rom_period, fill = interaction(day_type, angler_final))) +
       geom_point(aes(fill = interaction(day_type, angler_final)), color = "black", pch = 21, size = 3.25) +
       scale_x_date(date_breaks = "1 month", labels = scales::date_format("%b")) +
@@ -66,7 +71,7 @@ plot_inputs_pe_cpue_period <- function(
   }
   
   else if(period_pe == "duration"){
-    cpue_period |> 
+    p <- cpue_periodcpue_period |> 
       ggplot(aes(min_event_date, cpue_rom_period, fill = interaction(day_type, angler_final))) +
       geom_point(aes(fill = interaction(day_type, angler_final)), color = "black", pch = 21, size = 3.25) +
       scale_x_date() +
@@ -77,4 +82,48 @@ plot_inputs_pe_cpue_period <- function(
       # geom_text(aes(label = n_obs), nudge_y = 0.02, color = "black", check_overlap = TRUE, size = 2.5) + #option to see sample size
       facet_wrap(~section_num, scales = "fixed", ncol = 2, labeller = label_wrap_gen(multi_line = F))
   }
+  # Save if requested
+  if (save) {
+    # Check for outputs_folders - try parameter first, then global environment
+    if (is.null(outputs_folders)) {
+      if (!exists("outputs_folders", envir = parent.frame())) {
+        warning("outputs_folders not found. Plot not saved. Provide outputs_folders argument or ensure it exists in calling environment.")
+      } else {
+        outputs_folders <- get("outputs_folders", envir = parent.frame())
+      }
+    }
+    
+    # Only save if we have outputs_folders
+    if (!is.null(outputs_folders) && "figures" %in% names(outputs_folders)) {
+      # Ensure .png extension
+      if (!grepl("\\.(png|pdf)$", filename)) {
+        filename <- paste0(filename, ".png")
+      }
+      
+      filepath <- file.path(outputs_folders$figures, filename)
+      
+      # Save as PNG
+      ggplot2::ggsave(
+        filename = filepath,
+        plot = p,
+        width = width,
+        height = height,
+        dpi = 300,
+        ...
+      )
+      
+      # Also save as PDF
+      pdf_path <- sub("\\.png$", ".pdf", filepath)
+      ggplot2::ggsave(
+        filename = pdf_path,
+        plot = p,
+        width = width,
+        height = height,
+        ...
+      )
+      
+      cli::cli_alert_success("Plot saved: {.file {basename(filepath)}}")
+    }
+  }
+  return(p)
 }

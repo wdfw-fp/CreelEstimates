@@ -2,7 +2,7 @@
 fit_bss <- function(
   # model_file = here::here("stan_models/BSS_creel_model_02_2021-01-22.stan"),
   #model_file_name = here::here(paste0("stan_models/", model_file_name)), #BSS_creel_model_02_2021-01-22.stan"),
-  model_file_name = here::here("stan_models/SS_creel_model_02_2021-01-22_ppc.stan"),
+  model_file_name = here::here("stan_models/BSS_creel_model_02_2021-01-22_ppc.stan"),
   bss_inputs_list,
   n_chain = n_chain,  
   n_cores = n_cores,
