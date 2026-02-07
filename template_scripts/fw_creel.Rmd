@@ -185,7 +185,7 @@ save_plot <- function(plot_obj, filename, width = 10, height = 8, ...) {
     ...
   )
   
-# Also save as PDF
+  # Also save as PDF
   pdf_path <- sub("\\.png$", ".pdf", filepath)
   ggsave(
     filename = pdf_path,
@@ -200,7 +200,7 @@ save_plot <- function(plot_obj, filename, width = 10, height = 8, ...) {
   return(invisible(plot_obj))
 }
 
-# Helper function to save gt tables to the figures folder
+# Helper function to save gt tables to the figures folder (HTML ONLY - no Chrome needed)
 save_gt_table <- function(gt_obj, filename) {
   if (!exists("outputs_folders")) {
     stop("outputs_folders not defined. Run setup chunk first.")
@@ -209,15 +209,11 @@ save_gt_table <- function(gt_obj, filename) {
   # Remove extension if provided
   filename_base <- tools::file_path_sans_ext(filename)
   
-  # Save as HTML
+  # Save as HTML only (no Chrome/PNG export)
   html_path <- file.path(outputs_folders$figures, paste0(filename_base, ".html"))
   gt::gtsave(gt_obj, filename = html_path)
   
-  # Save as PNG
-  png_path <- file.path(outputs_folders$figures, paste0(filename_base, ".png"))
-  gt::gtsave(gt_obj, filename = png_path)
-  
-  cli_alert_success("Table saved: {.file {basename(filename_base)}}")
+  cli_alert_success("Table saved as HTML: {.file {basename(html_path)}}")
   
   return(invisible(gt_obj))
 }
