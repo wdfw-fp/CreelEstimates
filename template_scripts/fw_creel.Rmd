@@ -5,7 +5,7 @@ params:
   project_name: "District 14"
   fishery_name: "Skagit winter steelhead 2025"
   est_date_start: "2025-02-15"
-  est_date_end: "2025-03-15"
+  est_date_end: "2025-03-01"
   est_catch_groups: !r data.frame(rbind(
     c(species = 'Steelhead', life_stage = 'Adult', fin_mark = 'UM', fate = 'Released'),
     c(species = 'Bull Trout|Dolly Varden', life_stage = 'Adult|NA|UNK', fin_mark = 'UM|UNK|NA', fate = 'Released')
@@ -45,7 +45,7 @@ Please note that the data provided has not yet undergone complete Quality Assura
 
 # Setup code chunks
 #### Load packages
-```{r packages, results='hide'}
+```{r packages, results='hide', message=FALSE, warning=FALSE}
 # Load packages
 library("cli")
 library("here")
@@ -67,19 +67,15 @@ library(creelutils)
 ```
 
 #### Script setup
-```{r setup, results='hide'}
+```{r setup, results='hide', message=FALSE, warning=FALSE}
 # Setup 
-
-# knitr options
+# knitr options - MINIMAL initial setup (will be overridden by setup_analysis_structure)
 knitr::opts_chunk$set(
-  # echo = FALSE,           # Hide code by default (you have code_folding anyway)
   warning = FALSE,
   message = FALSE,
-  cache = FALSE,          # Default to no caching (opt-in per chunk)
+  cache = FALSE,          # Will be set to TRUE by setup_analysis_structure
   fig.width = 10,
-  fig.height = 8,
-  fig.path = "figures/",  # Store figures in organized folder
-  cache.path = "cache/"   # Store cache in organized folder
+  fig.height = 8
 )
 
 # Package settings
@@ -96,7 +92,6 @@ walk(list.files(here("R_functions"), full.names = T), source)
 
 # adjust day_length inputs
 day_length_inputs <- list()
-
 if(params$day_length_expansion == "manual"){
 # Step #1: Select general strategy for [earliest] start and [latest] end time
     day_length_inputs$start_time<-c("manual") # enter either "sunrise" or "manual" 
@@ -114,7 +109,6 @@ if(params$day_length_expansion == "manual"){
 }
 
 # Establish directory structure
-
 ## Define directory structure
 path_components <- list(
   here("fishery_analyses"),
@@ -130,7 +124,6 @@ path_components |>
   })
 
 # Generate analyis metadata 
-
 ## Get current file path for analysis folder detection
 current_file <- tryCatch({
   # CASE 1: Knitting
@@ -153,6 +146,7 @@ cli_alert_info("Analysis Folder: {.val {analysis_lut$analysis_folder}}")
 cli_alert_info("Identifier: {.val {analysis_lut$identifier}}")
 
 # Create analysis folder structure and configure knitr
+# THIS will set the cache.path and fig.path correctly
 analysis_structure <- setup_analysis_structure(params, analysis_lut)
 
 # Extract paths for use in subsequent chunks

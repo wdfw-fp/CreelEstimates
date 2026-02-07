@@ -38,23 +38,18 @@ setup_analysis_structure <- function(params, analysis_lut) {
   })
   
   # Define and create separate cache location
-  cache_path <- here::here(
-    "fishery_analyses", 
-    params$project_name, 
-    params$fishery_name, 
-    analysis_lut$analysis_folder, 
-    ".cache"
-  )
+  cache_path <- file.path(analysis_folder_path, ".cache")
   
   if (!dir.exists(cache_path)) {
     dir.create(cache_path, recursive = TRUE)
   }
   
   # Set knitr cache to SEPARATE location from analysis outputs
+  # Use paste0 with trailing slash for cross-platform compatibility
   knitr::opts_chunk$set(
     cache = TRUE,
-    cache.path = file.path(cache_path, "/"),
-    fig.path = file.path(outputs_folders$figures, "/"),
+    cache.path = paste0(cache_path, .Platform$file.sep),
+    fig.path = paste0(outputs_folders$figures, .Platform$file.sep),
     fig.keep = "all",
     dev = c("png", "pdf"),
     dpi = 300,
