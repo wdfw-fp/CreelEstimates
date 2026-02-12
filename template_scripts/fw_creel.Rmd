@@ -2,14 +2,13 @@
 title: "Freshwater Creel Report <br>`r params$fishery_name`"
 date: "`r Sys.Date()`"
 params:
-  project_name: "District 14"
-  fishery_name: "Skagit winter steelhead 2025"
-  est_date_start: "2025-02-15"
-  est_date_end: "2025-03-01"
+  project_name: "District 11"
+  fishery_name: "Nisqually salmon 2022"
+  est_date_start: "2022-09-01"
+  est_date_end: "2022-09-15"
   est_catch_groups: !r data.frame(rbind(
-    c(species = 'Steelhead', life_stage = 'Adult', fin_mark = 'UM', fate = 'Released'),
-    c(species = 'Bull Trout|Dolly Varden', life_stage = 'Adult|NA|UNK', fin_mark = 'UM|UNK|NA', fate = 'Released')
-    ))
+    c(species = 'Chinook', life_stage = 'Adult', fin_mark = 'UM', fate = 'Released'),
+    c(species = 'Chinook', life_stage = 'Adult', fin_mark = 'AD', fate = 'Kept')))
   study_design: "Standard"   
   boat_type_collapse: "Yes"
   fish_location_determines_type: "No"
@@ -25,6 +24,7 @@ params:
   data_grade: "provisional"
   export: "local"
   export_tables: "both"
+  enable_cache: FALSE  # Set to FALSE to disable all caching (useful when cached files become too large)
 output:
   html_document:
     toc: true
@@ -73,7 +73,7 @@ library(creelutils)
 knitr::opts_chunk$set(
   warning = FALSE,
   message = FALSE,
-  cache = FALSE,          # Will be set to TRUE by setup_analysis_structure
+  cache = FALSE,          # Will be set based on params$enable_cache
   fig.width = 10,
   fig.height = 8
 )
@@ -86,6 +86,13 @@ theme_set(theme_light()) #ggplot theme
 
 # Create hash for cache invalidation when params change
 param_hash <- digest::digest(params)
+
+# Display cache status
+if (params$enable_cache) {
+  cli_alert_success("Cache is ENABLED - cached results will be reused when possible")
+} else {
+  cli_alert_warning("Cache is DISABLED - all chunks will be re-executed")
+}
 
 # Load functions (pre-package method)
 walk(list.files(here("R_functions"), full.names = T), source)
@@ -165,6 +172,7 @@ save_analysis_metadata(
 
 #### Load helper functions to save plots/tables
 ```{r helper_functions, cache=FALSE}
+# Note: This chunk always has cache=FALSE to ensure functions are loaded fresh
 # Helper functions loaded in global environment to make save functions work with knitr
 
 # Helper function to save plots to the figures folder
@@ -222,7 +230,7 @@ save_gt_table <- function(gt_obj, filename) {
 # Fetch and review data
 
 ## Download data
-```{r dwg_fetch, cache=TRUE, results='hide', dependson="setup", cache.extra=param_hash}
+```{r dwg_fetch, cache=params$enable_cache, results='hide', dependson="setup", cache.extra=param_hash}
 dwg <- creelutils::fetch_dwg(params$fishery_name)
 
 # Save raw data
@@ -363,14 +371,125 @@ gt(caption = "Total reported encounters in interviews to date for catch groups d
 
 ## Manual data edits (if needed)
 
-```{r manual_edits, results = 'hide'}
+```{r manual_edits, eval=TRUE}
 # If needed, manually edit/filter the creel data imported from dwg; be sure to include an explanation of each edit
 
+dwg$effort <- dwg$effort |>
+  filter(!section_num == 1) |> 
+  filter(count_sequence <= 4) |> # handful of 4th index counts that don't align with bulk of the dataset
+  mutate(
+    section_num = case_when(
+    section_num == 2 ~ 1,
+    section_num %in% c(3,4) ~ 2
+    ),
+    p_census_bank = 1, #coerce all rows to 1 - update 4/25/24 fixed in database so shouldn't need this 
+    p_census_boat = 1
+  ) 
+
+# perform the same section reassignment and aggregation as above for the effort data
+
+# instances where vehicle count > angler count appear to be a problem for the BSS model (also logicall problematic), removing those records for now
+# but should be reviewed in QA/QC 
+
+## 4/25/2024 check to ensuer that angler_count is the field we want to use (vs. total group count), check and see what field is being used in the prep_bss_inputs function !!
+
+dwg$interview <- dwg$interview |>
+  filter(!section_num == 1) |> # remove section 1 (only 4 interviews)
+  mutate(
+    section_num = case_when(
+    section_num == 2 ~ 1,# make section 2 section 1
+    section_num %in% c(3,4) ~ 2 # aggregate section 3,4 to section 2
+    ),
+    p_census_bank = 1, #coerce all rows to 1
+    p_census_boat = 1 #coerce all rows to 1
+    # sumvehicletrailer = rowSums(across(c(vehicle_count, trailer_count))) #add vehicle and trailer counts / interview
+  ) |> 
+  rowwise() |> 
+  mutate(cond = vehicle_count > angler_count) |> # mutate new boolean field to show if an interview meets condition of vehicles   
+  ungroup() |> 
+  filter(cond == FALSE) # removing interviews where vehicle count > angler count 
+  
+
+# Aggregating sections 2 and 3 necessitates dropping section 3 from closures, since 3 is no longer present in the effort and interview data
+
+dwg$closures <- dwg$closures |>
+  filter(!section_num %in% c(3,4))
+
+
+## check if this is necessary !
+# |> 
+#   filter(!sumvehicletrailer == 0) |>  # filter out interviews with no vehicles or trailers (causing error fitting bss model)
+#   select(-sumvehicletrailer)
+
+
+dwg$days <- dwg$days |>
+  select(!c(open_section_3, open_section_4))
+
+# dwg$days <- dwg$days |>
+#   select(!c(open_section_2, open_section_3)) 
+
+# add +1 dummy vehicle counts to trailer counts
+
+columns_to_keep <- setdiff(names(dwg$effort), c("count_type", "count_quantity"))
+
+
+census <- dwg$effort |> 
+  filter(tie_in_indicator == 1)
+  
+index_no_trailers <- dwg$effort |> 
+  filter(tie_in_indicator == 0) |> 
+   pivot_wider(
+    id_cols = all_of(columns_to_keep),
+    names_from = count_type,
+    values_from = count_quantity
+  ) |> 
+  filter(
+    `Trailers Only` == 0
+  ) |> 
+  pivot_longer(cols = c(`Vehicle Only`,`Trailers Only`), names_to = "count_type", values_to = "count_quantity")
+
+
+# filter to index counts and trailer counts > 0
+index_nonzero_trailers <- dwg$effort |>
+  filter(tie_in_indicator == 0) |> 
+  pivot_wider(
+    id_cols = all_of(columns_to_keep),
+    names_from = count_type,
+    values_from = count_quantity
+  ) |> 
+    filter(
+    `Trailers Only` > 0
+  ) |> 
+  mutate(
+    `Vehicle Only` = `Vehicle Only`+ `Trailers Only`
+  ) |> 
+  pivot_longer(cols = c(`Vehicle Only`,`Trailers Only`), names_to = "count_type", values_to = "count_quantity")
+
+dwg$effort <- index_nonzero_trailers |> 
+  rbind(index_no_trailers, census) |> 
+  arrange(event_date, count_sequence)
+
+```
+
+
+```{r aggregating sections 1 and 2, eval=TRUE}
+
+## aggregating all data to single section
+
+dwg$effort <- dwg$effort |>
+  mutate(section_num = 1)
+
+dwg$interview <- dwg$interview |>
+  mutate(section_num = 1)
+
+dwg$days <- dwg$days |>  select(-open_section_2)
+
+dwg$closures <- dwg$closures |> filter(!section_num == 2)
 ```
 
 ## Shared data aggregation
 
-```{r prep_dwg_summ_shared_summary_objects, results = 'hide', cache=TRUE, dependson="dwg_fetch", cache.extra=param_hash}
+```{r prep_dwg_summ_shared_summary_objects, results = 'hide', cache=params$enable_cache, dependson="dwg_fetch", cache.extra=param_hash}
 # Create blank list that will be used to attach the following three datasets
   dwg_summ <- list() #intermediate objects wrangled from creel list elements
 
@@ -468,7 +587,7 @@ saveRDS(dwg_summ, file.path(outputs_folders$inputs, "dwg_summ.rds"))
 
 ## Plot of index effort counts
 
-```{r plot_index_effort_counts, cache=TRUE, dependson="prep_dwg_summ_shared_summary_objects", fig.cap= "Index effort counts for each count sequence on surveyed days within the monitoring period."}
+```{r plot_index_effort_counts, cache=params$enable_cache, dependson="prep_dwg_summ_shared_summary_objects", fig.cap= "Index effort counts for each count sequence on surveyed days within the monitoring period."}
 # plot of index effort counts faceted by section and count_type per count sequence and day 
 
 plot_inputs_pe_index_effort_counts(
@@ -483,7 +602,7 @@ plot_inputs_pe_index_effort_counts(
 
 ### Create PE input object
 
-```{r prep_inputs_pe, results = 'hide', cache=TRUE, dependson="prep_dwg_summ_shared_summary_objects", cache.extra=param_hash}
+```{r prep_inputs_pe, results = 'hide', cache=params$enable_cache, dependson="prep_dwg_summ_shared_summary_objects", cache.extra=param_hash}
 
 inputs_pe <- list()
 
@@ -548,7 +667,7 @@ saveRDS(inputs_pe, file.path(outputs_folders$inputs, "inputs_pe.rds"))
 
 ### Paired census and index angler effort count plot
 
-```{r view_paired_census_index_counts, fig.cap= "Scatterplot displaying the effort bias-term ratio (TI_expan_final) for each section and angler type (angler_final), representing the total count from census surveys divided by the total count from index surveys. A 1:1 relationship is shown by the dashed line.", results = 'hide', cache=TRUE, dependson=c("establish_file_structure", "prep_inputs_pe")}
+```{r view_paired_census_index_counts, fig.cap= "Scatterplot displaying the effort bias-term ratio (TI_expan_final) for each section and angler type (angler_final), representing the total count from census surveys divided by the total count from index surveys. A 1:1 relationship is shown by the dashed line.", results = 'hide', cache=params$enable_cache, dependson=c("establish_file_structure", "prep_inputs_pe")}
 
 # table view of census / index surveys and resulting bias term ratio 
 inputs_pe$paired_census_index_counts |> 
@@ -565,7 +684,7 @@ plot_inputs_pe_census_vs_index(census_TI_expan = inputs_pe$paired_census_index_c
 
 ### Generate PE estimates
 
-```{r estimates_pe, cache=TRUE, dependson="prep_inputs_pe", cache.extra=param_hash}
+```{r estimates_pe, cache=params$enable_cache, dependson="prep_inputs_pe", cache.extra=param_hash}
 estimates_pe <- list() 
 
 estimates_pe$effort <- 
@@ -601,7 +720,7 @@ estimates_pe$effort |>
   gt(caption = paste("Estimated effort (angler hours) by fishing section from", params$est_date_start, "to", params$est_date_end))
 ```
 
-```{r plot_pe_effort_estimates, fig.cap= "Estimated effort (angler-hours) grouped by time strata, section and angler type (angler_final).", cache=TRUE, dependson=c("establish_file_structure", "estimates_pe"), cache.extra=param_hash}
+```{r plot_pe_effort_estimates, fig.cap= "Estimated effort (angler-hours) grouped by time strata, section and angler type (angler_final).", cache=params$enable_cache, dependson=c("establish_file_structure", "estimates_pe"), cache.extra=param_hash}
 
 # barplot of effort estimates by time stratum, section, and angler type
 plot_est_pe_effort(
@@ -613,7 +732,7 @@ plot_est_pe_effort(
 
 ### Catch rate (CPUE) estimates
 
-```{r pe_cpue_period_plots, results = 'hide',  cache=TRUE, dependson= c("prep_inputs_pe","dwg_fetch"), cache.extra=param_hash}
+```{r pe_cpue_period_plots, results = 'hide',  cache=params$enable_cache, dependson= c("prep_inputs_pe","dwg_fetch"), cache.extra=param_hash}
 # plot of catch rate estimates by catch group, time stratum, section, and angler type
 unique(na.omit(inputs_pe$daily_cpue_catch_est$est_cg)) |> 
 set_names() |> 
@@ -655,7 +774,7 @@ map(
   )
 ```
 
-```{r plot_pe_catch_estimates, results = 'hide', cache=TRUE, dependson="estimates_pe", cache.extra=param_hash}
+```{r plot_pe_catch_estimates, results = 'hide', cache=params$enable_cache, dependson="estimates_pe", cache.extra=param_hash}
 # barplot of catch estimates by catch group, time stratum, section, and angler type
 unique(na.omit(estimates_pe$catch$est_cg)) |> 
 set_names() |> 
@@ -673,7 +792,7 @@ map(
 
 ### Create BSS input object 
 
-```{r prep_inputs_bss, eval=TRUE, cache=TRUE, dependson="prep_dwg_summ_shared_summary_objects", cache.extra=param_hash}
+```{r prep_inputs_bss, eval=TRUE, cache=params$enable_cache, dependson="prep_dwg_summ_shared_summary_objects", cache.extra=param_hash}
 #either a single element list for a single catch_group
 #or a list of bss-input-lists, one for each catch_group
 inputs_bss <- 
@@ -714,7 +833,7 @@ saveRDS(inputs_bss, file.path(outputs_folders$inputs, "inputs_bss.rds"))
 
 ### Generate BSS estimates
 
-```{r estimates_bss, eval=TRUE, results='hide', fig.show='hide', cache=TRUE, dependson=c("establish_file_structure", "prep_inputs_bss"), cache.extra=param_hash}
+```{r estimates_bss, eval=TRUE, results='hide', fig.show='hide', cache=params$enable_cache, dependson=c("establish_file_structure", "prep_inputs_bss"), cache.extra=param_hash}
 #should work for either single or multiple catch_group 
 
 # ---- CONFIGURATION ----
@@ -1243,7 +1362,7 @@ purrr::iwalk(estimates_bss, ~{
 
 # Save results
 
-```{r transform_estimates, eval = TRUE, results='hide', cache=TRUE, dependson="estimates_bss", cache.extra=param_hash}
+```{r transform_estimates, eval = TRUE, results='hide', cache=params$enable_cache, dependson="estimates_bss", cache.extra=param_hash}
 #Extract and transform model estimates into a common format
 transformed_pe_data <- list()
 transformed_bss_data <- list()
