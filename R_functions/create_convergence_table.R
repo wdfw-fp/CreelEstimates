@@ -36,6 +36,5 @@ create_convergence_table <- function(draws_summary, ecg) {
       "5%" = q5,
       "95%" = q95
     ) |> 
-    arrange(desc(rhat)) |> 
-    slice_head(n = 15)
+    arrange(desc(rhat))
 }

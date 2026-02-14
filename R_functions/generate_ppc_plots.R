@@ -1,6 +1,52 @@
 # Function 2: Generate PPC plots and interval coverage statistics
 generate_ppc_plots <- function(bss_fit, inputs_bss, ecg, dwg, params) {
   
+  # Check for missing values in all replicate data
+  extracted_data <- extract(bss_fit)
+  missing_params <- character()
+  
+  if (any(is.na(extracted_data$V_I_rep)) || any(is.nan(extracted_data$V_I_rep))) {
+    missing_params <- c(missing_params, "V_I_rep")
+  }
+  if (any(is.na(extracted_data$T_I_rep)) || any(is.nan(extracted_data$T_I_rep))) {
+    missing_params <- c(missing_params, "T_I_rep")
+  }
+  if (any(is.na(extracted_data$E_s_rep)) || any(is.nan(extracted_data$E_s_rep))) {
+    missing_params <- c(missing_params, "E_s_rep")
+  }
+  if (any(is.na(extracted_data$c_rep)) || any(is.nan(extracted_data$c_rep))) {
+    missing_params <- c(missing_params, "c_rep")
+  }
+  if (any(is.na(extracted_data$V_A_rep)) || any(is.nan(extracted_data$V_A_rep))) {
+    missing_params <- c(missing_params, "V_A_rep")
+  }
+  if (any(is.na(extracted_data$T_A_rep)) || any(is.nan(extracted_data$T_A_rep))) {
+    missing_params <- c(missing_params, "T_A_rep")
+  }
+  
+  # If any missing values found, print warning and return NULL
+  if (length(missing_params) > 0) {
+    warning(
+      sprintf(
+        paste0(
+          "\n=== MISSING VALUES DETECTED ===\n",
+          "Catch group: %s\n",
+          "Parameters with missing/NaN values: %s\n",
+          "Skipping PPC plot generation for this catch group.\n",
+          "RECOMMENDATION: Check convergence diagnostics (Rhat, ESS, trace plots) for this model fit.\n",
+          "Missing values may indicate:\n",
+          "  - Model convergence issues\n",
+          "  - Numerical instability in sampling\n",
+          "  - Problematic parameter combinations\n",
+          "================================\n"
+        ),
+        ecg,
+        paste(missing_params, collapse = ", ")
+      )
+    )
+    return(NULL)
+  }
+  
   # Get sections reference
   sections <- dwg$effort |>
     filter(location_type == "Section") |>
@@ -34,7 +80,7 @@ generate_ppc_plots <- function(bss_fit, inputs_bss, ecg, dwg, params) {
   }
   
   # V_I PPC
-  V_I_PPC <- extract(bss_fit)$V_I_rep |>
+  V_I_PPC <- extracted_data$V_I_rep |>
     apply(2, \(x) quantile(x, c(0.025, 0.975))) |>
     t() |>
     as_tibble() |>
@@ -84,7 +130,7 @@ generate_ppc_plots <- function(bss_fit, inputs_bss, ecg, dwg, params) {
   # )
   
   # T_I PPC
-  T_I_PPC <- extract(bss_fit)$T_I_rep |>
+  T_I_PPC <- extracted_data$T_I_rep |>
     apply(2, \(x) quantile(x, c(0.025, 0.975))) |>
     t() |>
     as_tibble() |>
@@ -137,7 +183,7 @@ generate_ppc_plots <- function(bss_fit, inputs_bss, ecg, dwg, params) {
   # )
   
   # E_s PPC
-  E_s_PPC <- extract(bss_fit)$E_s_rep |>
+  E_s_PPC <- extracted_data$E_s_rep |>
     apply(2, \(x) quantile(x, c(0.025, 0.975))) |>
     t() |>
     as_tibble() |>
@@ -197,7 +243,7 @@ generate_ppc_plots <- function(bss_fit, inputs_bss, ecg, dwg, params) {
   # )
   
   # c PPC
-  c_PPC <- extract(bss_fit)$c_rep |>
+  c_PPC <- extracted_data$c_rep |>
     apply(2, \(x) quantile(x, c(0.025, 0.975))) |>
     t() |>
     as_tibble() |>
@@ -254,7 +300,7 @@ generate_ppc_plots <- function(bss_fit, inputs_bss, ecg, dwg, params) {
   # )
   
   # V_A PPC
-  V_A_PPC <- extract(bss_fit)$V_A_rep |>
+  V_A_PPC <- extracted_data$V_A_rep |>
     apply(2, \(x) quantile(x, c(0.025, 0.975))) |>
     t() |>
     as_tibble() |>
@@ -306,7 +352,7 @@ generate_ppc_plots <- function(bss_fit, inputs_bss, ecg, dwg, params) {
   # )
   # )
   # T_A PPC
-  T_A_PPC <- extract(bss_fit)$T_A_rep |>
+  T_A_PPC <- extracted_data$T_A_rep |>
     apply(2, \(x) quantile(x, c(0.025, 0.975))) |>
     t() |>
     as_tibble() |>

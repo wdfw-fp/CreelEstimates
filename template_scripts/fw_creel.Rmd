@@ -2,13 +2,13 @@
 title: "Freshwater Creel Report <br>`r params$fishery_name`"
 date: "`r Sys.Date()`"
 params:
-  project_name: "District 11"
-  fishery_name: "Nisqually salmon 2022"
-  est_date_start: "2022-09-01"
-  est_date_end: "2022-09-15"
+  project_name: "District 14"
+  fishery_name: "Skagit fall salmon 2024"
+  est_date_start: "2024-09-01"
+  est_date_end: "2024-09-15"
   est_catch_groups: !r data.frame(rbind(
-    c(species = 'Chinook', life_stage = 'Adult', fin_mark = 'UM', fate = 'Released'),
-    c(species = 'Chinook', life_stage = 'Adult', fin_mark = 'AD', fate = 'Kept')))
+    c(species = 'Coho', life_stage = 'Adult', fin_mark = 'UM', fate = 'Released'),
+    c(species = 'Coho', life_stage = 'Adult', fin_mark = 'AD', fate = 'Kept')))
   study_design: "Standard"   
   boat_type_collapse: "Yes"
   fish_location_determines_type: "No"
@@ -24,7 +24,7 @@ params:
   data_grade: "provisional"
   export: "local"
   export_tables: "both"
-  enable_cache: FALSE  # Set to FALSE to disable all caching (useful when cached files become too large)
+  enable_cache: TRUE  # Set to FALSE to disable all caching (useful when cached files become too large)
 output:
   html_document:
     toc: true
@@ -44,6 +44,16 @@ This report is intended to communicate preliminary results of freshwater salmon 
 Please note that the data provided has not yet undergone complete Quality Assurance/Quality Control (QA/QC) procedures and may be subject to revision.
 
 # Setup code chunks
+#### Report parameters
+```{r display_params, results='asis', echo=FALSE}
+cat('<details class="params-section">\n')
+cat("<summary>Click to view report parameters</summary>\n\n")
+cat("```yaml\n")
+cat(yaml::as.yaml(params))
+cat("```\n\n")
+cat("</details>\n")
+```
+
 #### Load packages
 ```{r packages, results='hide', message=FALSE, warning=FALSE}
 # Load packages
@@ -64,6 +74,37 @@ library("digest")
 # Load packages from source
 # devtools::install_github("wdfw-fp/creelutils")
 library(creelutils)
+```
+
+#### Selected catch groups
+The following catch groups of fish were selected for generating catch estimates. 
+```{r, echo = FALSE}
+params$est_catch_groups |> 
+  mutate(`#` = row_number()) |> 
+  relocate(`#`) |> 
+  gt() |> 
+  cols_label(
+    species = "Species",
+    life_stage = "Life stage",
+    fin_mark = "Mark status",
+    fate = "Fate"
+  )
+```
+
+#### Fishery dates
+
+```{r, eval=params$report_type %in% c("detailed","summary")}
+tibble(
+  `Start date`= format(as.Date(params$est_date_start), "%m/%d/%Y"),
+  `End date` = format(as.Date(params$est_date_end), "%m/%d/%Y")
+) |> 
+  gt() |> 
+tab_header(
+    title = "Start and end dates for creel survey data used in this report.") |>
+  tab_options(
+    heading.title.font.size = px(14),
+    table.font.color = "black"
+  )
 ```
 
 #### Script setup
@@ -255,15 +296,16 @@ dwg$days <- prep_days(
 saveRDS(dwg$days, file.path(outputs_folders$inputs, "dwg_days.rds"))
 ```
 
-## Review fishery sections
-
+## River sections
+Description of the spatial units of the creel survey. Each is listed by section number with a description of their downstream and upstream extent within the river system.
 ```{r table_sections}
 # Summary table of water_body, section_nums, and locations for a given fishery
 dwg$effort |> 
   filter(location_type == "Section") |> 
   distinct(water_body, section_num, location) |> 
   arrange(section_num) |>
-  select(`Water Body` = water_body, `Section Number` = section_num, `Location description` = location) |> gt()
+  select(`Water Body` = water_body, `Section Number` = section_num, `Location description` = location) |> 
+  gt()
 ```
 
 ## Review days and sampling periods
@@ -284,35 +326,45 @@ dwg$effort |>
 
 ```
 
-```{r period_dates_reference, eval=FALSE}
-# Summary table of dates for each period (time_strata)
-dwg$days |> 
-    group_by(period) |> 
-    summarise(
-      min_event_date = min(event_date),
-      max_event_date = max(event_date)) |> 
-  gt::gt(caption = "Reference table containing the first and last date within each time stratum period in the monitoring period.")
-```
-
 ## Summary table of effort counts
 
 ```{r creel_effort}
-# Total number of effort surveys by section num, location, and type (aka tie_in_indicator; 1=census, 0=index)
+
 dwg$effort |>
-  filter(between(event_date, as.Date(params$est_date_start), as.Date(params$est_date_end))) |> 
-  distinct(section_num, location, event_date, tie_in_indicator, count_sequence) |> 
-  count(section_num, location, tie_in_indicator) |> 
-  mutate(tie_in_indicator = case_when(
-    tie_in_indicator == 1 ~ "census",
-    tie_in_indicator == 0 ~ "index"
+  filter(between(event_date, as.Date(params$est_date_start), as.Date(params$est_date_end))) |>
+  distinct(section_num, location, event_date, tie_in_indicator, count_sequence) |>
+  count(section_num, location, tie_in_indicator) |>
+  mutate(
+    tie_in_indicator = case_when(
+      tie_in_indicator == 1 ~ "census",
+      tie_in_indicator == 0 ~ "index"
+      ),
+    section_label = paste("Section", section_num),
+    location = case_when(
+    tie_in_indicator == "census" ~ paste(section_label, "-", location),
+    TRUE ~ location
   )) |>
-  arrange(section_num, tie_in_indicator, location) |> 
-  gt(groupname_col = "section_num", rowname_col = "location") |> 
+  arrange(section_num, tie_in_indicator, location) |>
+  select(-section_label) |> 
+  gt() |>
+tab_header(
+    title = "The sum of distinct effort surveys by section number, location, and survey type. Survey type options were index and census effort counts. Census surveys were direct counts of anglers. Index surveys were indirect counts, where objects assumed to represent anglers (e.g., vehicles and boat trailers) are counted at a standardized set of access locations in the fishery area.") |>
+  tab_options(
+    heading.title.font.size = px(14),
+    table.font.color = "black"
+  ) |>   
+  cols_hide(columns = "section_num") |>   # hide the group column itself
   tab_style(
-    style = list(cell_fill("grey70"), cell_text(weight = "bold")),
+    style = list(cell_fill("grey90"), cell_text(weight = "bold", color = "black")),
     locations = cells_body(rows = tie_in_indicator == "census")
+  ) |> 
+  cols_label(
+    location = "Location",
+    tie_in_indicator = "Survey Type",
+    n = "Effort Counts"
   )
 ```
+
 
 ```{r effort_census_index_check, include=FALSE}
 # Total number of census effort surveys by water_body, event_date, and section_num; 
@@ -342,7 +394,28 @@ dwg$interview |>
   filter(between(event_date, as.Date(params$est_date_start), as.Date(params$est_date_end))) |>
   count(section_num, fishing_location) |>
   arrange(section_num) |>
-  gt(groupname_col = "section_num", caption = "Total number of angler interviews by (analysis/final) section")
+  gt() |> 
+  tab_header(
+    title = "The sum of the number of angler interviews completed by surevey staff grouped by river section."
+  ) |>
+  tab_options(
+    heading.title.font.size = px(14),
+    table.font.color = "black"
+  ) |> 
+  grand_summary_rows(
+    fns = "sum",
+    columns = "n",
+    missing_text = ""
+  ) |> 
+tab_style(
+    style = cell_text(color = "black"),
+    locations = cells_title()
+  ) |> 
+  cols_label(
+    section_num = "Section number",
+    fishing_location = "Desciption",
+    n = "Count"
+  )
 ```
 
 ```{r interviews_date_section, include=FALSE}
@@ -366,7 +439,22 @@ dwg$catch |>
   filter(between(event_date, as.Date(params$est_date_start), as.Date(params$est_date_end))) |> 
   group_by(catch_group) |> 
   summarise(fish_count = sum(fish_count), .groups = "drop") |> 
-gt(caption = "Total reported encounters in interviews to date for catch groups defined as individual combinations of species, life state, fin mark, and fate")
+gt() |>
+  tab_header(
+    title = "The sum of reported catches of all species reported in interviews, Catch group was defined as individual combinations of species, life stage, fin mark, and fate."
+  ) |>
+  tab_options(
+    heading.title.font.size = px(14),
+    table.font.color = "black"
+  ) |> 
+tab_style(
+    style = cell_text(color = "black"), # Note: cells_caption(), not cells_source_notes()
+    locations = cells_title()
+  ) |> 
+  cols_label(
+    catch_group = "Catch group",
+    fish_count = "Count"
+  )
 ```
 
 ## Manual data edits (if needed)
@@ -477,16 +565,28 @@ saveRDS(dwg_summ, file.path(outputs_folders$inputs, "dwg_summ.rds"))
 
 ## Plot of index effort counts
 
-```{r plot_index_effort_counts, cache=params$enable_cache, dependson="prep_dwg_summ_shared_summary_objects", fig.cap= "Index effort counts for each count sequence on surveyed days within the monitoring period."}
+```{r plot_index_effort_counts, cache=params$enable_cache, dependson="prep_dwg_summ_shared_summary_objects", fig.cap= "Index effort counts for each count sequence on surveyed days within the monitoring period. Index counts represent the sum of counts completed at each sampling site during a drive around effort count."}
 # plot of index effort counts faceted by section and count_type per count sequence and day 
+
+# rename to items actually counted 
+summarised_index_counts <- dwg_summ$effort_index |>
+  mutate(
+    angler_final = case_when(
+      angler_final == "boat" ~ "trailers",
+      angler_final == "total" ~ "vehicles",
+      TRUE ~ angler_final  # keeps any other values unchanged
+    )
+  )
 
 plot_inputs_pe_index_effort_counts(
   params = params,
-  effort_index = dwg_summ$effort_index,
+  effort_index = summarised_index_counts,
   outputs_folders = outputs_folders)
 ```
 
 # Effort and catch estimation
+
+This section contains preliminary estimates of angler effort and catch during the `r paste(params$fishery_name)` fishery. Settings for the Bayesian state space creel model are contained in folded code, select "show" to view the settings used for this report, including priors used for model parameters and sampler settings. 
 
 ## PE estimation
 
@@ -555,21 +655,31 @@ inputs_pe <- list()
 saveRDS(inputs_pe, file.path(outputs_folders$inputs, "inputs_pe.rds"))  
 ```
 
-### Paired census and index angler effort count plot
+### Paired census and index angler effort counts
 
-```{r view_paired_census_index_counts, fig.cap= "Scatterplot displaying the effort bias-term ratio (TI_expan_final) for each section and angler type (angler_final), representing the total count from census surveys divided by the total count from index surveys. A 1:1 relationship is shown by the dashed line.", results = 'hide', cache=params$enable_cache, dependson=c("establish_file_structure", "prep_inputs_pe")}
+```{r view_paired_census_index_counts, cache=params$enable_cache, dependson=c("establish_file_structure", "prep_inputs_pe")}
 
 # table view of census / index surveys and resulting bias term ratio 
 inputs_pe$paired_census_index_counts |> 
   select(section_num, angler_final, count_census, count_index, TI_expan_final) |> 
-  gt(caption = "The season-long sum of paired census and index angler effort counts and corresponding bias-term ratio (TI_expan_final), indicating the magnitude and direction (postive or negative) of bias in index counts relative to census counts") |> 
+  gt() |> 
+tab_header(
+    title = "The season-long sum of paired census and index angler effort counts and corresponding bias-term ratio (TI_expan_final), indicating the magnitude and direction (postive or negative) of bias in index counts relative to census counts."
+  ) |>
+  tab_options(
+    heading.title.font.size = px(14),
+    table.font.color = "black"
+  ) |> 
   fmt_number(count_index, decimals = 0) |> 
   fmt_number(TI_expan_final, decimals = 2)
 
+```
 
-# scatterplot of total census counts vs. total index counts by angler type and section 
+```{r scatterplot_census_v_index, fig.cap= "Scatterplot displaying the effort bias-term ratio (TI_expan_final) for each section and angler type (angler_final), representing the total count from census surveys divided by the total count from index surveys. A 1:1 relationship is shown by the dashed line.", dependson=c("establish_file_structure", "prep_inputs_pe")}
 
-plot_inputs_pe_census_vs_index(census_TI_expan = inputs_pe$paired_census_index_counts, outputs_folders = outputs_folders)
+plot_inputs_pe_census_vs_index(census_TI_expan = inputs_pe$paired_census_index_counts) +
+ theme(plot.caption = element_text(size = 10, hjust = 0))
+
 ```
 
 ### Generate PE estimates
@@ -607,7 +717,11 @@ estimates_pe$effort |>
     .groups = "drop"
   ) |> 
   pivot_wider(names_from = section_num, values_from = E_sum) |> 
-  gt(caption = paste("Estimated effort (angler hours) by fishing section from", params$est_date_start, "to", params$est_date_end))
+  gt(caption = paste("Estimated effort (angler hours) by fishing section from", params$est_date_start, "to", params$est_date_end)) |> 
+  tab_options(
+    heading.title.font.size = px(14),
+    table.font.color = "black"
+  )
 ```
 
 ```{r plot_pe_effort_estimates, fig.cap= "Estimated effort (angler-hours) grouped by time strata, section and angler type (angler_final).", cache=params$enable_cache, dependson=c("establish_file_structure", "estimates_pe"), cache.extra=param_hash}
@@ -761,8 +875,15 @@ for(ecg in names(inputs_bss)) {
   ecg_keep$cpue_daily <- get_bss_cpue_daily(bss_fit = ecg_fit, ecg = ecg, dwg = dwg)
   ecg_keep$catch_daily <- get_bss_catch_daily(bss_fit = ecg_fit, ecg = ecg, dwg = dwg)
   ecg_keep$effort_daily <- get_bss_effort_daily(bss_fit = ecg_fit, ecg = ecg, dwg = dwg)
+  
+  # Always extract draws for use in diagnostics and plots
   ecg_keep$draws <- extract(ecg_fit)
-  ecg_keep$summary <-summary(ecg_fit)$summary
+  
+  # ---- NEW: Prepare season results and create density plot ----
+  ecg_keep$season_results <- get_bss_season_results(ecg_keep$draws, ecg)
+  ecg_keep$density_plot <- create_bss_density_plot(ecg_keep$season_results, ecg)
+  
+  ecg_keep$summary <- summary(ecg_fit)$summary
   ecg_keep$ppc_values <- calculate_ppc_pvalues(
     bss_fit = ecg_fit, 
     inputs_bss = inputs_bss, 
@@ -827,13 +948,21 @@ for(ecg in names(inputs_bss)) {
   # Save convergence diagnostics (creates gt table and saves to figures folder)
   save_convergence_diagnostics(convergence_table, ecg, outputs_folders)
   
-  # Clean up memory - remove large draw objects (unless saving them)
+  # ---- UPDATED: Clean up memory - conditionally remove draws ----
   if (!save_draws) {
+    # Remove draws from estimates_bss to save memory
+    estimates_bss[[ecg]]$draws <- NULL
+    estimates_bss[[ecg]]$season_results <- NULL  # Also remove season results as they contain draw data
+    
+    # Remove temporary draw objects
     rm(draws_array_temp, draws_df_full, draws_df)
     gc()  # Force garbage collection
+    cli::cli_alert_info("Draws cleaned up for catch group: {ecg}")
   } else {
-    rm(draws_df_full)  # Still remove the full unsubsetted version
+    # Keep draws but still remove the full unsubsetted version
+    rm(draws_df_full)
     gc()
+    cli::cli_alert_info("Draws retained for catch group: {ecg}")
   }
   # ---- END: Process draws and generate convergence diagnostics ----
   
@@ -892,6 +1021,11 @@ saveRDS(estimates_bss, file.path(outputs_folders$outputs, "estimates_bss.rds"))
 saveRDS(diagnostics_bss, file.path(outputs_folders$outputs, "diagnostics_bss.rds"))
 saveRDS(convergence_tables, file.path(outputs_folders$outputs, "convergence_tables.rds"))
 
+# ---- NEW: Combine and save density plots ----
+density_plots <- map(estimates_bss, ~.$density_plot)
+combined_density_plot <- save_bss_density_plots(density_plots, outputs_folders)
+cli::cli_alert_success("Density plots saved")
+
 # Conditionally save draws if requested
 if (save_draws) {
   saveRDS(draws_bss, file.path(outputs_folders$outputs, "draws_bss.rds"))
@@ -908,10 +1042,9 @@ if (save_draws) {
 
 ```{r summary_convergence_diagnostics, results='asis'}
 # Display convergence diagnostics tables in document
-
 for (ecg in names(convergence_tables)) {
-
   tbl <- convergence_tables[[ecg]] |>
+    dplyr::slice_head(n = 15) |>
     dplyr::select(-rhat) |>
     dplyr::relocate(rhat_display, .after = variable) |>
     gt::gt() |>
@@ -933,7 +1066,6 @@ for (ecg in names(convergence_tables)) {
       footnote = "Filtered to 15 rows, sorted by descending Rhat",
       locations = gt::cells_column_labels(columns = rhat_display)
     )
-
   # Emit raw HTML so knitr renders the widget
   cat(gt::as_raw_html(tbl))
 }
@@ -978,77 +1110,20 @@ overview_combined |>
   tab_style(
     style = cell_fill(),
     locations = cells_body(columns = "50%")
-  )
+  ) |> 
+    tab_header(title = "Total estimates of angler effort and catch for catch groups analyzed in this report. Statistics correspond to effort and catch estimates generated using a Bayesian state space creel model. Effort was estimated for each individual catch group model run.") |>
+  tab_options(
+    heading.title.font.size = px(14),
+    table.font.color = "black"
+  ) 
 ```
 
 #### Posterior Probability Density Plots
+```{r plot_prob_density, eval=TRUE, fig.keep='all', dependson=c("establish_file_structure", "estimates_bss"), fig.cap= "Posterior probability density plots showing the distribution of estimated catch (number of fish) and effort (angler-hours) for estimated catch groups. Each panel displays a kernel density curve representing the relative likelihood of different parameter values from the Bayesian creel model's posterior distribution. The x-axis shows the estimated quantity (either number of fish caught or angler-hours expended). The y-axis shows the probability density for parameter estimates— higher values indicate parameter values that are more supported by the data and model. The shaded area under each curve represents the full range of plausible values. Vertical dashed lines mark the 2.5th percentile (lower credible limit), 50th percentile (median), and 97.5th percentile (upper credible limit), which together define the 95% credible interval—the range within which the true parameter value lies with 95% probability given the data and model assumptions. Effort was estimated for each individual catch group model run."}
 
-```{r plot_prob_density, eval=TRUE, fig.keep='all', dependson=c("establish_file_structure", "estimates_bss")}
-catch_groups <- names(estimates_bss)
-
-# Prepare catch data
-catch_season_results <- map_df(estimates_bss, \(x) {
-  x$draws$C_sum |> 
-    as.data.frame() |> 
-    mutate(iter = row_number()) |> 
-    pivot_longer(cols = -iter, names_to = "est_cg", values_to = "C_sum") |> 
-    select(-"est_cg")
-}, .id = "ecg")
-
-catch_quantiles <- catch_season_results |>
-  group_by(ecg) |>
-  reframe(C_sum = quantile(C_sum, c(0.025, 0.5, 0.975)), q = c(0.025, 0.5, 0.975))
-
-# Prepare effort data
-effort_season_results <- map_df(estimates_bss, \(x) {
-  x$draws$E_sum |> 
-    as.data.frame() |> 
-    mutate(iter = row_number()) |> 
-    pivot_longer(cols = -iter, names_to = "est_cg", values_to = "E_sum") |> 
-    select(-"est_cg")
-}, .id = "ecg")
-
-effort_quantiles <- effort_season_results |>
-  group_by(ecg) |>
-  reframe(E_sum = quantile(E_sum, c(0.025, 0.5, 0.975)), q = c(0.025, 0.5, 0.975))
-
-catch_median <- median(catch_season_results$C_sum) |> round(0)
-effort_median <- median(effort_season_results$E_sum) |> round(0)
-
-# Function to create combined plot 
-plot_catch_effort <- function(cg) {
-  # filter to given catch group
-  catch_df <- filter(catch_season_results, ecg == cg)
-  catch_q <- filter(catch_quantiles, ecg == cg)
-  
-  effort_df <- filter(effort_season_results, ecg == cg)
-  effort_q <- filter(effort_quantiles, ecg == cg)
-  
-  # Catch plot
-  plot_catch <- ggplot(catch_df, aes(x = C_sum)) +
-    geom_density(fill = "steelblue", alpha = 0.6) +
-    geom_vline(data = catch_q, aes(xintercept = C_sum, group = q), linetype = "dashed") +
-    labs(x = "Catch (number of fish)", y = "Kernel Density", title = glue("{cg}")) +
-    theme_bw() +
-    theme(legend.position = "none") 
-  
-  # Effort plot
-  plot_effort <- ggplot(effort_df, aes(x = E_sum)) +
-    geom_density(fill = "steelblue", alpha = 0.6) +
-    geom_vline(data = effort_q, aes(xintercept = E_sum, group = q), linetype = "dashed") +
-    labs(x = "Effort (angler-hours)", y = "Kernel Density") +
-    theme_bw() +
-    theme(legend.position = "none") 
-  
-  # Combine catch and effort plots
-  combined_plot <- plot_catch / plot_effort +
-    plot_layout(heights = c(1, 1))
-  
-  return(combined_plot)
-}
-
-# Create a list of plots, one per catch group
-plots_list <- map(catch_groups, plot_catch_effort)
+# Extract density plots from estimates_bss list
+plots_list <- map(estimates_bss, "density_plot") |>
+  compact()  # Remove any NULL plots
 
 # Combine all plots vertically
 combined_figure <- wrap_plots(plots_list, ncol = 1) +
@@ -1071,7 +1146,7 @@ save_plot(
 
 #### plot daily catch BSS
 
-```{r plot_bss_catch_daily, eval=TRUE, fig.keep='all', dependson=c("establish_file_structure", "estimates_bss")}
+```{r plot_bss_catch_daily, eval=TRUE, fig.keep='all', dependson=c("establish_file_structure", "estimates_bss"), fig.cap= "Weekly estimates of catch for catch groups included in the report, with separate plots for each river section. Lines are posterior medians and shading shows 95% credible intervals and are colored by angler type."}
 
 plot_bss_catch_daily <-
   map_df(estimates_bss, ~.x$catch_daily) |> 
@@ -1100,7 +1175,7 @@ save_plot(
 
 #### plot daily effort BSS
 
-```{r plot_bss_effort_daily, eval=TRUE, fig.keep='all', dependson=c("establish_file_structure", "estimates_bss")}
+```{r plot_bss_effort_daily, eval=TRUE, fig.keep='all', dependson=c("establish_file_structure", "estimates_bss"), fig.cap= "Weekly estimates of angler effort (angler hours) during the fishery, with separate plots for each river section. Lines are posterior medians and shading shows 95% credible intervals and are colored by angler type."}
 
 plot_bss_effort_daily <-
   estimates_bss[[1]]$effort_daily |> 
@@ -1128,7 +1203,7 @@ save_plot(
 
 #### plot daily CPUE BSS
 
-```{r plot_bss_cpue_daily, eval=TRUE, fig.keep='all', dependson=c("establish_file_structure","estimates_bss")}
+```{r plot_bss_cpue_daily, eval=TRUE, fig.keep='all', dependson=c("establish_file_structure","estimates_bss"), fig.cap= "Weekly estimates of catch rate (fish/hour) for catch groups included in the report, with separate plots for each river section. Lines are posterior medians and shading shows 95% credible intervals and are colored by angler type."}
 
 plot_bss_cpue_daily <-
   map_df(estimates_bss, ~.x$cpue_daily) |> 
@@ -1157,9 +1232,10 @@ save_plot(
 
 ### BSS model fit: posterior predictive checks (PPC)
 
-Buehrens (2024): "Plots of observations versus 95% posterior predictive intervals (PPI) were generated for each likelihood, separated by strata (boat vs. bank anglers, and river sections) to determine if certain strata were associated with better or worse fit to the data. The proportion of observations that fell outside 95% posterior predictive intervals (PPI) were calculated for each likelihood."
-
 #### PPC interval coverage summary
+
+Tables show the proportion of observations that fell outside 95% posterior predictive intervals (PPI) were calculated for each likelihood (Buehrens 2024). 
+
 ```{r ppc_interval_coverage, eval=TRUE}
 # Extract p_fit tables from ppc_results
 ppc_coverage_combined <- purrr::map_df(
@@ -1204,10 +1280,12 @@ ppc_coverage_combined_table <- ppc_coverage_combined |>
 
 #### PPC plots
 
+Plots show observations versus 95% posterior predictive intervals (PPI) for each likelihood, separated by strata (boat vs. bank anglers, and river sections) to determine if certain strata were associated with better or worse fit to the data.
+
 ```{r ppc_plots_display, eval=TRUE, fig.height=8, fig.width=10, fig.keep='all', dependson=c("establish_file_structure", "estimates_bss")}
 # Display and save all PPC plots for each catch group
 purrr::iwalk(estimates_bss, ~{
-  cat("\n### Catch Group:", .y, "\n\n")
+  # cat("\n### Catch Group:", .y, "\n\n")
   
   # Create safe filename version of catch group name
   safe_catch_group <- stringr::str_replace_all(.y, "[^[:alnum:]]", "_")
@@ -1248,6 +1326,52 @@ purrr::iwalk(estimates_bss, ~{
             paste0("ppc_T_A_", safe_catch_group, ".png"), 
             width = 10, height = 8)
 })
+```
+
+## Combined summary of effort and catch estimates
+```{r estimates_combo_overview, dependson=c("estimates_bss, estimates_pe")}
+
+#per-est_cg summary of total effort hours and catch/encounters, showing results of both PE and BSS estimation methods
+
+map_df(estimates_bss, ~.x$overview) |> 
+  mutate(estimate = case_when(
+    estimate == "E_sum" ~ "effort",
+    estimate == "C_sum" ~ "catch",
+    TRUE ~ estimate
+  )) |> 
+  left_join(
+    bind_cols(
+      estimates_pe$catch |> 
+        group_by(est_cg) |>
+        summarise(
+          catch = sum(est),
+          .groups = "drop"
+        ),
+      estimates_pe$effort |> 
+        summarise(
+          effort = sum(est, na.rm=T),
+          .groups = "drop"
+        )
+    ) |> 
+      pivot_longer(
+        cols = -est_cg,
+        names_to = "estimate",
+        values_to = "PE"
+      )
+    ,
+    by = c("estimate", "est_cg")
+  ) |> 
+  select(est_cg, estimate, PE, everything()) |> 
+  gt(groupname_col = "est_cg") |>
+  tab_header(title = "Total estimates of angler effort and catch for catch groups analyzed in this report. The column PE contains point estimates of effort and catch using a deterministic method of moments estimator. All other statistics correspond to effort and catch estimates generated using a Bayesian state space creel model. Effort was estimated for each individual catch group model run.") |>
+  tab_options(
+    heading.title.font.size = px(14),
+    table.font.color = "black"
+  ) |> 
+  fmt_number(-c(estimate, est_cg), decimals = 1) |> 
+  tab_style(style = cell_fill(), locations = cells_body(columns = "PE")) |> 
+  tab_style(style = cell_fill(), locations = cells_body(columns = "50%"))
+
 ```
 
 # Save results
