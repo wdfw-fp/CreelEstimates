@@ -1,3 +1,7 @@
+# Migrated from rstan to cmdstanr
+# No direct rstan API calls in this function.
+# Input is a draws_summary tibble from posterior::summarize_draws() which
+# is compatible with both rstan and cmdstanr backends.
 # Function 1: create_convergence_table.R
 create_convergence_table <- function(draws_summary, ecg) {
   draws_problems <- draws_summary |> 

@@ -1,26 +1,46 @@
+# Migrated from rstan to cmdstanr
+# API substitutions:
+#   - extract(bss_fit) -> individual bss_fit$draws(variables = "param", format = "matrix") calls
+#   - Column names: "param[1]","param[2]",... -> sequential indices via set colnames
+#   - Each replicate parameter extracted individually (not bulk extract)
+#   - Missing value checks updated for matrix format
 # Function 2: Generate PPC plots and interval coverage statistics
 generate_ppc_plots <- function(bss_fit, inputs_bss, ecg, dwg, params) {
   
+  # Helper: extract draws as a matrix with sequential column indices
+  extract_rep_matrix <- function(fit, var_name) {
+    mat <- fit$draws(variables = var_name, format = "matrix")
+    colnames(mat) <- seq_len(ncol(mat))
+    return(mat)
+  }
+  
+  # Extract each replicate parameter individually
+  V_I_rep <- extract_rep_matrix(bss_fit, "V_I_rep")
+  T_I_rep <- extract_rep_matrix(bss_fit, "T_I_rep")
+  E_s_rep <- extract_rep_matrix(bss_fit, "E_s_rep")
+  c_rep   <- extract_rep_matrix(bss_fit, "c_rep")
+  V_A_rep <- extract_rep_matrix(bss_fit, "V_A_rep")
+  T_A_rep <- extract_rep_matrix(bss_fit, "T_A_rep")
+  
   # Check for missing values in all replicate data
-  extracted_data <- extract(bss_fit)
   missing_params <- character()
   
-  if (any(is.na(extracted_data$V_I_rep)) || any(is.nan(extracted_data$V_I_rep))) {
+  if (any(is.na(V_I_rep)) || any(is.nan(V_I_rep))) {
     missing_params <- c(missing_params, "V_I_rep")
   }
-  if (any(is.na(extracted_data$T_I_rep)) || any(is.nan(extracted_data$T_I_rep))) {
+  if (any(is.na(T_I_rep)) || any(is.nan(T_I_rep))) {
     missing_params <- c(missing_params, "T_I_rep")
   }
-  if (any(is.na(extracted_data$E_s_rep)) || any(is.nan(extracted_data$E_s_rep))) {
+  if (any(is.na(E_s_rep)) || any(is.nan(E_s_rep))) {
     missing_params <- c(missing_params, "E_s_rep")
   }
-  if (any(is.na(extracted_data$c_rep)) || any(is.nan(extracted_data$c_rep))) {
+  if (any(is.na(c_rep)) || any(is.nan(c_rep))) {
     missing_params <- c(missing_params, "c_rep")
   }
-  if (any(is.na(extracted_data$V_A_rep)) || any(is.nan(extracted_data$V_A_rep))) {
+  if (any(is.na(V_A_rep)) || any(is.nan(V_A_rep))) {
     missing_params <- c(missing_params, "V_A_rep")
   }
-  if (any(is.na(extracted_data$T_A_rep)) || any(is.nan(extracted_data$T_A_rep))) {
+  if (any(is.na(T_A_rep)) || any(is.nan(T_A_rep))) {
     missing_params <- c(missing_params, "T_A_rep")
   }
   
@@ -80,7 +100,7 @@ generate_ppc_plots <- function(bss_fit, inputs_bss, ecg, dwg, params) {
   }
   
   # V_I PPC
-  V_I_PPC <- extracted_data$V_I_rep |>
+  V_I_PPC <- V_I_rep |>
     apply(2, \(x) quantile(x, c(0.025, 0.975))) |>
     t() |>
     as_tibble() |>
@@ -130,7 +150,7 @@ generate_ppc_plots <- function(bss_fit, inputs_bss, ecg, dwg, params) {
   # )
   
   # T_I PPC
-  T_I_PPC <- extracted_data$T_I_rep |>
+  T_I_PPC <- T_I_rep |>
     apply(2, \(x) quantile(x, c(0.025, 0.975))) |>
     t() |>
     as_tibble() |>
@@ -183,7 +203,7 @@ generate_ppc_plots <- function(bss_fit, inputs_bss, ecg, dwg, params) {
   # )
   
   # E_s PPC
-  E_s_PPC <- extracted_data$E_s_rep |>
+  E_s_PPC <- E_s_rep |>
     apply(2, \(x) quantile(x, c(0.025, 0.975))) |>
     t() |>
     as_tibble() |>
@@ -243,7 +263,7 @@ generate_ppc_plots <- function(bss_fit, inputs_bss, ecg, dwg, params) {
   # )
   
   # c PPC
-  c_PPC <- extracted_data$c_rep |>
+  c_PPC <- c_rep |>
     apply(2, \(x) quantile(x, c(0.025, 0.975))) |>
     t() |>
     as_tibble() |>
@@ -300,7 +320,7 @@ generate_ppc_plots <- function(bss_fit, inputs_bss, ecg, dwg, params) {
   # )
   
   # V_A PPC
-  V_A_PPC <- extracted_data$V_A_rep |>
+  V_A_PPC <- V_A_rep |>
     apply(2, \(x) quantile(x, c(0.025, 0.975))) |>
     t() |>
     as_tibble() |>
@@ -352,7 +372,7 @@ generate_ppc_plots <- function(bss_fit, inputs_bss, ecg, dwg, params) {
   # )
   # )
   # T_A PPC
-  T_A_PPC <- extracted_data$T_A_rep |>
+  T_A_PPC <- T_A_rep |>
     apply(2, \(x) quantile(x, c(0.025, 0.975))) |>
     t() |>
     as_tibble() |>

@@ -1,3 +1,7 @@
+# Migrated from rstan to cmdstanr
+# No direct rstan API calls in this function.
+# Input is season_results from get_bss_season_results() which now receives
+# cmdstanr-extracted draws vectors.
 #' Create density plot for catch and effort
 #'
 #' @param season_results Output from get_bss_season_results()

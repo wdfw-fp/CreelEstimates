@@ -1,3 +1,6 @@
+# Migrated from rstan to cmdstanr
+# No direct rstan API calls in this function.
+# Input is density_plots list from create_bss_density_plot().
 #' Save combined density plots for all catch groups
 #'
 #' @param density_plots List of density plot objects

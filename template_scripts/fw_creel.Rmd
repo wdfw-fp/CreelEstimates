@@ -5,7 +5,7 @@ params:
   project_name: "District 14"
   fishery_name: "Skagit fall salmon 2024"
   est_date_start: "2024-09-01"
-  est_date_end: "2024-09-15"
+  est_date_end: "2024-09-30"
   est_catch_groups: !r data.frame(rbind(
     c(species = 'Coho', life_stage = 'Adult', fin_mark = 'UM', fate = 'Released'),
     c(species = 'Coho', life_stage = 'Adult', fin_mark = 'AD', fate = 'Kept')))
@@ -66,7 +66,7 @@ library("patchwork")
 library("gt")
 library("parallel")
 library("timeDate")
-library("rstan")
+library("cmdstanr")
 library("posterior")
 library("bayesplot")
 library("digest")
@@ -119,8 +119,7 @@ knitr::opts_chunk$set(
   fig.height = 8
 )
 
-# Package settings
-rstan_options(auto_write = TRUE)
+# Package settings (cmdstanr caches compiled models automatically)
 
 # Global R settings
 theme_set(theme_light()) #ggplot theme
@@ -866,6 +865,7 @@ for(ecg in names(inputs_bss)) {
       n_thin = 1,
       adapt_delta = 0.7,
       max_treedepth = 12,
+      threads_per_chain = 4,  # within-chain parallelization via reduce_sum (total CPU = n_cores * threads_per_chain)
       init = "0"
     )
     
@@ -876,14 +876,17 @@ for(ecg in names(inputs_bss)) {
   ecg_keep$catch_daily <- get_bss_catch_daily(bss_fit = ecg_fit, ecg = ecg, dwg = dwg)
   ecg_keep$effort_daily <- get_bss_effort_daily(bss_fit = ecg_fit, ecg = ecg, dwg = dwg)
   
-  # Always extract draws for use in diagnostics and plots
-  ecg_keep$draws <- extract(ecg_fit)
+  # Always extract draws for use in diagnostics and plots (cmdstanr)
+  ecg_keep$draws <- list(
+    C_sum = as.vector(ecg_fit$draws(variables = "C_sum", format = "matrix")),
+    E_sum = as.vector(ecg_fit$draws(variables = "E_sum", format = "matrix"))
+  )
   
   # ---- NEW: Prepare season results and create density plot ----
   ecg_keep$season_results <- get_bss_season_results(ecg_keep$draws, ecg)
   ecg_keep$density_plot <- create_bss_density_plot(ecg_keep$season_results, ecg)
   
-  ecg_keep$summary <- summary(ecg_fit)$summary
+  ecg_keep$summary <- ecg_fit$summary()
   ecg_keep$ppc_values <- calculate_ppc_pvalues(
     bss_fit = ecg_fit, 
     inputs_bss = inputs_bss, 
@@ -901,7 +904,7 @@ for(ecg in names(inputs_bss)) {
   
   # ---- START: Process draws and generate convergence diagnostics ----
   # Extract draws from fit object 
-  draws_array_temp <- posterior::as_draws_array(ecg_fit)
+  draws_array_temp <- ecg_fit$draws(format = "draws_array")
   draws_df_full <- posterior::as_draws_df(draws_array_temp)
   
   ## subset parameters
@@ -970,28 +973,78 @@ for(ecg in names(inputs_bss)) {
   
   # extract and generate model diagnostics
   diagnostics_keep <- list()
-  diagnostics_keep$bss_runtime_cg <- creelutils::get_bss_runtime(ecg_fit)
+  
+  # TODO: Update creelutils package (wdfw-fp/creelutils) to support cmdstanr fit objects
+  # get_bss_runtime fallback
+  diagnostics_keep$bss_runtime_cg <- tryCatch(
+    {
+      creelutils::get_bss_runtime(ecg_fit)
+    },
+    error = function(e) {
+      warning(paste0(
+        "creelutils::get_bss_runtime() may not be compatible with cmdstanr fit objects. ",
+        "Using local fallback. Error: ", e$message
+      ))
+      ecg_fit$time()
+    }
+  )
   cat("\n")
   cli::cli_rule()
   
-  diagnostics_keep$bss_hmc_diagnostic_cg <- capture.output(creelutils::get_hmc_diagnostics(stan_fit = ecg_fit))
+  # get_hmc_diagnostics fallback
+  diagnostics_keep$bss_hmc_diagnostic_cg <- tryCatch(
+    {
+      capture.output(creelutils::get_hmc_diagnostics(stan_fit = ecg_fit))
+    },
+    error = function(e) {
+      warning(paste0(
+        "creelutils::get_hmc_diagnostics() may not be compatible with cmdstanr fit objects. ",
+        "Using local fallback. Error: ", e$message
+      ))
+      capture.output(ecg_fit$diagnostic_summary())
+    }
+  )
   cat(diagnostics_keep$bss_hmc_diagnostic_cg, sep = "\n")
   cat("\n")
   cli::cli_rule()
   
-  diagnostics_keep$bss_settings_cg <- get_bss_settings(ecg, ecg_fit, inputs_bss, print = TRUE) |> capture.output()
+  # get_bss_settings fallback
+  diagnostics_keep$bss_settings_cg <- tryCatch(
+    {
+      get_bss_settings(ecg, ecg_fit, inputs_bss, print = TRUE) |> capture.output()
+    },
+    error = function(e) {
+      warning(paste0(
+        "get_bss_settings() may not be compatible with cmdstanr fit objects. ",
+        "Using local fallback. Error: ", e$message
+      ))
+      capture.output(cat(paste0(
+        "Catch group: ", ecg, "\n",
+        "Chains: ", ecg_fit$num_chains(), "\n",
+        "Iter sampling: ", ecg_fit$metadata()$iter_sampling, "\n",
+        "Iter warmup: ", ecg_fit$metadata()$iter_warmup, "\n",
+        "Thin: ", ecg_fit$metadata()$thin, "\n",
+        "Adapt delta: ", ecg_fit$metadata()$adapt_delta, "\n",
+        "Max treedepth: ", ecg_fit$metadata()$max_treedepth, "\n"
+      )))
+    }
+  )
   cat(diagnostics_keep$bss_settings_cg, sep = "\n")
 
-  # trace plots
+  # trace plots — cmdstanr: pass explicit draws array + sampler diagnostics to bayesplot
+  np_data <- tryCatch(
+    nuts_params(ecg_fit$sampler_diagnostics(format = "draws_array")),
+    error = function(e) NULL
+  )
   invisible(diagnostics_keep$traceplots <- mcmc_trace(
-    ecg_fit, 
+    ecg_fit$draws(format = "draws_array"), 
     pars = c(
       "C_sum", "E_sum", "phi_C_scaled", "phi_E_scaled", 
       "sigma_r_C", "sigma_r_E", "sigma_eps_C", "sigma_eps_E",
       "sigma_mu_C", "sigma_mu_E", "phi_C", "phi_E", 
       "r_C", "r_E", "B1", "lp__"
     ),
-    np = nuts_params(ecg_fit)
+    np = np_data
   ) +
     labs(
       x = "Post-warmup iteration",
@@ -1100,22 +1153,24 @@ overview_combined <- purrr::imap_dfr(
 )
 
 # Create a gt table with row groups
-overview_combined |> 
+# Select and order columns: drop redundant 'median' (keep '50%'), drop 'mad' and 'ess_tail'
+overview_combined |>
+  select(catch_group, variable, est_cg, mean, sd,
+         `2.5%`, `25%`, `50%`, `75%`, `97.5%`,
+         rhat, ess_bulk, n_div) |>
   gt(groupname_col = "catch_group") |>
-  fmt_number(-c(estimate, est_cg, catch_group), decimals = 1) |> 
+  fmt_number(columns = c(mean, sd, `2.5%`, `25%`, `50%`, `75%`, `97.5%`), decimals = 1) |>
+  fmt_number(columns = rhat, decimals = 3) |>
+  fmt_number(columns = c(ess_bulk, n_div), decimals = 0) |>
   tab_style(
     style = cell_fill(),
     locations = cells_body(columns = "50%")
-  ) |> 
-  tab_style(
-    style = cell_fill(),
-    locations = cells_body(columns = "50%")
-  ) |> 
-    tab_header(title = "Total estimates of angler effort and catch for catch groups analyzed in this report. Statistics correspond to effort and catch estimates generated using a Bayesian state space creel model. Effort was estimated for each individual catch group model run.") |>
+  ) |>
+  tab_header(title = "Total estimates of angler effort and catch for catch groups analyzed in this report. Statistics correspond to effort and catch estimates generated using a Bayesian state space creel model. Effort was estimated for each individual catch group model run.") |>
   tab_options(
     heading.title.font.size = px(14),
     table.font.color = "black"
-  ) 
+  )
 ```
 
 #### Posterior Probability Density Plots
@@ -1333,7 +1388,8 @@ purrr::iwalk(estimates_bss, ~{
 
 #per-est_cg summary of total effort hours and catch/encounters, showing results of both PE and BSS estimation methods
 
-map_df(estimates_bss, ~.x$overview) |> 
+map_df(estimates_bss, ~.x$overview) |>
+  rename(estimate = variable) |>
   mutate(estimate = case_when(
     estimate == "E_sum" ~ "effort",
     estimate == "C_sum" ~ "catch",
@@ -1370,7 +1426,7 @@ map_df(estimates_bss, ~.x$overview) |>
   ) |> 
   fmt_number(-c(estimate, est_cg), decimals = 1) |> 
   tab_style(style = cell_fill(), locations = cells_body(columns = "PE")) |> 
-  tab_style(style = cell_fill(), locations = cells_body(columns = "50%"))
+  tab_style(style = cell_fill(), locations = cells_body(columns = "median"))
 
 ```
 

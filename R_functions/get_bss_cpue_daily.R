@@ -1,11 +1,13 @@
+# Migrated from rstan to cmdstanr
+# API substitutions:
+#   - summary(bss_fit, pars = "lambda_C_S")$summary -> bss_fit$summary(variables = "lambda_C_S")
+#   - pluck("summary") removed; $summary() returns tibble directly
+#   - as.data.frame() |> rownames_to_column("estimate_index") ->
+#     mutate(estimate_index = variable) since cmdstanr uses a "variable" column
 get_bss_cpue_daily <- function(bss_fit, ecg, dwg, ...){
   dwg <- dwg
-  bss_fit |> 
-    summary(pars = c("lambda_C_S")) |> 
-    pluck("summary") |> #only want the combined-chains version
-    as.data.frame() |> 
-    rownames_to_column("estimate_index") |> 
-    as_tibble() |> 
+  bss_fit$summary(variables = "lambda_C_S", ~quantile(.x, probs = c(0.025, 0.25, 0.5, 0.75, 0.975))) |>
+    mutate(estimate_index = variable) |>
     mutate(indices = str_sub(estimate_index, 12, 20) |> str_remove("\\]")) |> 
     separate(
       col = indices,

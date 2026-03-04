@@ -1,9 +1,22 @@
+# Migrated from rstan to cmdstanr
+# API substitutions:
+#   - rstan::extract(bss_fit)$param -> bss_fit$draws(variables = "param", format = "matrix")
+#   - Column names change from unnamed V1,V2,... to "param[1]","param[2]",...
+#     We rename columns to V1, V2, ... via paste0("V", seq_len(ncol(.))) 
+#   - as_tibble() column naming adjusted accordingly
 # Function 1: Calculate p-values for posterior predictive checks
 calculate_ppc_pvalues <- function(bss_fit, inputs_bss, ecg) {
   ecg_fit <- bss_fit
+  
+  # Helper: extract draws as tibble with V1, V2, ... column names (matching old rstan pattern)
+  extract_rep_tibble <- function(fit, var_name) {
+    mat <- fit$draws(variables = var_name, format = "matrix")
+    colnames(mat) <- paste0("V", seq_len(ncol(mat)))
+    tibble::as_tibble(mat)
+  }
+  
   # V_I p-value
-  V_I_pvalue <- extract(ecg_fit)$V_I_rep |>
-    as_tibble() |>
+  V_I_pvalue <- extract_rep_tibble(ecg_fit, "V_I_rep") |>
     mutate(iterations = row_number()) |>
     pivot_longer(
       cols = -iterations,
@@ -30,8 +43,7 @@ calculate_ppc_pvalues <- function(bss_fit, inputs_bss, ecg) {
     )
   
   # T_I p-value
-  T_I_pvalue <- extract(ecg_fit)$T_I_rep |>
-    as_tibble() |>
+  T_I_pvalue <- extract_rep_tibble(ecg_fit, "T_I_rep") |>
     mutate(iterations = row_number()) |>
     pivot_longer(
       cols = -iterations,
@@ -58,8 +70,7 @@ calculate_ppc_pvalues <- function(bss_fit, inputs_bss, ecg) {
     )
   
   # E_s p-value
-  E_s_pvalue <- extract(ecg_fit)$E_s_rep |>
-    as_tibble() |>
+  E_s_pvalue <- extract_rep_tibble(ecg_fit, "E_s_rep") |>
     mutate(iterations = row_number()) |>
     pivot_longer(
       cols = -iterations,
@@ -86,8 +97,7 @@ calculate_ppc_pvalues <- function(bss_fit, inputs_bss, ecg) {
     )
   
   # c p-value
-  c_pvalue <- extract(ecg_fit)$c_rep |>
-    as_tibble() |>
+  c_pvalue <- extract_rep_tibble(ecg_fit, "c_rep") |>
     mutate(iterations = row_number()) |>
     pivot_longer(
       cols = -iterations,
@@ -114,8 +124,7 @@ calculate_ppc_pvalues <- function(bss_fit, inputs_bss, ecg) {
     )
   
   # V_A p-value
-  V_A_pvalue <- extract(ecg_fit)$V_A_rep |>
-    as_tibble() |>
+  V_A_pvalue <- extract_rep_tibble(ecg_fit, "V_A_rep") |>
     mutate(iterations = row_number()) |>
     pivot_longer(
       cols = -iterations,
@@ -142,8 +151,7 @@ calculate_ppc_pvalues <- function(bss_fit, inputs_bss, ecg) {
     )
   
   # T_A p-value
-  T_A_pvalue <- extract(ecg_fit)$T_A_rep |>
-    as_tibble() |>
+  T_A_pvalue <- extract_rep_tibble(ecg_fit, "T_A_rep") |>
     mutate(iterations = row_number()) |>
     pivot_longer(
       cols = -iterations,
