@@ -1,0 +1,11 @@
+{
+  "name": "CreelEstimates",
+  "image": "rocker/rstudio:4.3.3",
+  "forwardPorts": [8787],
+  "postCreateCommand": "Rscript .devcontainer/install_packages.R",
+  "postStartCommand": "/usr/lib/rstudio-server/bin/rserver --server-daemonize=1",
+  "remoteEnv": {
+    "DISABLE_AUTH": "true",
+    "ROOT": "true"
+  }
+}
