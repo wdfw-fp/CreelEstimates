@@ -48,3 +48,6 @@ vignettes/*.pdf
 
 # Database configuration file
 config.yml
+
+# Dev container configuration
+.devcontainer
