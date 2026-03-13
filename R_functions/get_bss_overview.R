@@ -97,10 +97,23 @@ get_bss_overview <- function(bss_fit, ecg, ...){
   sampler_diag <- bss_fit$sampler_diagnostics(format = "df")
   n_div <- sum(sampler_diag$divergent__)
   
+  # Standardise output to match rstan summary column names so that
+  # creelutils::process_estimates_bss() (which pivots "mean":"n_div") continues
+  # to work without modification.
+  # rstan columns: estimate, est_cg, mean, se_mean, sd,
+  #                2.5%, 25%, 50%, 75%, 97.5%, n_eff, Rhat, n_div
   overview |>
-    mutate(
-      n_div = n_div,
+    dplyr::mutate(
+      n_div  = n_div,
       est_cg = ecg
     ) |>
-    relocate(variable, est_cg)
+    dplyr::rename(estimate = variable) |>
+    dplyr::mutate(
+      se_mean = ifelse(!is.na(ess_bulk) & ess_bulk > 0, sd / sqrt(ess_bulk), NA_real_),
+      n_eff   = ess_bulk,
+      Rhat    = rhat
+    ) |>
+    dplyr::select(estimate, est_cg, mean, se_mean, sd,
+                  `2.5%`, `25%`, `50%`, `75%`, `97.5%`,
+                  n_eff, Rhat, n_div)
 }

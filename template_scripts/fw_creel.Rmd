@@ -5,9 +5,9 @@ params:
   project_name: "District 14"
   fishery_name: "Skagit fall salmon 2024"
   est_date_start: "2024-09-01"
-  est_date_end: "2024-09-30"
+  est_date_end: "2024-09-15"
   est_catch_groups: !r data.frame(rbind(
-    c(species = 'Coho', life_stage = 'Adult', fin_mark = 'UM', fate = 'Released'),
+    c(species = 'Coho', life_stage = 'Adult', fin_mark = 'UM', fate = 'Kept'),
     c(species = 'Coho', life_stage = 'Adult', fin_mark = 'AD', fate = 'Kept')))
   study_design: "Standard"   
   boat_type_collapse: "Yes"
@@ -19,7 +19,7 @@ params:
   days_wkend: !r c('Saturday', 'Sunday')
   day_length_expansion: "night closure"
   min_fishing_time: 0.5
-  bss_model_file_name: "BSS_creel_model_02_2024-04-03.stan"
+  bss_model_file_name: "BSS_creel_model_02_2021-01-22_ppc.stan"
   model_used: "Both models"
   data_grade: "provisional"
   export: "local"
@@ -270,7 +270,7 @@ save_gt_table <- function(gt_obj, filename) {
 # Fetch and review data
 
 ## Download data
-```{r dwg_fetch, cache=params$enable_cache, results='hide', dependson="setup", cache.extra=param_hash}
+```{r dwg_fetch, cache=params$enable_cache, results='hide', cache.extra=param_hash}
 dwg <- creelutils::fetch_dwg(params$fishery_name)
 
 # Save raw data
@@ -656,7 +656,7 @@ saveRDS(inputs_pe, file.path(outputs_folders$inputs, "inputs_pe.rds"))
 
 ### Paired census and index angler effort counts
 
-```{r view_paired_census_index_counts, cache=params$enable_cache, dependson=c("establish_file_structure", "prep_inputs_pe")}
+```{r view_paired_census_index_counts, cache=params$enable_cache, dependson="prep_inputs_pe"}
 
 # table view of census / index surveys and resulting bias term ratio 
 inputs_pe$paired_census_index_counts |> 
@@ -674,7 +674,7 @@ tab_header(
 
 ```
 
-```{r scatterplot_census_v_index, fig.cap= "Scatterplot displaying the effort bias-term ratio (TI_expan_final) for each section and angler type (angler_final), representing the total count from census surveys divided by the total count from index surveys. A 1:1 relationship is shown by the dashed line.", dependson=c("establish_file_structure", "prep_inputs_pe")}
+```{r scatterplot_census_v_index, fig.cap= "Scatterplot displaying the effort bias-term ratio (TI_expan_final) for each section and angler type (angler_final), representing the total count from census surveys divided by the total count from index surveys. A 1:1 relationship is shown by the dashed line.", dependson="prep_inputs_pe"}
 
 plot_inputs_pe_census_vs_index(census_TI_expan = inputs_pe$paired_census_index_counts) +
  theme(plot.caption = element_text(size = 10, hjust = 0))
@@ -723,7 +723,7 @@ estimates_pe$effort |>
   )
 ```
 
-```{r plot_pe_effort_estimates, fig.cap= "Estimated effort (angler-hours) grouped by time strata, section and angler type (angler_final).", cache=params$enable_cache, dependson=c("establish_file_structure", "estimates_pe"), cache.extra=param_hash}
+```{r plot_pe_effort_estimates, fig.cap= "Estimated effort (angler-hours) grouped by time strata, section and angler type (angler_final).", cache=params$enable_cache, dependson="estimates_pe", cache.extra=param_hash}
 
 # barplot of effort estimates by time stratum, section, and angler type
 plot_est_pe_effort(
@@ -836,13 +836,21 @@ saveRDS(inputs_bss, file.path(outputs_folders$inputs, "inputs_bss.rds"))
 
 ### Generate BSS estimates
 
-```{r estimates_bss, eval=TRUE, results='hide', fig.show='hide', cache=params$enable_cache, dependson=c("establish_file_structure", "prep_inputs_bss"), cache.extra=param_hash}
-#should work for either single or multiple catch_group 
+```{r estimates_bss, eval=TRUE, results='hide', fig.show='hide', cache=params$enable_cache, dependson="prep_inputs_bss", cache.extra=param_hash}
+#should work for either single or multiple catch_group
 
 # ---- CONFIGURATION ----
 # Set to TRUE to save draw objects (WARNING: large file sizes)
 save_draws <- FALSE  # Change to TRUE if you want to save draws
 # ----------------------
+compile_bss_model
+# ---- Compile / load model once (shared across all catch groups) ----
+# Compiles only when no exe is found; subsequent runs load the existing exe.
+# Default stan_exe_dir = dirname(cmdstan_path()) = C:\Users\<user>\.cmdstan\
+bss_model <- compile_bss_model(
+  model_file_name   = here::here("stan_models", params$bss_model_file_name),
+  threads_per_chain = 2
+)
 
 # create empty lists for outputs
 estimates_bss <- list()
@@ -854,19 +862,20 @@ if (save_draws) {
 }
 
 for(ecg in names(inputs_bss)) {
-  # fit the model to generate estimates 
+  # fit the model to generate estimates
   ecg_fit <-
     fit_bss(
-      bss_inputs_list = inputs_bss[[ecg]],
-      n_chain = 2,  
-      n_cores = 2,
-      n_iter = 50,
-      n_warmup = 25,
-      n_thin = 1,
-      adapt_delta = 0.7,
-      max_treedepth = 12,
-      threads_per_chain = 4,  # within-chain parallelization via reduce_sum (total CPU = n_cores * threads_per_chain)
-      init = "0"
+      bss_model_obj     = bss_model,      # pre-compiled; no recompilation per catch group
+      bss_inputs_list   = inputs_bss[[ecg]],
+      n_chain           = 4,
+      n_cores           = 4,
+      n_iter            = 200,
+      n_warmup          = 100,
+      n_thin            = 1,
+      adapt_delta       = 0.7,
+      max_treedepth     = 12,
+      threads_per_chain = 3,              # within-chain parallelization via reduce_sum (total CPU = n_cores * threads_per_chain)
+      init              = "0"
     )
     
   ## extract and summarize estimates and model fit statistics 
@@ -1153,15 +1162,15 @@ overview_combined <- purrr::imap_dfr(
 )
 
 # Create a gt table with row groups
-# Select and order columns: drop redundant 'median' (keep '50%'), drop 'mad' and 'ess_tail'
+# Select and order columns: overview uses rstan-compatible names (estimate, Rhat, n_eff)
 overview_combined |>
-  select(catch_group, variable, est_cg, mean, sd,
+  select(catch_group, estimate, est_cg, mean, sd,
          `2.5%`, `25%`, `50%`, `75%`, `97.5%`,
-         rhat, ess_bulk, n_div) |>
+         Rhat, n_eff, n_div) |>
   gt(groupname_col = "catch_group") |>
   fmt_number(columns = c(mean, sd, `2.5%`, `25%`, `50%`, `75%`, `97.5%`), decimals = 1) |>
-  fmt_number(columns = rhat, decimals = 3) |>
-  fmt_number(columns = c(ess_bulk, n_div), decimals = 0) |>
+  fmt_number(columns = Rhat, decimals = 3) |>
+  fmt_number(columns = c(n_eff, n_div), decimals = 0) |>
   tab_style(
     style = cell_fill(),
     locations = cells_body(columns = "50%")
@@ -1174,7 +1183,7 @@ overview_combined |>
 ```
 
 #### Posterior Probability Density Plots
-```{r plot_prob_density, eval=TRUE, fig.keep='all', dependson=c("establish_file_structure", "estimates_bss"), fig.cap= "Posterior probability density plots showing the distribution of estimated catch (number of fish) and effort (angler-hours) for estimated catch groups. Each panel displays a kernel density curve representing the relative likelihood of different parameter values from the Bayesian creel model's posterior distribution. The x-axis shows the estimated quantity (either number of fish caught or angler-hours expended). The y-axis shows the probability density for parameter estimates— higher values indicate parameter values that are more supported by the data and model. The shaded area under each curve represents the full range of plausible values. Vertical dashed lines mark the 2.5th percentile (lower credible limit), 50th percentile (median), and 97.5th percentile (upper credible limit), which together define the 95% credible interval—the range within which the true parameter value lies with 95% probability given the data and model assumptions. Effort was estimated for each individual catch group model run."}
+```{r plot_prob_density, eval=TRUE, fig.keep='all', dependson="estimates_bss", fig.cap= "Posterior probability density plots showing the distribution of estimated catch (number of fish) and effort (angler-hours) for estimated catch groups. Each panel displays a kernel density curve representing the relative likelihood of different parameter values from the Bayesian creel model's posterior distribution. The x-axis shows the estimated quantity (either number of fish caught or angler-hours expended). The y-axis shows the probability density for parameter estimates— higher values indicate parameter values that are more supported by the data and model. The shaded area under each curve represents the full range of plausible values. Vertical dashed lines mark the 2.5th percentile (lower credible limit), 50th percentile (median), and 97.5th percentile (upper credible limit), which together define the 95% credible interval—the range within which the true parameter value lies with 95% probability given the data and model assumptions. Effort was estimated for each individual catch group model run."}
 
 # Extract density plots from estimates_bss list
 plots_list <- map(estimates_bss, "density_plot") |>
@@ -1201,7 +1210,7 @@ save_plot(
 
 #### plot daily catch BSS
 
-```{r plot_bss_catch_daily, eval=TRUE, fig.keep='all', dependson=c("establish_file_structure", "estimates_bss"), fig.cap= "Weekly estimates of catch for catch groups included in the report, with separate plots for each river section. Lines are posterior medians and shading shows 95% credible intervals and are colored by angler type."}
+```{r plot_bss_catch_daily, eval=TRUE, fig.keep='all', dependson="estimates_bss", fig.cap= "Weekly estimates of catch for catch groups included in the report, with separate plots for each river section. Lines are posterior medians and shading shows 95% credible intervals and are colored by angler type."}
 
 plot_bss_catch_daily <-
   map_df(estimates_bss, ~.x$catch_daily) |> 
@@ -1230,7 +1239,7 @@ save_plot(
 
 #### plot daily effort BSS
 
-```{r plot_bss_effort_daily, eval=TRUE, fig.keep='all', dependson=c("establish_file_structure", "estimates_bss"), fig.cap= "Weekly estimates of angler effort (angler hours) during the fishery, with separate plots for each river section. Lines are posterior medians and shading shows 95% credible intervals and are colored by angler type."}
+```{r plot_bss_effort_daily, eval=TRUE, fig.keep='all', dependson="estimates_bss", fig.cap= "Weekly estimates of angler effort (angler hours) during the fishery, with separate plots for each river section. Lines are posterior medians and shading shows 95% credible intervals and are colored by angler type."}
 
 plot_bss_effort_daily <-
   estimates_bss[[1]]$effort_daily |> 
@@ -1258,7 +1267,7 @@ save_plot(
 
 #### plot daily CPUE BSS
 
-```{r plot_bss_cpue_daily, eval=TRUE, fig.keep='all', dependson=c("establish_file_structure","estimates_bss"), fig.cap= "Weekly estimates of catch rate (fish/hour) for catch groups included in the report, with separate plots for each river section. Lines are posterior medians and shading shows 95% credible intervals and are colored by angler type."}
+```{r plot_bss_cpue_daily, eval=TRUE, fig.keep='all', dependson="estimates_bss", fig.cap= "Weekly estimates of catch rate (fish/hour) for catch groups included in the report, with separate plots for each river section. Lines are posterior medians and shading shows 95% credible intervals and are colored by angler type."}
 
 plot_bss_cpue_daily <-
   map_df(estimates_bss, ~.x$cpue_daily) |> 
@@ -1337,7 +1346,7 @@ ppc_coverage_combined_table <- ppc_coverage_combined |>
 
 Plots show observations versus 95% posterior predictive intervals (PPI) for each likelihood, separated by strata (boat vs. bank anglers, and river sections) to determine if certain strata were associated with better or worse fit to the data.
 
-```{r ppc_plots_display, eval=TRUE, fig.height=8, fig.width=10, fig.keep='all', dependson=c("establish_file_structure", "estimates_bss")}
+```{r ppc_plots_display, eval=TRUE, fig.height=8, fig.width=10, fig.keep='all', dependson="estimates_bss"}
 # Display and save all PPC plots for each catch group
 purrr::iwalk(estimates_bss, ~{
   # cat("\n### Catch Group:", .y, "\n\n")
@@ -1384,12 +1393,11 @@ purrr::iwalk(estimates_bss, ~{
 ```
 
 ## Combined summary of effort and catch estimates
-```{r estimates_combo_overview, dependson=c("estimates_bss, estimates_pe")}
+```{r estimates_combo_overview, dependson=c("estimates_bss", "estimates_pe")}
 
 #per-est_cg summary of total effort hours and catch/encounters, showing results of both PE and BSS estimation methods
 
 map_df(estimates_bss, ~.x$overview) |>
-  rename(estimate = variable) |>
   mutate(estimate = case_when(
     estimate == "E_sum" ~ "effort",
     estimate == "C_sum" ~ "catch",
@@ -1426,7 +1434,7 @@ map_df(estimates_bss, ~.x$overview) |>
   ) |> 
   fmt_number(-c(estimate, est_cg), decimals = 1) |> 
   tab_style(style = cell_fill(), locations = cells_body(columns = "PE")) |> 
-  tab_style(style = cell_fill(), locations = cells_body(columns = "median"))
+  tab_style(style = cell_fill(), locations = cells_body(columns = "50%"))
 
 ```
 

@@ -4,24 +4,37 @@
 #   - pluck("summary") removed; $summary() returns tibble directly
 #   - as.data.frame() |> rownames_to_column("estimate_index") ->
 #     mutate(estimate_index = variable) since cmdstanr uses a "variable" column
+# Column compatibility: creelutils::process_estimates_bss() pivots cols = c("mean":"Rhat"),
+#   so the output must include mean, se_mean, sd, n_eff, Rhat alongside the quantiles.
+#   Two separate $summary() calls (default stats + quantiles) are joined to produce this.
 get_bss_cpue_daily <- function(bss_fit, ecg, dwg, ...){
   dwg <- dwg
-  bss_fit$summary(variables = "lambda_C_S", ~quantile(.x, probs = c(0.025, 0.25, 0.5, 0.75, 0.975))) |>
-    mutate(estimate_index = variable) |>
-    mutate(indices = str_sub(estimate_index, 12, 20) |> str_remove("\\]")) |> 
+  stats_tbl <- bss_fit$summary(variables = "lambda_C_S")
+  qtile_tbl <- bss_fit$summary(variables = "lambda_C_S",
+                                ~quantile(.x, probs = c(0.025, 0.25, 0.5, 0.75, 0.975)))
+  dplyr::left_join(stats_tbl, qtile_tbl, by = "variable") |>
+    dplyr::mutate(
+      se_mean        = ifelse(!is.na(ess_bulk) & ess_bulk > 0, sd / sqrt(ess_bulk), NA_real_),
+      n_eff          = ess_bulk,
+      Rhat           = rhat,
+      estimate_index = variable
+    ) |>
+    mutate(indices = str_sub(estimate_index, 12, 20) |> str_remove("\\]")) |>
     separate(
       col = indices,
       into = c("section_num", "day_index", "angler_final")
-    ) |> 
+    ) |>
     mutate(
       across(c(section_num, day_index), as.integer),
       angler_final = if_else(angler_final == "1", "bank", "boat"),
       est_cg = ecg,
       estimate = "CPUE_daily"
-    ) |> 
-    left_join(dwg$days |> 
+    ) |>
+    left_join(dwg$days |>
                 select(event_date, day_index, week, month),
-              by = "day_index") |> 
-    relocate(estimate, estimate_index, est_cg, day_index, event_date, week, month, section_num, angler_final) |> 
+              by = "day_index") |>
+    dplyr::select(estimate, estimate_index, est_cg, day_index, event_date, week, month,
+                  section_num, angler_final,
+                  mean, se_mean, sd, `2.5%`, `25%`, `50%`, `75%`, `97.5%`, n_eff, Rhat) |>
     arrange(event_date)
 }
