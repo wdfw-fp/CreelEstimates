@@ -32,10 +32,34 @@
 #   Proven AppLocker-safe on WDFW endpoints: C:/rtools, C:/rtools44, C:/rtools43, C:/RBuildTools
 
 
+# Internal helper: walk the full rlang condition chain and return TRUE if
+# "system error 5" (AppLocker/Access Denied) appears anywhere in the message
+# hierarchy. processx wraps the OS error in a parent condition, so
+# conditionMessage(e) alone misses it.
+.has_error5 <- function(e) {
+  cond <- e
+  while (!is.null(cond)) {
+    if (grepl("system error 5", conditionMessage(cond), fixed = TRUE)) return(TRUE)
+    cond <- cond$parent
+  }
+  FALSE
+}
+
+# Same chain-walk for error 32 (AV/EDR transient scan lock).
+.has_error32 <- function(e) {
+  cond <- e
+  while (!is.null(cond)) {
+    if (grepl("system error 32", conditionMessage(cond), fixed = TRUE)) return(TRUE)
+    cond <- cond$parent
+  }
+  FALSE
+}
+
 # Internal helper: test whether Windows AppLocker permits execution of an exe.
-# Runs the exe with no arguments; Stan compiled models exit immediately with usage
-# text when called bare, so this is safe. Returns TRUE if process creation succeeded
-# (any exit code), FALSE only if error 5 (Access Denied = AppLocker block) is raised.
+# Runs the exe with no arguments; Stan compiled models exit immediately with
+# usage text when called bare, so this is safe.
+# Returns TRUE if process creation succeeded, FALSE for ANY error — if the
+# probe errors for any reason the exe cannot be used in that location.
 .test_exe_runnable <- function(exe_path) {
   if (.Platform$OS.type != "windows") return(TRUE)
   tryCatch({
@@ -44,7 +68,7 @@
                   stdout = NULL, stderr = NULL)
     TRUE
   }, error = function(e) {
-    !grepl("system error 5", conditionMessage(e), fixed = TRUE)
+    FALSE
   })
 }
 
@@ -141,14 +165,15 @@ compile_bss_model <- function(
         cmdstanr::cmdstan_model(model_file_name, dir = try_dir,
                                 cpp_options = cpp_opts, force_recompile = FALSE),
         error = function(e) {
-          msg <- conditionMessage(e)
-          if (is_windows && grepl("system error 32", msg, fixed = TRUE) && attempt < max_av_waits) {
+          is_av_lock <- is_windows && .has_error32(e) && attempt < max_av_waits
+          is_blocked <- is_windows && .has_error5(e)
+          if (is_av_lock) {
             message(sprintf("[compile_bss_model] AV scan lock (attempt %d/%d) — waiting 10 s...",
                             attempt, max_av_waits))
             Sys.sleep(10)
             return(NULL)
           }
-          if (is_windows && grepl("system error 5", msg, fixed = TRUE)) {
+          if (is_blocked) {
             message(sprintf("[compile_bss_model] AppLocker blocked %s — trying next dir.", try_dir))
             blocked <<- TRUE
             return(NULL)
