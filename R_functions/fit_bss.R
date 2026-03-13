@@ -19,17 +19,12 @@
 #   - For loops over multiple catch groups: call compile_bss_model() once before the loop,
 #     then pass the result as bss_model_obj to each fit_bss() call (compile once, sample N times)
 #
-# Exe directory (stan_exe_dir) — WDFW-managed endpoints (DFW-275708):
-#   Default = cmdstanr::cmdstan_path()  — the VERSIONED CmdStan install directory
-#   e.g.  C:\Users\<user>\.cmdstan\cmdstan-2.38.0\          (Windows)
-#         /home/<user>/.cmdstan/cmdstan-2.38.0/              (Linux)
-#   AppLocker/WDAC permits execution of CmdStan's own tools from this exact directory
-#   (stanc.exe, etc. all run from here). Placing the compiled model exe in the same
-#   directory inherits that permission.
-#
-#   The .cmdstan ROOT (dirname of cmdstan_path()) is NOT AppLocker-permitted for execution:
-#   the IT ASR exclusion (C:\Users*\.cmdstan*) covers write/scan operations only.
-#   Error 5 (Access Denied) on process creation = AppLocker block = permanent, not transient.
+# Exe directory (stan_exe_dir):
+#   Default = dirname(cmdstanr::cmdstan_path())  — the .cmdstan root directory
+#   e.g.  C:\Users\<user>\.cmdstan\   (Windows)
+#         ~/.cmdstan/                  (Linux/Mac)
+#   This is one level above the versioned CmdStan install subdir and is the same
+#   location CmdStan tools write to on compile. Works for any user without hardcoding.
 
 
 # Compile or load a BSS Stan model, returning a CmdStanModel object.
@@ -46,12 +41,13 @@
 # @param threads_per_chain Must match the threads_per_chain value used in
 #   fit_bss() — compiling with stan_threads = TRUE is required for > 1 thread.
 # @param stan_exe_dir Directory where the compiled exe is stored.
-#   Default keeps the exe inside the CmdStan install tree (AppLocker-safe).
+#   Default is the .cmdstan root (dirname of cmdstan_path()), resolved for
+#   whatever user is running the code, shared across CmdStan version upgrades.
 # @return A CmdStanModel object ready for $sample() calls.
 compile_bss_model <- function(
     model_file_name   = here::here("stan_models/BSS_creel_model_02_2021-01-22_ppc.stan"),
     threads_per_chain = 1,
-    stan_exe_dir      = cmdstanr::cmdstan_path()) {
+    stan_exe_dir      = dirname(cmdstanr::cmdstan_path())) {
 
   if (!requireNamespace("cmdstanr", quietly = TRUE)) {
     stop("Package 'cmdstanr' is required.")
@@ -86,10 +82,10 @@ compile_bss_model <- function(
   exe_valid <- exe_size >= EXE_MIN_BYTES
 
   if (exe_valid) {
-    # Exe already in the AppLocker-safe target directory — nothing to do.
+    # Valid exe already present — nothing to do.
     message(sprintf("[compile_bss_model] Existing exe found — skipping compilation\n  %s", exe_path))
   } else {
-    # Remove any zero-byte or stub file left by a failed copy.
+    # Remove any zero-byte or stub file left by a previous failed run.
     if (file.exists(exe_path)) {
       message(sprintf(
         "[compile_bss_model] Removing invalid/truncated exe (%d bytes): %s",
@@ -97,35 +93,7 @@ compile_bss_model <- function(
       ))
       file.remove(exe_path)
     }
-
-    # Check the parent directory (dirname(stan_exe_dir)) as a fallback.
-    # This handles the case where the exe was previously compiled directly into
-    # the .cmdstan root (e.g. C:\Users\<user>\.cmdstan\) before the AppLocker-safe
-    # subdirectory convention was established.
-    parent_exe_path  <- file.path(dirname(stan_exe_dir), exe_filename)
-    parent_exe_size  <- if (file.exists(parent_exe_path)) file.info(parent_exe_path)$size else -1L
-    parent_exe_valid <- parent_exe_size >= EXE_MIN_BYTES
-
-    if (parent_exe_valid) {
-      message(sprintf(
-        "[compile_bss_model] Exe found in parent dir — copying to AppLocker-safe location\n  from: %s\n  to:   %s",
-        parent_exe_path, exe_path
-      ))
-      copied_ok      <- file.copy(parent_exe_path, exe_path, overwrite = TRUE)
-      copied_size    <- if (file.exists(exe_path)) file.info(exe_path)$size else 0L
-      copy_succeeded <- copied_ok && copied_size >= EXE_MIN_BYTES
-      if (!copy_succeeded) {
-        message(sprintf(
-          "[compile_bss_model] Copy failed or produced truncated file (%d bytes) — will recompile.\n  (Source may be read-restricted by AV/EDR.)",
-          copied_size
-        ))
-        if (file.exists(exe_path)) file.remove(exe_path)
-      }
-    }
-
-    if (!file.exists(exe_path)) {
-      message(sprintf("[compile_bss_model] No valid exe found — compiling: %s", basename(model_file_name)))
-    }
+    message(sprintf("[compile_bss_model] No valid exe found — compiling: %s", basename(model_file_name)))
   }
 
   # Call cmdstan_model() with force_recompile = FALSE.
@@ -212,7 +180,7 @@ fit_bss <- function(
     threads_per_chain = 1,
     init              = "0",
     refresh           = NULL,
-    stan_exe_dir      = cmdstanr::cmdstan_path(),
+    stan_exe_dir      = dirname(cmdstanr::cmdstan_path()),
     ...) {
 
   if (!requireNamespace("cmdstanr", quietly = TRUE)) {

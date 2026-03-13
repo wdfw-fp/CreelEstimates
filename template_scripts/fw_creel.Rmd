@@ -847,6 +847,7 @@ compile_bss_model
 # ---- Compile / load model once (shared across all catch groups) ----
 # Compiles only when no exe is found; subsequent runs load the existing exe.
 # Default stan_exe_dir = dirname(cmdstan_path()) = C:\Users\<user>\.cmdstan\
+# (user-agnostic; exe persists across CmdStan version upgrades)
 bss_model <- compile_bss_model(
   model_file_name   = here::here("stan_models", params$bss_model_file_name),
   threads_per_chain = 2
@@ -874,7 +875,7 @@ for(ecg in names(inputs_bss)) {
       n_thin            = 1,
       adapt_delta       = 0.7,
       max_treedepth     = 12,
-      threads_per_chain = 3,              # within-chain parallelization via reduce_sum (total CPU = n_cores * threads_per_chain)
+      threads_per_chain = 2,              # within-chain parallelization via reduce_sum (total CPU = n_cores * threads_per_chain)
       init              = "0"
     )
     
