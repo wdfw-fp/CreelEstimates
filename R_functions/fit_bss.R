@@ -80,124 +80,105 @@ compile_bss_model <- function(
     stop("Stan model file not found: ", model_file_name)
   }
 
-  # stan_threads = TRUE is required at compile time for threads_per_chain > 1.
-  cpp_opts <- if (threads_per_chain > 1) list(stan_threads = TRUE) else list()
-
-  exe_stem     <- tools::file_path_sans_ext(basename(model_file_name))
-  exe_filename <- if (.Platform$OS.type == "windows") paste0(exe_stem, ".exe") else exe_stem
-
-  # A real CmdStan-compiled exe is always several MB; treat anything < 100 KB as invalid.
+  cpp_opts      <- if (threads_per_chain > 1) list(stan_threads = TRUE) else list()
+  exe_stem      <- tools::file_path_sans_ext(basename(model_file_name))
+  exe_filename  <- if (.Platform$OS.type == "windows") paste0(exe_stem, ".exe") else exe_stem
   EXE_MIN_BYTES <- 100000L
   is_windows    <- .Platform$OS.type == "windows"
+  max_av_waits  <- 6L
 
   t0 <- proc.time()[["elapsed"]]
 
-  # ---------------------------------------------------------------------------
-  # Step 1: Compile (or load cached exe) into the primary stan_exe_dir.
-  # ---------------------------------------------------------------------------
-  dir.create(stan_exe_dir, showWarnings = FALSE, recursive = TRUE)
-  if (!dir.exists(stan_exe_dir)) {
-    stop("Could not create stan_exe_dir: ", stan_exe_dir)
-  }
+  # Ordered candidate dirs: primary first, then proven-safe fallbacks (only if
+  # already present on this machine — rtools/RBuildTools are not created here).
+  fallback_roots <- c("C:/rtools", "C:/rtools44", "C:/rtools43", "C:/RBuildTools")
+  all_dirs       <- c(stan_exe_dir, Filter(dir.exists, fallback_roots))
 
-  primary_exe <- file.path(stan_exe_dir, exe_filename)
+  compiled_exe <- NULL  # set after first successful compile; copied to later dirs
 
-  # Remove any zero-byte or truncated stub left by a previous failed run.
-  if (file.exists(primary_exe) && file.info(primary_exe)$size < EXE_MIN_BYTES) {
-    message(sprintf("[compile_bss_model] Removing truncated exe (%d bytes): %s",
-                    file.info(primary_exe)$size, primary_exe))
-    file.remove(primary_exe)
-  }
+  for (try_dir in all_dirs) {
 
-  if (file.exists(primary_exe)) {
-    message(sprintf("[compile_bss_model] Existing exe found — skipping compilation\n  %s", primary_exe))
-  } else {
-    message(sprintf("[compile_bss_model] No exe found — compiling: %s", basename(model_file_name)))
-  }
+    # Primary dir: create if needed. Fallback dirs: must already exist on machine.
+    if (identical(try_dir, stan_exe_dir)) {
+      dir.create(try_dir, showWarnings = FALSE, recursive = TRUE)
+    }
+    if (!dir.exists(try_dir)) next
 
-  # AV/EDR retry loop (error 32 = transient scan lock; wait and retry).
-  max_attempts <- 6L
-  mod <- NULL
-  for (attempt in seq_len(max_attempts)) {
-    mod <- tryCatch(
-      cmdstanr::cmdstan_model(model_file_name, dir = stan_exe_dir,
-                              cpp_options = cpp_opts, force_recompile = FALSE),
-      error = function(e) {
-        msg <- conditionMessage(e)
-        if (is_windows && grepl("system error 32", msg, fixed = TRUE) && attempt < max_attempts) {
-          message(sprintf("[compile_bss_model] Exe locked by AV scan (attempt %d/%d) — waiting 10 s...",
-                          attempt, max_attempts))
-          Sys.sleep(10)
-          return(NULL)
+    try_exe <- file.path(try_dir, exe_filename)
+
+    # Remove any truncated stub left by a previous failed run.
+    if (file.exists(try_exe) && file.info(try_exe)$size < EXE_MIN_BYTES) {
+      message(sprintf("[compile_bss_model] Removing truncated exe (%d bytes): %s",
+                      file.info(try_exe)$size, try_exe))
+      file.remove(try_exe)
+    }
+
+    # If already compiled in a previous dir, copy rather than recompile (~20 s).
+    if (!file.exists(try_exe) && !is.null(compiled_exe)) {
+      message(sprintf("[compile_bss_model] Copying exe to: %s", try_dir))
+      ok      <- file.copy(compiled_exe, try_exe, overwrite = TRUE)
+      cp_size <- if (file.exists(try_exe)) file.info(try_exe)$size else 0L
+      if (!ok || cp_size < EXE_MIN_BYTES) {
+        message(sprintf("[compile_bss_model] Copy failed (%d bytes) — skipping %s.", cp_size, try_dir))
+        if (file.exists(try_exe)) file.remove(try_exe)
+        next
+      }
+    }
+
+    if (!file.exists(try_exe)) {
+      message(sprintf("[compile_bss_model] Compiling into: %s", try_dir))
+    } else {
+      message(sprintf("[compile_bss_model] Loading from:   %s", try_dir))
+    }
+
+    # Load or compile. Catch:
+    #   error 32 — AV/EDR transient scan lock  → wait 10 s and retry (same dir)
+    #   error 5  — AppLocker permanent block    → skip immediately to next dir
+    blocked <- FALSE
+    mod     <- NULL
+    for (attempt in seq_len(max_av_waits)) {
+      mod <- tryCatch(
+        cmdstanr::cmdstan_model(model_file_name, dir = try_dir,
+                                cpp_options = cpp_opts, force_recompile = FALSE),
+        error = function(e) {
+          msg <- conditionMessage(e)
+          if (is_windows && grepl("system error 32", msg, fixed = TRUE) && attempt < max_av_waits) {
+            message(sprintf("[compile_bss_model] AV scan lock (attempt %d/%d) — waiting 10 s...",
+                            attempt, max_av_waits))
+            Sys.sleep(10)
+            return(NULL)
+          }
+          if (is_windows && grepl("system error 5", msg, fixed = TRUE)) {
+            message(sprintf("[compile_bss_model] AppLocker blocked %s — trying next dir.", try_dir))
+            blocked <<- TRUE
+            return(NULL)
+          }
+          stop(e)
         }
-        stop(e)
-      }
-    )
-    if (!is.null(mod)) break
-  }
+      )
+      if (blocked || !is.null(mod)) break
+    }
+    if (blocked || is.null(mod)) next
 
-  message(sprintf("[compile_bss_model] Compiled/loaded: %.1f s  |  exe: %s",
-                  proc.time()[["elapsed"]] - t0, mod$exe_file()))
+    # Track the compiled exe path so it can be copied to subsequent dirs.
+    compiled_exe <- mod$exe_file()
 
-  # ---------------------------------------------------------------------------
-  # Step 2: Test whether the exe can actually be executed (AppLocker check).
-  # On non-Windows or when the primary dir is permitted, return immediately.
-  # ---------------------------------------------------------------------------
-  if (.test_exe_runnable(mod$exe_file())) {
+    # Execution probe via processx: catches AppLocker at the OS process-creation
+    # level (error 5), which can fire even if cmdstan_model() did not.
+    if (!.test_exe_runnable(compiled_exe)) {
+      message(sprintf("[compile_bss_model] AppLocker blocked execution in %s — trying next dir.",
+                      try_dir))
+      next
+    }
+
+    message(sprintf("[compile_bss_model] Ready: %.1f s  |  exe: %s",
+                    proc.time()[["elapsed"]] - t0, compiled_exe))
     return(mod)
-  }
-
-  # ---------------------------------------------------------------------------
-  # Step 3: AppLocker blocked the primary dir — copy exe to fallback dirs and
-  # use the first one that permits execution.
-  # Fallbacks are only used if the directory already exists on the machine
-  # (rtools/RBuildTools are installed by the user, not created here).
-  # ---------------------------------------------------------------------------
-  fallback_dirs <- c("C:/rtools", "C:/rtools44", "C:/rtools43", "C:/RBuildTools")
-  compiled_exe  <- mod$exe_file()
-
-  message(sprintf(
-    "[compile_bss_model] AppLocker blocked execution from: %s\n  Trying fallback directories: %s",
-    stan_exe_dir, paste(fallback_dirs, collapse = ", ")
-  ))
-
-  for (fb_dir in fallback_dirs) {
-    if (!dir.exists(fb_dir)) next  # skip if not installed on this machine
-
-    fb_exe    <- file.path(fb_dir, exe_filename)
-    copied_ok <- file.copy(compiled_exe, fb_exe, overwrite = TRUE)
-    fb_size   <- if (file.exists(fb_exe)) file.info(fb_exe)$size else 0L
-
-    if (!copied_ok || fb_size < EXE_MIN_BYTES) {
-      message(sprintf("[compile_bss_model] Copy to %s failed (%d bytes) — skipping.", fb_dir, fb_size))
-      if (file.exists(fb_exe)) file.remove(fb_exe)
-      next
-    }
-
-    if (!.test_exe_runnable(fb_exe)) {
-      message(sprintf("[compile_bss_model] AppLocker also blocked %s — skipping.", fb_dir))
-      file.remove(fb_exe)
-      next
-    }
-
-    # This fallback dir permits execution — load the model from it.
-    mod_fb <- tryCatch(
-      cmdstanr::cmdstan_model(model_file_name, dir = fb_dir,
-                              cpp_options = cpp_opts, force_recompile = FALSE),
-      error = function(e) {
-        message(sprintf("[compile_bss_model] Failed to load from %s: %s", fb_dir, conditionMessage(e)))
-        NULL
-      }
-    )
-    if (!is.null(mod_fb)) {
-      message(sprintf("[compile_bss_model] Using fallback dir: %s", fb_dir))
-      return(mod_fb)
-    }
   }
 
   stop(
     "[compile_bss_model] All candidate directories are AppLocker-blocked.\n",
-    "  Tried: ", paste(c(stan_exe_dir, fallback_dirs), collapse = "\n         "), "\n",
+    "  Tried: ", paste(all_dirs, collapse = "\n         "), "\n",
     "  Submit an IT ticket requesting an AppLocker execution rule for one of these paths."
   )
 }
