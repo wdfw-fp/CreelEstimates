@@ -2,9 +2,10 @@
 title: "Freshwater Creel Report <br>`r params$fishery_name`"
 date: "`r Sys.Date()`"
 params:
+  project_name: "District 11"
   fishery_name: "Nisqually salmon 2022"
-  est_date_start: "2022-09-01"
-  est_date_end: "2022-09-15"
+  est_date_start: "2022-07-01"
+  est_date_end: "2022-11-15"
   est_catch_groups: !r data.frame(rbind(
     c(species = 'Chinook', life_stage = 'Adult', fin_mark = 'UM', fate = 'Released')))
   study_design: "Standard"   
