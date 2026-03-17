@@ -1,0 +1,71 @@
+name: Run Creel Analysis
+
+on:
+  workflow_dispatch:
+    inputs:
+      analysis_folder:
+        description: >
+          Path to the analysis folder relative to repo root.
+          Example: fishery_analyses/District 11/Nisqually salmon 2023/NS23_B8F5_20260317
+        required: true
+        type: string
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    # Use the same base image as the devcontainer — R, tidyverse, rmarkdown,
+    # knitr, devtools, and pandoc are already installed.
+    container:
+      image: rocker/verse:4.4
+    timeout-minutes: 360   # Stan models can be slow; 6-hour cap
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Cache the R library keyed on the Dockerfile + install_packages.R so a
+      # rebuild is only triggered when dependencies actually change.
+      - name: Cache R library
+        uses: actions/cache@v4
+        with:
+          path: /usr/local/lib/R/site-library
+          key: r-44-jammy-${{ hashFiles('.devcontainer/Dockerfile', '.devcontainer/install_packages.R') }}
+          restore-keys: r-44-jammy-
+
+      # Install CRAN packages not already in rocker/verse.
+      # Uses Posit Package Manager pre-compiled binaries for Ubuntu 22.04 (jammy)
+      # — same strategy as the Dockerfile but targeting the correct OS for this image.
+      - name: Install CRAN packages
+        run: |
+          Rscript -e "
+            options(
+              repos = c(CRAN = 'https://packagemanager.posit.co/cran/__linux__/jammy/latest'),
+              Ncpus = parallel::detectCores()
+            )
+            pkgs <- c(
+              'here', 'yaml', 'patchwork', 'gt', 'timeDate', 'digest',
+              'rstan', 'posterior', 'bayesplot',
+              'readxl', 'lubridate', 'suncalc', 'uuid'
+            )
+            missing <- pkgs[!pkgs %in% installed.packages()[, 'Package']]
+            if (length(missing) > 0) install.packages(missing)
+          "
+
+      # Install the wdfw-fp/creelutils GitHub package (same as postCreateCommand).
+      - name: Install creelutils
+        run: Rscript .devcontainer/install_packages.R
+
+      # Run the analysis. working-directory sets the shell cwd so that the
+      # relative Rmd path inside run_rmd.R resolves correctly.
+      - name: Render analysis
+        working-directory: ${{ inputs.analysis_folder }}
+        run: Rscript run_rmd.R
+
+      # Upload the rendered HTML so it can be downloaded from the Actions run page.
+      - name: Upload HTML report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: creel-report
+          path: "${{ inputs.analysis_folder }}/*.html"
+          if-no-files-found: warn
