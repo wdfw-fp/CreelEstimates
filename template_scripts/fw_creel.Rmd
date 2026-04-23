@@ -1419,7 +1419,7 @@ if (params$export %in% c("database", "local") && !params$model_used %in% c("PE o
   }
   
   #Combine PE and BSS and perform other transformation steps
-  creel_estimates <- transform_estimates(params = params, dwg, transformed_pe_data, transformed_bss_data)  
+  creel_estimates <- creelutils::transform_estimates(params, dwg, transformed_pe_data, transformed_bss_data)  
 
 }
 
