@@ -9,7 +9,6 @@ prep_dwg_effort_index <- function(
     angler_type_kayak_pontoon = NA,     # string passed from params that controls whether a boat designated as a kayak, pontoon, or kick during an effort count or angler group interview should be designated as a boat or bank angler.
     ...){
   
-  params <- params
 #create intermediate object index_angler_groups that converts count_type objects to angler_final
 if(str_detect(study_design, "tandard" )){
 

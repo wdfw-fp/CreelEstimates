@@ -9,7 +9,6 @@ prep_dwg_interview_catch <- function(
     est_catch_groups,            # data.frame passed from params of aggregated catch groups of interest to estimate
     ...){
 
-  params <- params
   #coerce missing values to actual strings to allow params$est_catch_groups to include NAs alongside non-NA
   #to allow 'run' specification in params, add 'run' within across()
   dwg_catch_group <- 

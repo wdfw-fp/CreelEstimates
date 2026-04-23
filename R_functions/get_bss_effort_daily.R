@@ -1,5 +1,5 @@
 get_bss_effort_daily <- function(bss_fit, ecg, dwg, ...){
-  dwg <- dwg
+
   bss_fit |> 
     summary(pars = c("E")) |> 
     pluck("summary") |> #only want the combined-chains version

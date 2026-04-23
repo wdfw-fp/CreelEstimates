@@ -15,8 +15,6 @@ est_pe_effort <- function(
     sections,
     ...
 ){
-  params <- params
-  dwg <- dwg
   est_effort <- 
     dplyr::left_join(
     #dates expanded to sections * angler_final * opendays

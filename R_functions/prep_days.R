@@ -10,7 +10,7 @@ prep_days <- function(
     day_length,
     day_length_inputs,
     ...){
-  params <- params
+
   date_begin <- as.Date(date_begin, format="%Y-%m-%d")
   date_end <- as.Date(date_end, format="%Y-%m-%d")
   
