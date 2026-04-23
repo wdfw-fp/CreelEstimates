@@ -57,7 +57,7 @@ plot_inputs_pe_cpue_period <- function(
   }
   else if(period_pe == "month"){
     
-    p <- cpue_periodcpue_period |> 
+    p <- cpue_period |> 
       ggplot(aes(min_event_date, cpue_rom_period, fill = interaction(day_type, angler_final))) +
       geom_point(aes(fill = interaction(day_type, angler_final)), color = "black", pch = 21, size = 3.25) +
       scale_x_date(date_breaks = "1 month", labels = scales::date_format("%b")) +
@@ -71,7 +71,7 @@ plot_inputs_pe_cpue_period <- function(
   }
   
   else if(period_pe == "duration"){
-    p <- cpue_periodcpue_period |> 
+    p <- cpue_period |> 
       ggplot(aes(min_event_date, cpue_rom_period, fill = interaction(day_type, angler_final))) +
       geom_point(aes(fill = interaction(day_type, angler_final)), color = "black", pch = 21, size = 3.25) +
       scale_x_date() +
