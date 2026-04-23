@@ -9,7 +9,6 @@
 
 est_pe_effort <- function(
     params,
-    dwg,
     days,
     pe_inputs_list,
     sections,
