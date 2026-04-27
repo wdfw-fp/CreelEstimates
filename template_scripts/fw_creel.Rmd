@@ -1437,7 +1437,14 @@ if (params$export == "database") {
   #calls prep_export()
   #Defines functions for writing to database tables
   #Performs pre- and post- upload QAQC checks
-  creelutils::export_estimates(params, analysis_lut, creel_estimates)
+  # creelutils::export_estimates(params, analysis_lut, creel_estimates)
+  
+  con <- creelutils::connect_creel_db()
+  
+  analysis_lut <- analysis_lut |> 
+    dplyr::select(-fishery_name, -identifier, -analysis_folder, -created_datetime)
+  
+  creelutils::export_estimates(conn = con , params, analysis_lut, creel_estimates)
   
 } else if (params$export == "local") {
   # Save all export tables to outputs folder
