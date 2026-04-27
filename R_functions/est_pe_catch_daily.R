@@ -1,6 +1,7 @@
 # Divide time strata (period) catch estimates into estimated daily values
 
 est_pe_catch_daily <- function(
+    dwg,
     days,
     pe_catch, 
     closures,

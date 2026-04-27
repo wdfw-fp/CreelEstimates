@@ -1,6 +1,7 @@
 # function for "first time run" of fw_creel.Rmd that copies, renames, and saves a new analysis script in it's respective fishery_analyses/project/fishery_name location
 
 prep_analysis_script <- function(
+    params,
     project,
     fishery,
     ...){

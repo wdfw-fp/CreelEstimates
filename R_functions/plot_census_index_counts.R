@@ -5,6 +5,7 @@
 plot_paired_census_index <- function(
     days,
     dwg_summarized,
+    params,
     interview_ang_per_vehic,
     census_expan,
     outputs_folders = NULL,
