@@ -8,12 +8,12 @@
 #could pool over weeks (and perhaps angler_final) if a better variance is desired over the fishery duration
 
 est_pe_effort <- function(
+    params,
     days,
     pe_inputs_list,
     sections,
     ...
 ){
-  
   est_effort <- 
     dplyr::left_join(
     #dates expanded to sections * angler_final * opendays

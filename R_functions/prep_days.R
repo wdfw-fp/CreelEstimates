@@ -1,5 +1,6 @@
 
 prep_days <- function(
+    params,
     date_begin, date_end,
     weekends = c("Saturday", "Sunday"),
     lat, long,
@@ -9,7 +10,7 @@ prep_days <- function(
     day_length,
     day_length_inputs,
     ...){
-  
+
   date_begin <- as.Date(date_begin, format="%Y-%m-%d")
   date_end <- as.Date(date_end, format="%Y-%m-%d")
   

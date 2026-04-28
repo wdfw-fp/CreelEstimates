@@ -1,6 +1,6 @@
 #Aggregates index effort counts over locations within count_seq & section
 #Note summarize() does not account for missed locations with date-section-sequence 
-prep_dwg_effort_index_baker <- function(eff, ...){
+prep_dwg_effort_index_baker <- function(eff, params, ...){
   
   eff |> dplyr::filter( 
     tie_in_indicator == 0,

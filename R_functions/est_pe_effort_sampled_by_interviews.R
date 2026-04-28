@@ -2,23 +2,25 @@
 
 # EB 7.24.2023 need to deal with repeating data over catch groups, right now multiplying total stratum fishing hours from interviews by n-number of catch groups 
 
+# example: est_pe_effort_sampled_by_interviews(days=dwg$days, dwg_summ, estimates_pe$effort)
 
 est_pe_effort_sampled_by_interviews <- function(
     days,
-    dwg_summarized,
-    estimates_pe_effort,
+    dwg_summ,
+    estimates_pe_effort = estimates_pe$effort,
     ...
 ){
   
   dwg_summ$interview |>
     distinct(interview_id, section_num, event_date, angler_final, fishing_time_total) |> # ensure only distinct interviews are evaluated, given potentially > 1 catch groups
-    left_join(dwg$days |> dplyr::select(event_date, period, day_type), by = "event_date") |> 
+    left_join(days |> dplyr::select(event_date, period, day_type), by = "event_date") |> 
     drop_na(angler_final) |>  
     group_by(period, section_num, day_type, angler_final) |> 
     summarise(
       interview_hours_total = sum(fishing_time_total)
     ) |> 
-    left_join(estimates_pe$effort |> ## join expanded catch estimates in pe$est_effort_s_ts_dt_at to total angler hours from interviews in pe$interview 
+    # left_join(estimates_pe$effort |> ## join expanded catch estimates in pe$est_effort_s_ts_dt_at to total angler hours from interviews in pe$interview 
+    left_join(estimates_pe_effort |> 
                 select(section_num, period, section_num, day_type, angler_final, effort_est = est) |>
                 group_by(section_num, period, day_type, angler_final) |> 
                 summarise(

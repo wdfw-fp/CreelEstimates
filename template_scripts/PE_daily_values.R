@@ -24,6 +24,7 @@ library("lubridate")
 
 
 estimates_pe$catch_daily <- est_pe_catch_daily(
+  dwg = dwg,
   days = dwg$days,
   pe_catch = estimates_pe$catch,
   closures = dwg$closures |> 

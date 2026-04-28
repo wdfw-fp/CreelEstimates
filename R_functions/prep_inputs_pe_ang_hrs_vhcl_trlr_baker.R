@@ -4,6 +4,7 @@ prep_inputs_pe_ang_hrs_vhcl_trlr_baker <- function(
     interview_ang_per_vehic, #tibble of interview-based values to translate vehicle/trailer counts to boat/bank
     paired_census_index_counts,
     census_expan,
+    inputs_pe,
     ...
     ){
   

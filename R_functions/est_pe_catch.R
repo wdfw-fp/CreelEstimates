@@ -1,9 +1,10 @@
 est_pe_catch <- function(
+    params,
+    dwg,
     days,
     pe_inputs_list, 
     ...
 ){
-  
   est_catch <- 
     dplyr::left_join(
     #dates expanded to sections * angler_final * opendays

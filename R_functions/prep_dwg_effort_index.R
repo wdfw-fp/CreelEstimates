@@ -1,6 +1,7 @@
 #Aggregates index effort counts over locations within count_seq & section based on study_design and user input values for boat_type_collapse, fish_location_determines_type, angler_type_kayak_pontoon 
 #Note summarize() does not account for missed locations with date-section-sequence 
 prep_dwg_effort_index <- function(
+    params,
     eff,                                # effort data from dwg filtered using start & end dates passed from params
     study_design,                       # string passed from params denoting which study design was followed during data collection
     boat_type_collapse = NA,            # string passed from params that controls whether all (potential) boat types (e.g., motor_boat, drift_boat) are collapsed (i.e., boat_type_collapse: "Yes") into a single boat type or kept separate (boat_type_collapse: "No"). 
