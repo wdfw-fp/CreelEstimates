@@ -34,7 +34,7 @@ if(str_detect(study_design, "tandard" )){
             dplyr::group_by(section_num, event_date, count_sequence) |>
             dplyr::summarize(angler_final = "boat", count_census = sum(count_census), .groups = "drop")
         ),
-        dwg_summarized$effort_index |> select(-fishery_name, -angler_final_int)
+        dwg_summarized$effort_index |> select(-fishery_name, -angler_final_int, -count_type)
         ,
         by = c("section_num", "event_date", "count_sequence", "angler_final")
       ) |> 
