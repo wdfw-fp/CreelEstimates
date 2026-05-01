@@ -57,15 +57,20 @@ if(str_detect(study_design, "tandard" )){
     ) 
 } 
 # create final object output of interest index_angler_final that summarizes index count data by section_num, event_date, count_sequence, & angler_final  
-  index_angler_final<-  
-    index_angler_groups |>  
-    dplyr::group_by(section_num, event_date, count_sequence, angler_final) |> #
-    dplyr::summarise(count_index = sum(count_quantity), .groups = "drop") |> 
-    dplyr::arrange(section_num, event_date, count_sequence) |> 
+  index_angler_final <-
+    index_angler_groups |>
+    dplyr::group_by(section_num, event_date, count_sequence, angler_final) |>
+    dplyr::summarise(count_index = sum(count_quantity), .groups = "drop") |>
+    dplyr::arrange(section_num, event_date, count_sequence) |>
     mutate(
-      fishery_name = params$fishery_name # add back fishery_name
-      , angler_final_int = as.integer(factor(angler_final)) 
-    ) |> 
+      fishery_name = params$fishery_name,
+      angler_final_int = as.integer(factor(angler_final, levels = c("total", "boat"))),
+      count_type = dplyr::case_match(
+        angler_final,
+        "total" ~ "Vehicle Only",
+        "boat"  ~ "Trailers Only"
+      )
+    ) |>
     relocate(fishery_name)
   
   return(list(index_angler_groups = index_angler_groups, index_angler_final = index_angler_final))  
