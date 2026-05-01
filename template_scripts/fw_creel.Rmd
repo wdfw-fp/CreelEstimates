@@ -568,19 +568,9 @@ saveRDS(dwg_summ, file.path(outputs_folders$inputs, "dwg_summ.rds"))
 ```{r plot_index_effort_counts, cache=params$enable_cache, dependson="prep_dwg_summ_shared_summary_objects", fig.cap= "Index effort counts for each count sequence on surveyed days within the monitoring period. Index counts represent the sum of counts completed at each sampling site during a drive around effort count."}
 # plot of index effort counts faceted by section and count_type per count sequence and day 
 
-# rename to items actually counted 
-summarised_index_counts <- dwg_summ$effort_index |>
-  mutate(
-    angler_final = case_when(
-      angler_final == "boat" ~ "trailers",
-      angler_final == "total" ~ "vehicles",
-      TRUE ~ angler_final  # keeps any other values unchanged
-    )
-  )
-
 plot_inputs_pe_index_effort_counts(
   params = params,
-  effort_index = summarised_index_counts,
+  effort_index = dwg_summ$effort_index,
   outputs_folders = outputs_folders)
 ```
 
