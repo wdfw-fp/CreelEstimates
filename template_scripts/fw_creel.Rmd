@@ -1093,7 +1093,8 @@ overview_combined <- purrr::imap_dfr(
 # Create a gt table with row groups
 overview_combined |> 
   gt(groupname_col = "catch_group") |>
-  fmt_number(-c(estimate, est_cg, catch_group), decimals = 1) |> 
+  fmt_number(-c(estimate, est_cg, catch_group, Rhat), decimals = 1) |> 
+  fmt_number(Rhat, decimals = 2) |> 
   tab_style(
     style = cell_fill(),
     locations = cells_body(columns = "50%")
@@ -1360,9 +1361,30 @@ map_df(estimates_bss, ~.x$overview) |>
     table.font.color = "black"
   ) |> 
   fmt_number(-c(estimate, est_cg), decimals = 1) |> 
+  fmt_number(Rhat, decimals = 2) |> 
   tab_style(style = cell_fill(), locations = cells_body(columns = "PE")) |> 
   tab_style(style = cell_fill(), locations = cells_body(columns = "50%"))
 
+```
+
+## Estimated total effort sampled by interviews
+
+```{r effort_sampled_by_interviews, eval=TRUE, cache=params$enable_cache, dependson=c("dwg_fetch", "prep_dwg_summ_shared_summary_objects", "estimates_pe"), cache.extra=param_hash}
+
+est_pe_effort_sampled_by_interviews(
+  days = dwg$days, dwg_summ = dwg_summ, estimates_pe_effort = estimates_pe$effort
+) |> 
+  gt(groupname_col = "section_name") |> 
+  fmt_number(c(interview_hours_total, angler_effort_total, proportion_interviewed_effort), decimals = 0) |> 
+  fmt_number(proportion_interviewed_effort, decimals = 2) |> 
+  cols_label_with(
+    fn = ~str_to_sentence(str_replace_all(.x, "_", " "))
+  ) |>
+  tab_header(title = "Summation of interview hours, total PE estimated effort (angler hours), and the estimated proportion of total effort that was sampled during creel surveys.") |>
+  tab_options(
+    heading.title.font.size = px(14),
+    table.font.color = "black"
+  )
 ```
 
 # Save results
