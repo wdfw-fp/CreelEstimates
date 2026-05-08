@@ -5,7 +5,7 @@ params:
   project_name: "District 14"
   fishery_name: "Skagit fall salmon 2024"
   est_date_start: "2024-09-01"
-  est_date_end: "2024-09-15"
+  est_date_end: "2024-09-30"
   est_catch_groups: !r data.frame(rbind(
     c(species = 'Coho', life_stage = 'Adult', fin_mark = 'UM', fate = 'Released'),
     c(species = 'Coho', life_stage = 'Adult', fin_mark = 'AD', fate = 'Kept')))
