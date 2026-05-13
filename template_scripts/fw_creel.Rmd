@@ -1371,9 +1371,11 @@ map_df(estimates_bss, ~.x$overview) |>
 
 ```{r effort_sampled_by_interviews, eval=TRUE, cache=params$enable_cache, dependson=c("dwg_fetch", "prep_dwg_summ_shared_summary_objects", "estimates_pe"), cache.extra=param_hash}
 
-est_pe_effort_sampled_by_interviews(
-  days = dwg$days, dwg_summ = dwg_summ, estimates_pe_effort = estimates_pe$effort
-) |> 
+interview_coverage_table <-  est_pe_effort_sampled_by_interviews(
+  days = dwg$days, 
+  dwg_summ = dwg_summ, 
+  estimates_pe_effort = estimates_pe$effort
+  ) |> 
   gt() |> 
     grand_summary_rows(
       columns = c(interview_hours_total, angler_effort_total),
@@ -1414,6 +1416,12 @@ est_pe_effort_sampled_by_interviews(
         cells_grand_summary()
       )
     )
+
+interview_coverage_table
+
+# Save to figures folder
+save_gt_table(interview_coverage_table, paste0("interview_coverage_table"))
+
 ```
 
 # Save results
