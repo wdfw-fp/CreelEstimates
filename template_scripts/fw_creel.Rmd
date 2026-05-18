@@ -1093,7 +1093,8 @@ overview_combined <- purrr::imap_dfr(
 # Create a gt table with row groups
 overview_combined |> 
   gt(groupname_col = "catch_group") |>
-  fmt_number(-c(estimate, est_cg, catch_group), decimals = 1) |> 
+  fmt_number(-c(estimate, est_cg, catch_group, Rhat), decimals = 1) |> 
+  fmt_number(Rhat, decimals = 2) |> 
   tab_style(
     style = cell_fill(),
     locations = cells_body(columns = "50%")
@@ -1360,8 +1361,66 @@ map_df(estimates_bss, ~.x$overview) |>
     table.font.color = "black"
   ) |> 
   fmt_number(-c(estimate, est_cg), decimals = 1) |> 
+  fmt_number(Rhat, decimals = 2) |> 
   tab_style(style = cell_fill(), locations = cells_body(columns = "PE")) |> 
   tab_style(style = cell_fill(), locations = cells_body(columns = "50%"))
+
+```
+
+## Estimated total effort sampled by interviews
+
+```{r effort_sampled_by_interviews, eval=TRUE, cache=params$enable_cache, dependson=c("dwg_fetch", "prep_dwg_summ_shared_summary_objects", "estimates_pe"), cache.extra=param_hash}
+
+interview_coverage_table <-  est_pe_effort_sampled_by_interviews(
+  days = dwg$days, 
+  dwg_summ = dwg_summ, 
+  estimates_pe_effort = estimates_pe$effort
+  ) |> 
+  gt() |> 
+    grand_summary_rows(
+      columns = c(interview_hours_total, angler_effort_total),
+      fns = list(Total = ~sum(.)),
+      fmt = ~fmt_number(., decimals = 0, use_seps = TRUE)
+    ) |>
+    grand_summary_rows(
+      columns = c(proportion_interviewed_effort),
+      fns = list(Total = ~sum(interview_hours_total) / sum(angler_effort_total)),
+      fmt = ~fmt_percent(., decimals = 1)
+    ) |> 
+    fmt_number(c(interview_hours_total, angler_effort_total), decimals = 0) |> 
+    fmt_percent(proportion_interviewed_effort, decimals = 1) |> 
+    cols_width(
+      section_num ~ px(100),
+      angler_type ~ px(80),
+      interview_hours_total ~ px(120),
+      angler_effort_total ~ px(100),
+      proportion_interviewed_effort ~ px(150)
+    ) |> 
+    cols_label(
+      section_num = "Section number",
+      angler_type = "Angler type",
+      interview_hours_total = "Angler hours from interviews",
+      angler_effort_total = "Angler hours from expanded estimates",
+      proportion_interviewed_effort = "Interview coverage (%)"
+    ) |> 
+    tab_caption(caption = "Percentage of total estimated angler effort (angler hours) that was directly sampled through creel interviews, by section and angler type.") |>
+    tab_options(
+      heading.title.font.size = px(14),
+      table.font.color = "black"
+    ) |> 
+    tab_style(
+      style = cell_text(align = "center"),
+      locations = list(
+        cells_column_labels(columns = everything()),
+        cells_body(columns = everything()),
+        cells_grand_summary()
+      )
+    )
+
+interview_coverage_table
+
+# Save to figures folder
+save_gt_table(interview_coverage_table, paste0("interview_coverage_table"))
 
 ```
 
