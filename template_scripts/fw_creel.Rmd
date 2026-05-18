@@ -24,7 +24,7 @@ params:
   data_grade: "provisional"
   export: "local"
   export_tables: "both"
-  enable_cache: TRUE  # Set to FALSE to disable all caching (useful when cached files become too large)
+  enable_cache: FALSE  # Set to FALSE to disable all caching (useful when cached files become too large)
 output:
   html_document:
     toc: true
@@ -651,9 +651,9 @@ saveRDS(inputs_pe, file.path(outputs_folders$inputs, "inputs_pe.rds"))
 
 # table view of census / index surveys and resulting bias term ratio 
 inputs_pe$paired_census_index_counts |> 
-  select(section_num, angler_final, count_census, count_index, TI_expan_final) |> 
+  distinct(angler_final, count_census, count_index, TI_expan_final) |> 
   gt() |> 
-tab_header(
+  tab_header(
     title = "The season-long sum of paired census and index angler effort counts and corresponding bias-term ratio (TI_expan_final), indicating the magnitude and direction (postive or negative) of bias in index counts relative to census counts."
   ) |>
   tab_options(
