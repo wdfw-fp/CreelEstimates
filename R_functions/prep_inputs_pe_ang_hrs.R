@@ -83,10 +83,10 @@ prep_inputs_pe_ang_hrs <- function(
     left_join(
       angler_hours_daily_mean
       , 
-      paired_census_index_counts |> dplyr::select(section_num, angler_final, TI_expan_final)
+      paired_census_index_counts |> dplyr::select(angler_final, section_num, TI_expan_final)
       # census_TI_expan |> dplyr::select(section_num, angler_final, TI_expan_final)
       ,
-      by = c("section_num", "angler_final")
+      by = c("angler_final", "section_num")
     ) |>
     mutate(
       ang_hrs_daily_mean_TI_expan = angler_hours_daily_mean * TI_expan_final

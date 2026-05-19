@@ -1,88 +1,73 @@
-# Evaluate proportion of estimated total angler hours (effort) sampled during interviews, grouped by angler type
-
-# EB 7.24.2023 need to deal with repeating data over catch groups, right now multiplying total stratum fishing hours from interviews by n-number of catch groups 
-
-# example: est_pe_effort_sampled_by_interviews(days=dwg$days, dwg_summ, estimates_pe$effort)
-
+#' Estimate proportion of total angler effort sampled during interviews
+#'
+#' Evaluates the proportion of estimated total angler hours (effort) that were
+#' sampled during creel interviews, grouped by section, angler type, period,
+#' and day type. Returns a season-long summary collapsed across periods.
+#'
+#' @param days A data frame of fishing days produced by [prep_days()], containing
+#'   columns `event_date`, `period`, and `day_type`.
+#' @param dwg_summ A named list of summarized creel data frames, as produced by
+#'   the shared data aggregation steps in the analysis template. Must contain an
+#'   `interview` element with columns `interview_id`, `section_num`, `event_date`,
+#'   `angler_final`, and `fishing_time_total`.
+#' @param estimates_pe_effort A data frame of PE effort estimates, typically
+#'   `estimates_pe$effort`. Must contain columns `section_num`, `period`,
+#'   `day_type`, `angler_final`, and `est`.
+#'
+#' @return A data frame with one row per `section_num` and `angler_type`,
+#'   containing columns:
+#'   \describe{
+#'     \item{section_num}{River section identifier.}
+#'     \item{angler_type}{Angler type (renamed from `angler_final`).}
+#'     \item{interview_hours_total}{Total angler hours recorded across interviews.}
+#'     \item{angler_effort_total}{Total estimated angler effort (hours) from PE.}
+#'     \item{proportion_interviewed_effort}{Ratio of interviewed hours to total
+#'       estimated effort.}
+#'   }
+#'
+#' @export
 est_pe_effort_sampled_by_interviews <- function(
     days,
     dwg_summ,
-    estimates_pe_effort = estimates_pe$effort,
-    ...
-){
+    estimates_pe_effort
+) {
+  
+  effort_by_strata <- estimates_pe_effort |>
+    dplyr::select(section_num, period, day_type, angler_final, effort_est = est) |>
+    dplyr::group_by(section_num, period, day_type, angler_final) |>
+    dplyr::summarise(
+      angler_effort_total = sum(effort_est),
+      .groups = "drop"
+    )
   
   dwg_summ$interview |>
-    distinct(interview_id, section_num, event_date, angler_final, fishing_time_total) |> # ensure only distinct interviews are evaluated, given potentially > 1 catch groups
-    left_join(days |> dplyr::select(event_date, period, day_type), by = "event_date") |> 
-    drop_na(angler_final) |>  
-    group_by(period, section_num, day_type, angler_final) |> 
-    summarise(
-      interview_hours_total = sum(fishing_time_total)
-    ) |> 
-    # left_join(estimates_pe$effort |> ## join expanded catch estimates in pe$est_effort_s_ts_dt_at to total angler hours from interviews in pe$interview 
-    left_join(estimates_pe_effort |> 
-                select(section_num, period, section_num, day_type, angler_final, effort_est = est) |>
-                group_by(section_num, period, day_type, angler_final) |> 
-                summarise(
-                  angler_effort_total = sum(effort_est))
-              , 
-              by = c("section_num", "period", "day_type", "angler_final")) |>
-    mutate(
-      angler_effort_total = if_else(is.nan(angler_effort_total), 0 , angler_effort_total) # coerce to zero rows where bank effort not estimable due
-      # to method of obtaining bank anglers from total - boat, circle back on this with KB at some point
-    ) |> 
-    group_by(section_num, angler_final) |> 
-    summarise(
+    dplyr::distinct(interview_id, section_num, event_date, angler_final, fishing_time_total) |>
+    dplyr::left_join(
+      dplyr::select(days, event_date, period, day_type),
+      by = "event_date"
+    ) |>
+    tidyr::drop_na(angler_final) |>
+    dplyr::group_by(period, section_num, day_type, angler_final) |>
+    dplyr::summarise(
+      interview_hours_total = sum(fishing_time_total),
+      .groups = "drop"
+    ) |>
+    dplyr::left_join(
+      effort_by_strata,
+      by = c("section_num", "period", "day_type", "angler_final")
+    ) |>
+    dplyr::mutate(
+      # Coerce NaN to zero for strata where bank effort is not directly estimable
+      # (derived as total minus boat effort); revisit with KB
+      angler_effort_total = dplyr::if_else(is.nan(angler_effort_total), 0, angler_effort_total)
+    ) |>
+    dplyr::group_by(section_num, angler_final) |>
+    dplyr::summarise(
       interview_hours_total = sum(interview_hours_total),
-      angler_effort_total = sum(angler_effort_total),
-      proportion_interviewed_effort = (interview_hours_total / angler_effort_total)
-    ) |> 
-    gt(groupname_col = "section_name") |> 
-    fmt_number(c(interview_hours_total, angler_effort_total, proportion_interviewed_effort), decimals = 2)
-  # |>
-  #   bind_rows(
-  #     dwg_summ$interview |>
-  #       left_join(dwg$days |> dplyr::select(event_date, period, day_type), by = "event_date") |> 
-  #       drop_na(angler_final) |>  
-  #       group_by(period, section_num, day_type, angler_final) |> 
-  #       summarise(
-  #         interview_hours_total = sum(fishing_time_total)
-  #       ) |> 
-  #       left_join(estimates_pe$effort |> ## join expanded catch estimates in pe$est_effort_s_ts_dt_at to total angler hours from interviews in pe$interview 
-  #                   select(section_num, period, section_num, day_type, angler_final, effort_est = est) |>
-  #                   group_by(section_num, period, day_type, angler_final) |> 
-  #                   summarise(
-  #                     angler_effort_total = sum(effort_est))
-  #                 , 
-  #                 by = c("section_num", "period", "day_type", "angler_final")) |> 
-  #       group_by(section_num) |> 
-  #       summarise(
-  #         interview_hours_total = sum(interview_hours_total),
-  #         angler_effort_total = sum(angler_effort_total),
-  #         proportion_interviewed_effort = (interview_hours_total / angler_effort_total)
-  #       ) 
-  #     |> 
-  #       mutate(
-  #         angler_final = "total",
-  #         angler_effort_total = if_else(is.nan(angler_effort_total), 0 , angler_effort_total) # Again, coerce to zero rows where bank effort not estimable due
-  #         # to method of obtaining bank anglers from total - boat, circle back on this with KB at some point
-  #       )
-  #   ) |>
-  #   mutate(across(where(is.numeric), round, 2)) |>
-  #   left_join(
-  #     dwg$interview |> distinct(fishing_location, section_num),
-  #     by = "section_num") |>
-  #   gt(groupname_col = "section_name") |>
-  #   cols_label(
-  #     angler_final = md("angler type"),
-  #     interview_hours_total = md("total angler hours from direct sampling (interviews)"),
-  #     angler_effort_total = md("total angler hours from expanded effort estimates"),
-  #     proportion_interviewed_effort = md("proportion of total effort sampled in interviews")
-  #   ) |>
-  #   tab_header(
-  #     title = md("Estimated total angler effort sampled during interviews"),
-  #     subtitle = md("The season-long total of angler hours from interviews and effort counts. The fifth column displays the estimated proportion of total angling effort (angler hours) that was directly sampled during creel interviews.")) |>
-  #   tab_options(container.overflow.x = T, container.overflow.y = T)
-
+      angler_effort_total   = sum(angler_effort_total),
+      proportion_interviewed_effort = interview_hours_total / angler_effort_total,
+      .groups = "drop"
+    ) |>
+    dplyr::rename(angler_type = angler_final)
   
 }

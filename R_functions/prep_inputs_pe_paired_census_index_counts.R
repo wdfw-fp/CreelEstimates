@@ -93,12 +93,12 @@ if(str_detect(study_design, "tandard" )){
     
     census_TI_expan <- 
       census_TI_expan |> 
-      dplyr::group_by(section_num, angler_final) |>
+      dplyr::group_by(angler_final) |>
       dplyr::summarise(
         dplyr::across(c(count_census, count_index), sum),
         .groups = "drop"
       ) |>
-      dplyr::left_join(census_expan, by = c("section_num", "angler_final")) |>
+      dplyr::left_join(census_expan, by = c("angler_final")) |>
       dplyr::mutate(
         TI_expan_weighted = count_census / count_index,
         TI_expan_weighted = if_else(
