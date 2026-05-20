@@ -56,6 +56,8 @@ cat("</details>\n")
 
 #### Load packages
 ```{r packages, results='hide', message=FALSE, warning=FALSE}
+systime_start  <- Sys.time()
+
 # Load packages
 library("cli")
 library("here")
@@ -1558,4 +1560,21 @@ if (params$export == "database") {
 } else {
   cli_alert_warning("Export parameter is '{params$export}' - no export performed")
 }
+```
+
+```{r report_runtime, results='asis', echo=FALSE}
+# Calculate and report total runtime
+systime_stop <- Sys.time()
+total <- as.integer(difftime(systime_stop, systime_start, units = "secs"))
+hours <- total %/% 3600
+mins  <- (total %% 3600) %/% 60
+secs  <- total %% 60
+
+parts <- c(
+  if (hours > 0) glue::glue("{hours}h"),
+  if (mins  > 0 || hours > 0) glue::glue("{mins}m"),
+  glue::glue("{secs}s")
+)
+
+cat("Total runtime:", paste(parts, collapse = " "))
 ```
