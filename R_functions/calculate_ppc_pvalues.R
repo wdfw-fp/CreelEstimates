@@ -1,181 +1,72 @@
-# Function 1: Calculate p-values for posterior predictive checks
-calculate_ppc_pvalues <- function(bss_fit, inputs_bss, ecg) {
-  ecg_fit <- bss_fit
-  # V_I p-value
-  V_I_pvalue <- extract(ecg_fit)$V_I_rep |>
-    as_tibble() |>
-    mutate(iterations = row_number()) |>
-    pivot_longer(
-      cols = -iterations,
-      names_to = "V_n",
-      values_to = "value"
-    ) |>
-    mutate(V_n = as.integer(str_remove(V_n, "V"))) |>
-    left_join(
-      tibble(
-        V_I = inputs_bss[[ecg]]$V_I,
-        V_n = seq_along(inputs_bss[[ecg]]$V_I)
-      ),
-      by = "V_n"
-    ) |>
-    group_by(iterations) |>
-    summarise(
-      mean_gt = if_else(mean(value) > mean(V_I), 1, 0),
-      sd_gt = if_else(sd(value) > sd(V_I), 1, 0),
-      .groups = "drop"
-    ) |>
-    summarise(
-      mean_gt = sum(mean_gt) / n(),
-      sd_gt = sum(sd_gt) / n()
-    )
+calculate_ppc_pvalues<- function(bss_fit, inputs_bss, ecg) {
   
-  # T_I p-value
-  T_I_pvalue <- extract(ecg_fit)$T_I_rep |>
-    as_tibble() |>
-    mutate(iterations = row_number()) |>
-    pivot_longer(
-      cols = -iterations,
-      names_to = "T_n",
-      values_to = "value"
-    ) |>
-    mutate(T_n = as.integer(str_remove(T_n, "V"))) |>
-    left_join(
-      tibble(
-        T_I = inputs_bss[[ecg]]$T_I,
-        T_n = seq_along(inputs_bss[[ecg]]$T_I)
-      ),
-      by = "T_n"
-    ) |>
-    group_by(iterations) |>
-    summarise(
-      mean_gt = if_else(mean(value) > mean(T_I), 1, 0),
-      sd_gt = if_else(sd(value) > sd(T_I), 1, 0),
-      .groups = "drop"
-    ) |>
-    summarise(
-      mean_gt = sum(mean_gt) / n(),
-      sd_gt = sum(sd_gt) / n()
-    )
+  extracted_data <- extract(bss_fit)
+  ecg_inputs <- inputs_bss[[ecg]]
   
-  # E_s p-value
-  E_s_pvalue <- extract(ecg_fit)$E_s_rep |>
-    as_tibble() |>
-    mutate(iterations = row_number()) |>
-    pivot_longer(
-      cols = -iterations,
-      names_to = "E_n",
-      values_to = "value"
-    ) |>
-    mutate(E_n = as.integer(str_remove(E_n, "V"))) |>
-    left_join(
-      tibble(
-        E_s = inputs_bss[[ecg]]$E_s,
-        E_n = seq_along(inputs_bss[[ecg]]$E_s)
-      ),
-      by = "E_n"
-    ) |>
-    group_by(iterations) |>
-    summarise(
-      mean_gt = if_else(mean(value) > mean(E_s), 1, 0),
-      sd_gt = if_else(sd(value) > sd(E_s), 1, 0),
-      .groups = "drop"
-    ) |>
-    summarise(
-      mean_gt = sum(mean_gt) / n(),
-      sd_gt = sum(sd_gt) / n()
-    )
-  
-  # c p-value
-  c_pvalue <- extract(ecg_fit)$c_rep |>
-    as_tibble() |>
-    mutate(iterations = row_number()) |>
-    pivot_longer(
-      cols = -iterations,
-      names_to = "IntC",
-      values_to = "value"
-    ) |>
-    mutate(IntC = as.integer(str_remove(IntC, "V"))) |>
-    left_join(
-      tibble(
-        c = inputs_bss[[ecg]]$c,
-        IntC = seq_along(inputs_bss[[ecg]]$c)
-      ),
-      by = "IntC"
-    ) |>
-    group_by(iterations) |>
-    summarise(
-      mean_gt = if_else(mean(value) > mean(c), 1, 0),
-      sd_gt = if_else(sd(value) > sd(c), 1, 0),
-      .groups = "drop"
-    ) |>
-    summarise(
-      mean_gt = sum(mean_gt) / n(),
-      sd_gt = sum(sd_gt) / n()
-    )
-  
-  # V_A p-value
-  V_A_pvalue <- extract(ecg_fit)$V_A_rep |>
-    as_tibble() |>
-    mutate(iterations = row_number()) |>
-    pivot_longer(
-      cols = -iterations,
-      names_to = "IntA",
-      values_to = "value"
-    ) |>
-    mutate(IntA = as.integer(str_remove(IntA, "V"))) |>
-    left_join(
-      tibble(
-        V_A = inputs_bss[[ecg]]$V_A,
-        IntA = seq_along(inputs_bss[[ecg]]$V_A)
-      ),
-      by = "IntA"
-    ) |>
-    group_by(iterations) |>
-    summarise(
-      mean_gt = if_else(mean(value) > mean(V_A), 1, 0),
-      sd_gt = if_else(sd(value) > sd(V_A), 1, 0),
-      .groups = "drop"
-    ) |>
-    summarise(
-      mean_gt = sum(mean_gt) / n(),
-      sd_gt = sum(sd_gt) / n()
-    )
-  
-  # T_A p-value
-  T_A_pvalue <- extract(ecg_fit)$T_A_rep |>
-    as_tibble() |>
-    mutate(iterations = row_number()) |>
-    pivot_longer(
-      cols = -iterations,
-      names_to = "IntA",
-      values_to = "value"
-    ) |>
-    mutate(IntA = as.integer(str_remove(IntA, "V"))) |>
-    left_join(
-      tibble(
-        T_A = inputs_bss[[ecg]]$T_A,
-        IntA = seq_along(inputs_bss[[ecg]]$T_A)
-      ),
-      by = "IntA"
-    ) |>
-    group_by(iterations) |>
-    summarise(
-      mean_gt = if_else(mean(value) > mean(T_A), 1, 0),
-      sd_gt = if_else(sd(value) > sd(T_A), 1, 0),
-      .groups = "drop"
-    ) |>
-    summarise(
-      mean_gt = sum(mean_gt) / n(),
-      sd_gt = sum(sd_gt) / n()
-    )
-  
-  # Return list of all p-values
-  list(
-    V_I_pvalue = V_I_pvalue,
-    T_I_pvalue = T_I_pvalue,
-    E_s_pvalue = E_s_pvalue,
-    c_pvalue = c_pvalue,
-    V_A_pvalue = V_A_pvalue,
-    T_A_pvalue = T_A_pvalue
+  # Lookup table mapping rep parameter names to their observed counterpart
+  # in inputs_bss[[ecg]]. Extend this list as new model configurations arise.
+  param_map <- list(
+    V_I_rep = "V_I",   # Vehicle index counts
+    T_I_rep = "T_I",   # Trailer index counts
+    A_I_rep = "A_I",   # Angler index counts
+    B_s_rep = "B_s",   # Boat census counts (Drano)
+    E_s_rep = "E_s",   # Angler census counts
+    c_rep   = "c",     # Catch counts
+    V_A_rep = "V_A",   # Vehicle interview expansions
+    T_A_rep = "T_A",   # Trailer interview expansions
+    B_A_rep = "B_A"    # Boat interview expansions (Drano)
   )
+  # Retain only parameters present in both the fit and the input data
+  active_params <- param_map[
+    names(param_map) %in% names(extracted_data) &
+      unlist(param_map) %in% names(ecg_inputs)
+  ]
+  
+  if (length(active_params) == 0) {
+    warning(sprintf(
+      "No recognized PPC parameters found for catch group '%s'. Check that rep arrays and observed inputs are named consistently.", 
+      ecg
+    ))
+    return(NULL)
+  }
+  
+  # Internal helper: compute posterior predictive p-values for one parameter
+  compute_pvalue <- function(rep_draws, obs_vals) {
+    rep_draws |>
+      as_tibble(.name_repair = ~ paste0("V", seq_along(.))) |>
+      mutate(iteration = row_number()) |>
+      pivot_longer(
+        cols      = -iteration,
+        names_to  = "idx",
+        values_to = "value"
+      ) |>
+      mutate(idx = as.integer(str_remove(idx, "V"))) |>
+      left_join(
+        tibble(obs = obs_vals, idx = seq_along(obs_vals)),
+        by = "idx"
+      ) |>
+      group_by(iteration) |>
+      summarise(
+        mean_gt = if_else(mean(value) > mean(obs), 1, 0),
+        sd_gt   = if_else(sd(value)   > sd(obs),   1, 0),
+        .groups = "drop"
+      ) |>
+      summarise(
+        mean_gt = sum(mean_gt) / n(),
+        sd_gt   = sum(sd_gt)   / n()
+      )
+  }
+  
+  # Compute p-values for all active parameters and return as named list
+  # Output names follow the convention: <obs_name>_pvalue (e.g., B_I_pvalue)
+  pvalue_list <- imap(active_params, \(obs_name, rep_name) {
+    compute_pvalue(
+      rep_draws = extracted_data[[rep_name]],
+      obs_vals  = ecg_inputs[[obs_name]]
+    )
+  })
+  
+  names(pvalue_list) <- paste0(unlist(active_params), "_pvalue")
+  
+  pvalue_list
 }
