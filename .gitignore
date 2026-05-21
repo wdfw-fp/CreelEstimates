@@ -53,3 +53,6 @@ config.yml
 .devcontainer/
 .devcontainer
 .positai
+
+# Logs from automated model runs
+logs/
