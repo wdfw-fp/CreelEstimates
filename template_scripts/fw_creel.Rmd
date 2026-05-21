@@ -204,7 +204,7 @@ current_file <- tryCatch({
 }, error = function(e) NULL)
 
 ## Generate or load analysis_lut (uses existing function as-is)
-generate_analysis_lut(params, current_file_path = current_file)
+analysis_lut <- generate_analysis_lut(params, current_file_path = current_file)
 
 # Display analysis metadata
 cli_alert_info("Analysis ID: {.val {analysis_lut$analysis_id}}")
