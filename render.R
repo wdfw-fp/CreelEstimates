@@ -16,9 +16,12 @@ suppressMessages(suppressWarnings({
   library(tidyverse)
   library(glue)
   
-  devtools::install_github("wdfw-fp/creelutils@patch_etl")
-  library(creelutils)
+  library(creelutils) # github.com/wdfw-fp/creelutils
 }))
+
+# Source functions `move_render_to_session()` and `.find_latest_sesson()`
+# To move output HTML file into the proper session-specific folder
+source(here::here("R_functions", "save_analysis_metadata.R"))
 
 # Set pandoc path for Task Scheduler access
 Sys.setenv(RSTUDIO_PANDOC = "C:/Program Files/RStudio/resources/app/bin/quarto/bin/tools")
@@ -52,10 +55,10 @@ log_msg <- function(msg) {
 # Active Fisheries #####################################################################################################
 # List of fishery names and analysis script locations. The rendering process will loop over each in this list
 Active <- list(
-  ## Snohomish fall salmon 2025 ####
+  ## Skagit spring Chinook 2025 upper ####
   list(
-    fishery = "Snohomish fall salmon 2025",
-    file_path = "fishery_analyses/District 13/Snohomish fall salmon 2025/fw_creel_Snohomish fall salmon 2025.Rmd"
+    fishery = "Skagit spring Chinook 2025 upper",
+    file_path = "fishery_analyses/District 14/Skagit spring Chinook 2025 upper/fw_creel_Skagit spring Chinook 2025 upper.Rmd"
   )
 )
 
@@ -87,8 +90,9 @@ for (i in seq_along(Active)) {
   
   # Render ####
   tryCatch({
+    withCallingHandlers({
     log_msg("(1) Starting render process...")
-    rmarkdown::render(
+    rendered <- rmarkdown::render(
       input = rmd_path,
       output_dir = output_dir,
       quiet = TRUE
@@ -96,95 +100,109 @@ for (i in seq_along(Active)) {
     log_msg(paste("Successfully completed:", paste0(fishery_name, ".html")))
     log_msg(paste("Output created at:", output_dir))
   
+    # Relocate the rendered HTML into the session folder created by this render
+    log_msg("(1b) Relocating HTML into session folder...")
+    relocated <- move_render_to_session(
+      rendered_path = rendered,
+      session_folder = .find_latest_session(dirname(rmd_path))
+    )
+    if (!is.null(relocated)) {
+      log_msg(paste("HTML now at:", relocated))
+    } else {
+      log_msg("HTML relocation skipped or failed (see warnings above)")
+    }
+    
     # Reset environment except essentials
     rm(list = setdiff(ls(), c("Active", "i", "log_file", "log_msg", "time1")))
   },
-  # Record error messages
-  error = function(e) {
-    log_msg(paste("!! Failed to render", fishery_name, ":", conditionMessage(e)))
-  },
-  # Record warning messages
+  # Log warnings without halting the render
   warning = function(w) {
     log_msg(paste("Warning in", fishery_name, ":", conditionMessage(w)))
+    invokeRestart("muffleWarning")
+    })
+  },
+  # Record error messages (errors still halt this fishery's render and move on to the next)
+  error = function(e) {
+    log_msg(paste("!! Failed to render", fishery_name, ":", conditionMessage(e)))
   })
   
 ########################################################################
   # Copy files within each fishery folder into the CreelEstimates clone on the Shared Teams drive
   # Performs action when files in destination folder do not exist or are out of date
   
-  log_msg("(2) Copying files to shared drive...")
-  
-  copy_to_teams <- function( ####
-    dirs, # Source file locations, assumes within CreelEstimates/ folder
-    dest_root = "C:/Users/holc2477/Washington State Executive Branch Agencies/DFW-Team FP FW Creel Monitoring Program - General/CreelEstimates/fishery_analyses"
-    ) {
-
-    # Initialize file counts
-    copied <- 0
-    skipped <- 0
-    failed <- 0
-    
-    # Loop through fishery folders
-    for (d in dirs) {
-      
-      # Check that this folder exists as expected
-      if (!dir.exists(d)) {
-        log_msg(paste("WARNING: Source directory not found:", d))
-        next
-      }
-
-      # List files to copy, but exclude any inside *_files/ folders. These are temporary files that may not be cleaned up after a failed rendering.
-      files <- list.files(d, recursive = TRUE, full.names = TRUE)
-      files <- files[!grepl("_files/", files)]
-      
-      # Loop through each file and copy to destination folder
-      for (f in files) {
-        
-        if (!file.exists(f)) {
-          log_msg(paste("WARNING: File not found:", f))
-          failed <- failed + 1
-          next
-        }
-        # Minor modification of path
-        rel_path <- sub(".*fishery_analyses/", "", f)
-        dest <- file.path(dest_root, rel_path)
-        
-        # Create fishery level folder in destination as necessary
-        dir.create(dirname(dest), recursive = TRUE, showWarnings = FALSE)
-        
-        # Check timestamps to see if destination file is out of date
-        if (file.exists(dest)) {
-          src_time  <- file.info(f)$mtime # new local
-          dest_time <- file.info(dest)$mtime # existing in shared
-          
-          if (dest_time >= src_time) { # Skip copying file if the timestamps are the same
-            log_msg(paste("    Skipping (up to date):", rel_path))
-            skipped <- skipped + 1
-            next
-          }
-        }
-        
-        # Copy file if new/updated from the version in shared drive
-        ok <- file.copy(f, dest, overwrite = TRUE)
-        if (ok) {
-          log_msg(paste("    Copied:", rel_path))
-          copied <- copied + 1
-        } else {
-          log_msg(paste("WARNING: Failed to copy:", f))
-          failed <- failed + 1
-        }
-      }
-    }
-    # Record copying summary
-    log_msg(paste("File copy summary:", copied, "copied,", skipped, "skipped,", failed, "failed."))
-  }
-  
-  # Call the function to copy files
-  copy_to_teams(
-    dirs = c(
-    "C:/Repos/CreelEstimates/fishery_analyses/District 13/Snohomish fall salmon 2025"
-    )
-  )
+  # log_msg("(2) Copying files to shared drive...")
+  # 
+  # copy_to_teams <- function( ####
+  #   dirs, # Source file locations, assumes within CreelEstimates/ folder
+  #   dest_root = "C:/Users/holc2477/Washington State Executive Branch Agencies/DFW-Team FP FW Creel Monitoring Program - General/CreelEstimates/fishery_analyses"
+  #   ) {
+  # 
+  #   # Initialize file counts
+  #   copied <- 0
+  #   skipped <- 0
+  #   failed <- 0
+  #   
+  #   # Loop through fishery folders
+  #   for (d in dirs) {
+  #     
+  #     # Check that this folder exists as expected
+  #     if (!dir.exists(d)) {
+  #       log_msg(paste("WARNING: Source directory not found:", d))
+  #       next
+  #     }
+  # 
+  #     # List files to copy, but exclude any inside *_files/ folders. These are temporary files that may not be cleaned up after a failed rendering.
+  #     files <- list.files(d, recursive = TRUE, full.names = TRUE)
+  #     files <- files[!grepl("_files/", files)]
+  #     
+  #     # Loop through each file and copy to destination folder
+  #     for (f in files) {
+  #       
+  #       if (!file.exists(f)) {
+  #         log_msg(paste("WARNING: File not found:", f))
+  #         failed <- failed + 1
+  #         next
+  #       }
+  #       # Minor modification of path
+  #       rel_path <- sub(".*fishery_analyses/", "", f)
+  #       dest <- file.path(dest_root, rel_path)
+  #       
+  #       # Create fishery level folder in destination as necessary
+  #       dir.create(dirname(dest), recursive = TRUE, showWarnings = FALSE)
+  #       
+  #       # Check timestamps to see if destination file is out of date
+  #       if (file.exists(dest)) {
+  #         src_time  <- file.info(f)$mtime # new local
+  #         dest_time <- file.info(dest)$mtime # existing in shared
+  #         
+  #         if (dest_time >= src_time) { # Skip copying file if the timestamps are the same
+  #           log_msg(paste("    Skipping (up to date):", rel_path))
+  #           skipped <- skipped + 1
+  #           next
+  #         }
+  #       }
+  #       
+  #       # Copy file if new/updated from the version in shared drive
+  #       ok <- file.copy(f, dest, overwrite = TRUE)
+  #       if (ok) {
+  #         log_msg(paste("    Copied:", rel_path))
+  #         copied <- copied + 1
+  #       } else {
+  #         log_msg(paste("WARNING: Failed to copy:", f))
+  #         failed <- failed + 1
+  #       }
+  #     }
+  #   }
+  #   # Record copying summary
+  #   log_msg(paste("File copy summary:", copied, "copied,", skipped, "skipped,", failed, "failed."))
+  # }
+  # 
+  # # Call the function to copy files
+  # copy_to_teams(
+  #   dirs = c(
+  #   "C:/Repos/CreelEstimates/fishery_analyses/District 13/Snohomish fall salmon 2025"
+  #   )
+  # )
 
   # Calculate and report model run time
   log_msg("(3) Logging run time...")
