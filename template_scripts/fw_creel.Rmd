@@ -23,6 +23,7 @@ params:
   model_used: "Both models"
   data_grade: "provisional"
   session_mode: "auto"
+  run_qaqc: TRUE
   export: "local"
   export_tables: "both"
   enable_cache: FALSE  # Set to FALSE to disable all caching (useful when cached files become too large)
@@ -77,6 +78,7 @@ library("digest")
 # Load packages from source
 # devtools::install_github("wdfw-fp/creelutils")
 library(creelutils)
+library(creelreview)
 ```
 
 ```{r, load_functions, message=FALSE}
@@ -313,6 +315,54 @@ dwg$days <- prep_days(
 
 # Save processed days
 saveRDS(dwg$days, file.path(outputs_folders$inputs, "dwg_days.rds"))
+```
+
+## QAQC Summary
+
+```{r qaqc_script}
+# When working interactively you might run the script several times
+# This prevents unnecessary re-renders of the qaqc script within a given session
+check_existing_qaqc <- file.exists(paste0(
+  outputs_folders$outputs, "/",
+  "qaqc_report_", 
+  gsub(" ", "-", params$fishery_name), 
+  "_", Sys.Date(), ".html"
+))
+if (params$run_qaqc && !check_existing_qaqc) {
+  # Produce data review summary
+  qaqc_result <- creelreview::run_all_checks(dwg)
+
+  # Render QA/QC report in a separate R process
+  qaqc_result <- tryCatch({
+    callr::r(
+      function(fishery_names, output_dir) {
+        creelreview::generate_report(
+          fishery_names = fishery_names,
+          output_dir = output_dir
+        )
+      },
+      args = list(
+        fishery_names = params$fishery_name,
+        output_dir = outputs_folders$qaqc
+      ),
+      timeout = 600
+    )
+  }, error = function(e) {
+    warning("QA/QC report render failed: ", conditionMessage(e))
+    data.frame(
+      fishery = params$fishery_name,
+      status = "FAILED",
+      message = NA,
+      error = conditionMessage(e),
+      row.names = NULL
+    )
+  })
+
+  cat("\nQA/QC report saved to: \n", outputs_folders$outputs)
+}
+
+#Print summary
+if (!is.null(qaqc_result)) print(qaqc_result)
 ```
 
 ## River sections

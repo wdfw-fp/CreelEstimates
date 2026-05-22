@@ -29,7 +29,8 @@ setup_analysis_structure <- function(params, analysis_lut, est_dates) {
   outputs_folders <- list(
     inputs = file.path(analysis_folder_path, "inputs"),
     outputs = file.path(analysis_folder_path, "outputs"),
-    figures = file.path(analysis_folder_path, "figures")
+    figures = file.path(analysis_folder_path, "figures"),
+    qaqc = file.path(analysis_folder_path, "QAQC")
   )
   
   purrr::walk(outputs_folders, ~ {
@@ -75,12 +76,13 @@ setup_analysis_structure <- function(params, analysis_lut, est_dates) {
   cli::cli_alert_info("  Inputs: {.path {outputs_folders$inputs}}")
   cli::cli_alert_info("  Outputs: {.path {outputs_folders$outputs}}")
   cli::cli_alert_info("  Figures: {.path {outputs_folders$figures}}")
+  cli::cli_alert_info("  QAQC: {.path {outputs_folders$qaqc}}") 
   if (isTRUE(params$enable_cache)) {
     cli::cli_alert_info("  Cache: {.path {cache_path}}")
   } else {
     cli::cli_alert_warning("  Cache: DISABLED (no .cache folder created)")
   }
-  
+
   # Return outputs folders for use in subsequent code
   return(list(
     analysis_folder_path = analysis_folder_path,
