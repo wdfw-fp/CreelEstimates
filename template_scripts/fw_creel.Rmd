@@ -3,12 +3,12 @@ title: "Freshwater Creel Report <br>`r params$fishery_name`"
 date: "`r Sys.Date()`"
 params:
   project_name: "District 14"
-  fishery_name: "Skagit fall salmon 2024"
-  est_date_start: "2024-09-01"
-  est_date_end: "2024-09-30"
+  fishery_name: "Skagit spring Chinook upper 2025"
+  est_date_start: "2025-09-01"
+  est_date_end: "2025-09-30"
   est_catch_groups: !r data.frame(rbind(
-    c(species = 'Coho', life_stage = 'Adult', fin_mark = 'UM', fate = 'Released'),
-    c(species = 'Coho', life_stage = 'Adult', fin_mark = 'AD', fate = 'Kept')))
+    c(species = 'Chinook', life_stage = 'Adult', fin_mark = 'UM', fate = 'Released'),
+    c(species = 'Chinook', life_stage = 'Adult', fin_mark = 'AD', fate = 'Kept')))
   study_design: "Standard"   
   boat_type_collapse: "Yes"
   fish_location_determines_type: "No"
@@ -698,7 +698,7 @@ saveRDS(estimates_pe, file.path(outputs_folders$outputs, "estimates_pe.rds"))
 ```
 
 ### Effort estimates
-```{r pe_effort_summary, cache.extra=param_hash}
+```{r pe_effort_summary, cache=params$enable_cache, cache.extra=param_hash}
 # effort by section_num
 estimates_pe$effort |>
   group_by(section_num, angler_final) |> 
