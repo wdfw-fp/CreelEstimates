@@ -16,7 +16,8 @@ plot_inputs_pe_index_effort_counts <- function(
            count_type = dplyr::case_match(
              count_type,
              "Trailers Only" ~ "Trailers",
-             "Vehicle Only"  ~ "Vehicles"
+             "Vehicle Only"  ~ "Vehicles", 
+             .default = count_type
            )) |> 
     ggplot(aes(event_date, count_index, fill = count_sequence)) +
     #geom_point() + geom_text(aes(label = count_index), nudge_y = 1, check_overlap = T) +

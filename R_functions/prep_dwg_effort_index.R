@@ -26,7 +26,24 @@ if(str_detect(study_design, "tandard" )){
           count_type == "Vehicle Only" ~ "total",
           TRUE ~ "fail"
         )
-    ) 
+    )
+  
+  # create final object output of interest index_angler_final that summarizes index count data by section_num, event_date, count_sequence, & angler_final  
+  index_angler_final <-
+    index_angler_groups |>
+    dplyr::group_by(section_num, event_date, count_sequence, angler_final) |>
+    dplyr::summarise(count_index = sum(count_quantity), .groups = "drop") |>
+    dplyr::arrange(section_num, event_date, count_sequence) |>
+    mutate(
+      fishery_name = params$fishery_name,
+      angler_final_int = as.integer(factor(angler_final, levels = c("total", "boat"))),
+      count_type = dplyr::case_match(
+        angler_final,
+        "total" ~ "Vehicle Only",
+        "boat"  ~ "Trailers Only"
+      )
+    ) |>
+    relocate(fishery_name)
 
 }else if(study_design == "Drano"){ 
 
@@ -54,9 +71,9 @@ if(str_detect(study_design, "tandard" )){
           stringr::str_detect(count_type, "ontoon|ayak") & stringr::str_detect(angler_type_kayak_pontoon, "ank")  ~ "bank", 
           TRUE ~ "fail"
         )
-    ) 
-} 
-# create final object output of interest index_angler_final that summarizes index count data by section_num, event_date, count_sequence, & angler_final  
+    )
+  
+  # create final object output of interest index_angler_final that summarizes index count data by section_num, event_date, count_sequence, & angler_final  
   index_angler_final <-
     index_angler_groups |>
     dplyr::group_by(section_num, event_date, count_sequence, angler_final) |>
@@ -64,14 +81,16 @@ if(str_detect(study_design, "tandard" )){
     dplyr::arrange(section_num, event_date, count_sequence) |>
     mutate(
       fishery_name = params$fishery_name,
-      angler_final_int = as.integer(factor(angler_final, levels = c("total", "boat"))),
-      count_type = dplyr::case_match(
-        angler_final,
-        "total" ~ "Vehicle Only",
-        "boat"  ~ "Trailers Only"
+      angler_final_int = as.integer(factor(angler_final, levels = c("bank", "boat"))),
+      count_type = dplyr::case_when(
+        stringr::str_detect(angler_final, "bank") ~ "bank",
+        stringr::str_detect(angler_final, "boat") ~ "boat",
+        .default = NA_character_
       )
     ) |>
     relocate(fishery_name)
+} 
+
   
   return(list(index_angler_groups = index_angler_groups, index_angler_final = index_angler_final))  
   
