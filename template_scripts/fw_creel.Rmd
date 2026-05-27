@@ -513,13 +513,13 @@ tab_style(
   # 2.1 - Aggregate index effort counts over locations within count_seq & section; count_types are converted to angler_final based on arguments
 
   # left join p_census_bank and p_census_boat p_TI values to effort index and census data so this data can be used in situations where census counts have not ocurred yet
-dwg$effort <- dwg$effort |>
+  dwg$effort <- dwg$effort |>
       select(-p_census_bank, -p_census_boat) |>
       left_join(
         dwg$fishery_manager |>
           filter(!is.na(p_census_bank) | !is.na(p_census_boat)) |>
-          distinct(section_num, surveyor_num, p_census_bank, p_census_boat),
-        by = c("section_num", "surveyor_num")
+          distinct(section_num, p_census_bank, p_census_boat),
+        by = c("section_num")
       )
     
       effort_index_summ <- 
