@@ -716,7 +716,7 @@ saveRDS(estimates_pe, file.path(outputs_folders$outputs, "estimates_pe.rds"))
 ```
 
 ### Effort estimates
-```{r pe_effort_summary, cache.extra=param_hash}
+```{r pe_effort_summary, cache=params$enable_cache, cache.extra=param_hash}
 # effort by section_num
 estimates_pe$effort |>
   group_by(section_num, angler_final) |> 
