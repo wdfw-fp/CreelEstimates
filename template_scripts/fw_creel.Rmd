@@ -671,7 +671,8 @@ if (nrow(dwg_summ$effort_census) > 0) {
       heading.title.font.size = px(14),
       table.font.color = "black"
     ) |> 
-    fmt_number(TI_expan_final, decimals = 2)
+    fmt_number(c(TI_expan_weighted, TI_expan_final), decimals = 2) |> 
+    fmt_number(c(count_census, count_index), decimals = 0)
 } else {
   gt(data.frame(
     msg = "No census effort count data was detected. Substituting a 1.0 census-index bias ratio for each section and angler type combination. This assumes there is no systematic bias in the index effort data relative to census counts."
