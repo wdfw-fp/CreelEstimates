@@ -672,8 +672,12 @@ if (nrow(dwg_summ$effort_census) > 0) {
       table.font.color = "black"
     ) |> 
     fmt_number(TI_expan_final, decimals = 2)
+} else {
+  gt(data.frame(
+    msg = "No census effort count data was detected. Substituting a 1.0 census-index bias ratio for each section and angler type combination. This assumes there is no systematic bias in the index effort data relative to census counts."
+  )) |>
+  tab_options(column_labels.hidden = TRUE, table.font.size = gt::px(14), table.font.color = "black")
 }
-
 ```
 
 ```{r scatterplot_census_v_index, fig.cap= "Scatterplot displaying the effort bias-term ratio (TI_expan_final) for each section and angler type (angler_final), representing the total count from census surveys divided by the total count from index surveys. A 1:1 relationship is shown by the dashed line.", dependson=c("establish_file_structure", "prep_inputs_pe")}
