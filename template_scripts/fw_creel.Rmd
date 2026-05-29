@@ -2,13 +2,12 @@
 title: "Freshwater Creel Report <br>`r params$fishery_name`"
 date: "`r Sys.Date()`"
 params:
-  project_name: "District 14"
-  fishery_name: "Skagit spring Chinook 2026 upper"
-  est_date_start: "2026-05-16"
-  est_date_end: "2026-05-25"
+  project_name: "District 16"
+  fishery_name: "Hoh winter steelhead 2023-24"
+  est_date_start: "2023-12-01"
+  est_date_end: "2024-03-31"
   est_catch_groups: !r data.frame(rbind(
-    c(species = 'Chinook', life_stage = 'Adult', fin_mark = 'UM', fate = 'Released'),
-    c(species = 'Chinook', life_stage = 'Adult', fin_mark = 'AD', fate = 'Kept')))
+    c(species = 'Steelhead', life_stage = 'Adult', fin_mark = 'UM', fate = 'Released')))
   study_design: "Standard"   
   boat_type_collapse: "Yes"
   fish_location_determines_type: "No"
@@ -850,15 +849,17 @@ saveRDS(inputs_bss, file.path(outputs_folders$inputs, "inputs_bss.rds"))
 
 # ---- CONFIGURATION ----
 # Set to TRUE to save draw objects (WARNING: large file sizes)
-save_draws <- FALSE  # Change to TRUE if you want to save draws
+save_draws <- TRUE  # Change to TRUE if you want to save draws
 # ----------------------
 
 # create empty lists for outputs
 estimates_bss <- list()
 diagnostics_bss <- list()
 convergence_tables <- list()
+# draws_bss is always initialised — get_bss_summary_by_section_gear() needs it
+# regardless of save_draws; entries are pruned after use when save_draws = FALSE
+draws_bss <- list()
 if (save_draws) {
-  draws_bss <- list()
   draws_array <- list()
 }
 
@@ -888,7 +889,7 @@ for(ecg in names(inputs_bss)) {
   # Always extract draws for use in diagnostics and plots
   ecg_keep$draws <- extract(ecg_fit)
   
-  # ---- NEW: Prepare season results and create density plot ----
+  # ---- Prepare season results and create density plot ----
   ecg_keep$season_results <- get_bss_season_results(ecg_keep$draws, ecg)
   ecg_keep$density_plot <- create_bss_density_plot(ecg_keep$season_results, ecg)
   
@@ -940,15 +941,25 @@ for(ecg in names(inputs_bss)) {
   
   colnames(summary_df) <- c("variable", "mean", "sd", "mad", "q5", "q95", "rhat", "ess_bulk", "ess_tail")
   
-  # Save draws if requested
+  # Always populate draws_bss for the current ecg so get_bss_summary_by_section_gear()
+  # can access it regardless of save_draws setting; pruned after use if save_draws = FALSE
+  draws_bss[[ecg]] <- list(
+    draws_df   = draws_df,
+    summary_df = summary_df
+  )
   if (save_draws) {
-    draws_bss[[ecg]] <- list(
-      draws_df = draws_df,
-      summary_df = summary_df
-    )
     draws_array[[ecg]] <- draws_array_temp
     cli::cli_alert_info("Draws saved for catch group: {ecg}")
   }
+  
+  # ---- Summarize effort and catch by section and gear ----
+  estimates_bss[[ecg]]$summary_by_section_gear <- get_bss_summary_by_section_gear(
+    draws_bss  = draws_bss,
+    dwg        = dwg,
+    inputs_bss = inputs_bss[[ecg]],
+    ecg        = ecg
+  )
+  cli::cli_alert_success("Section x gear summary complete for catch group: {ecg}")
   
   # Create and save convergence diagnostics
   convergence_table <- create_convergence_table(summary_df, ecg)
@@ -957,11 +968,14 @@ for(ecg in names(inputs_bss)) {
   # Save convergence diagnostics (creates gt table and saves to figures folder)
   save_convergence_diagnostics(convergence_table, ecg, outputs_folders)
   
-  # ---- UPDATED: Clean up memory - conditionally remove draws ----
+  # ---- Clean up memory - conditionally remove draws ----
   if (!save_draws) {
     # Remove draws from estimates_bss to save memory
     estimates_bss[[ecg]]$draws <- NULL
     estimates_bss[[ecg]]$season_results <- NULL  # Also remove season results as they contain draw data
+    
+    # Remove draws_bss entry for this ecg now that summary is extracted
+    draws_bss[[ecg]] <- NULL
     
     # Remove temporary draw objects
     rm(draws_array_temp, draws_df_full, draws_df)
@@ -1030,7 +1044,7 @@ saveRDS(estimates_bss, file.path(outputs_folders$outputs, "estimates_bss.rds"))
 saveRDS(diagnostics_bss, file.path(outputs_folders$outputs, "diagnostics_bss.rds"))
 saveRDS(convergence_tables, file.path(outputs_folders$outputs, "convergence_tables.rds"))
 
-# ---- NEW: Combine and save density plots ----
+# ---- Combine and save density plots ----
 density_plots <- map(estimates_bss, ~.$density_plot)
 combined_density_plot <- save_bss_density_plots(density_plots, outputs_folders)
 cli::cli_alert_success("Density plots saved")
