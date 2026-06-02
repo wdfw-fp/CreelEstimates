@@ -1,458 +1,330 @@
-# Function 2: Generate PPC plots and interval coverage statistics
-generate_ppc_plots <- function(bss_fit, inputs_bss, ecg, dwg, params) {
+generate_ppc_plots<- function(bss_fit, inputs_bss, ecg, dwg, params) {
   
-  # Check for missing values in all replicate data
   extracted_data <- extract(bss_fit)
-  missing_params <- character()
+  ecg_inputs     <- inputs_bss[[ecg]]
   
-  if (any(is.na(extracted_data$V_I_rep)) || any(is.nan(extracted_data$V_I_rep))) {
-    missing_params <- c(missing_params, "V_I_rep")
-  }
-  if (any(is.na(extracted_data$T_I_rep)) || any(is.nan(extracted_data$T_I_rep))) {
-    missing_params <- c(missing_params, "T_I_rep")
-  }
-  if (any(is.na(extracted_data$E_s_rep)) || any(is.nan(extracted_data$E_s_rep))) {
-    missing_params <- c(missing_params, "E_s_rep")
-  }
-  if (any(is.na(extracted_data$c_rep)) || any(is.nan(extracted_data$c_rep))) {
-    missing_params <- c(missing_params, "c_rep")
-  }
-  if (any(is.na(extracted_data$V_A_rep)) || any(is.nan(extracted_data$V_A_rep))) {
-    missing_params <- c(missing_params, "V_A_rep")
-  }
-  if (any(is.na(extracted_data$T_A_rep)) || any(is.nan(extracted_data$T_A_rep))) {
-    missing_params <- c(missing_params, "T_A_rep")
-  }
-  
-  # If any missing values found, print warning and return NULL
-  if (length(missing_params) > 0) {
-    warning(
-      sprintf(
-        paste0(
-          "\n=== MISSING VALUES DETECTED ===\n",
-          "Catch group: %s\n",
-          "Parameters with missing/NaN values: %s\n",
-          "Skipping PPC plot generation for this catch group.\n",
-          "RECOMMENDATION: Check convergence diagnostics (Rhat, ESS, trace plots) for this model fit.\n",
-          "Missing values may indicate:\n",
-          "  - Model convergence issues\n",
-          "  - Numerical instability in sampling\n",
-          "  - Problematic parameter combinations\n",
-          "================================\n"
-        ),
-        ecg,
-        paste(missing_params, collapse = ", ")
-      )
+  # Parameter configuration lookup. Each entry encodes everything needed to
+  # build PPC data and plots for one _rep parameter. Extend as model evolves.
+  # NOTE: B_s_rep index column names (section_B, day_B, countnum_B) are assumed
+  # by analogy with other parameters — verify these match your inputs_bss structure.
+  param_config <- list(
+    V_I_rep = list(
+      obs_name     = "V_I",
+      index_cols   = c(section = "section_V", day = "day_V", countnum = "countnum_V"),
+      has_section  = TRUE,
+      has_gear     = FALSE,
+      summary_grps = "section",
+      x_label      = "Observed Vehicle Counts",
+      plot_title   = "Vehicle Counts PPC",
+      plus_one     = FALSE
+    ),
+    T_I_rep = list(
+      obs_name     = "T_I",
+      index_cols   = c(section = "section_T", day = "day_T", countnum = "countnum_T"),
+      has_section  = TRUE,
+      has_gear     = FALSE,
+      summary_grps = "section",
+      x_label      = "Observed Trailer Counts",
+      plot_title   = "Trailer Counts PPC",
+      plus_one     = FALSE
+    ),
+    A_I_rep = list(
+      obs_name     = "A_I",
+      index_cols   = c(section = "section_A", day = "day_A", countnum = "countnum_A"),
+      has_section  = TRUE,
+      has_gear     = FALSE,
+      summary_grps = "section",
+      x_label      = "Observed Angler Index Counts",
+      plot_title   = "Angler Index Counts PPC",
+      plus_one     = FALSE
+    ),
+    B_s_rep = list(
+      obs_name     = "B_s",
+      index_cols   = c(section = "section_B", day = "day_B", countnum = "countnum_B"),
+      has_section  = TRUE,
+      has_gear     = FALSE,
+      summary_grps = "section",
+      x_label      = "Observed Boat Census Counts",
+      plot_title   = "Boat Census Counts PPC (Drano)",
+      plus_one     = FALSE
+    ),
+    E_s_rep = list(
+      obs_name     = "E_s",
+      index_cols   = c(section = "section_E", day = "day_E", gear = "gear_E", countnum = "countnum_E"),
+      has_section  = TRUE,
+      has_gear     = TRUE,
+      summary_grps = c("section", "gear"),
+      x_label      = "Observed Angler Counts",
+      plot_title   = "Angler Census Counts PPC",
+      plus_one     = FALSE
+    ),
+    c_rep = list(
+      obs_name     = "c",
+      index_cols   = c(section = "section_IntC", day = "day_IntC", gear = "gear_IntC"),
+      has_section  = TRUE,
+      has_gear     = TRUE,
+      summary_grps = c("section", "gear"),
+      x_label      = "Observed Catch",
+      plot_title   = "Catch PPC",
+      plus_one     = TRUE   # +1 offset for display
+    ),
+    V_A_rep = list(
+      obs_name     = "V_A",
+      index_cols   = c(gear = "gear_IntA"),
+      has_section  = FALSE,
+      has_gear     = TRUE,
+      summary_grps = "gear",
+      x_label      = "Observed Angler Group Vehicles",
+      plot_title   = "Angler Group Vehicles PPC",
+      plus_one     = FALSE
+    ),
+    T_A_rep = list(
+      obs_name     = "T_A",
+      index_cols   = c(gear = "gear_IntA"),
+      has_section  = FALSE,
+      has_gear     = TRUE,
+      summary_grps = "gear",
+      x_label      = "Observed Angler Group Trailers",
+      plot_title   = "Angler Group Trailers PPC",
+      plus_one     = FALSE
+    ),
+    B_A_rep = list(
+      obs_name     = "B_A",
+      index_cols   = c(gear = "gear_IntA"),
+      has_section  = FALSE,
+      has_gear     = TRUE,
+      summary_grps = "gear",
+      x_label      = "Observed Boat Interview Expansions",
+      plot_title   = "Boat Interview Expansions PPC (Drano)",
+      plus_one     = FALSE
     )
+  )
+  
+  # Retain only parameters present in both the fit and the input data
+  # Retain only parameters present in both the fit and the input data,
+  # with non-empty observations and draws
+  active_params <- param_config[
+    names(param_config) %in% names(extracted_data) &
+      map_lgl(param_config, \(cfg) cfg$obs_name %in% names(ecg_inputs)) &
+      map_lgl(param_config, \(cfg) {
+        obs_vals <- ecg_inputs[[cfg$obs_name]]
+        !is.null(obs_vals) && length(obs_vals) > 0 && sum(obs_vals) > 0
+      }) &
+      map_lgl(names(param_config), \(rep_name) {
+        rep_mat <- extracted_data[[rep_name]]
+        !is.null(rep_mat) && length(rep_mat) > 0
+      })
+  ]
+  
+  if (length(active_params) == 0) {
+    warning(sprintf(
+      "No recognized PPC parameters found for catch group '%s'. Check that _rep arrays and observed inputs are named consistently.",
+      ecg
+    ))
     return(NULL)
   }
   
-  # Get sections reference
+  # Check for missing/NaN values across all active parameters
+  missing_params <- names(active_params)[
+    map_lgl(names(active_params), \(rep_name)
+            any(is.na(extracted_data[[rep_name]])) || any(is.nan(extracted_data[[rep_name]]))
+    )
+  ]
+  
+  if (length(missing_params) > 0) {
+    warning(sprintf(
+      paste0(
+        "\n=== MISSING VALUES DETECTED ===\n",
+        "Catch group: %s\n",
+        "Parameters with missing/NaN values: %s\n",
+        "Skipping PPC plot generation for this catch group.\n",
+        "RECOMMENDATION: Check convergence diagnostics (Rhat, ESS, trace plots) for this model fit.\n",
+        "Missing values may indicate:\n",
+        "  - Model convergence issues\n",
+        "  - Numerical instability in sampling\n",
+        "  - Problematic parameter combinations\n",
+        "================================\n"
+      ),
+      ecg,
+      paste(missing_params, collapse = ", ")
+    ))
+    return(NULL)
+  }
+  
+  # Section reference table
   sections <- dwg$effort |>
     filter(location_type == "Section") |>
-    distinct(water_body, section_num, location) |>
+    distinct(water_body, section_num) |>
     arrange(section_num) |>
-    select(water_body, section = section_num, location)
+    rename(section = section_num)
   
-  # Helper function to create summary with totals
+  # Helper: p_fit summary with totals row
   add_summary_totals <- function(data, group_vars) {
+    group_vars <- intersect(group_vars, names(data))  # guard against missing cols
     summary_data <- data |>
       group_by(across(all_of(group_vars))) |>
       summarise(
-        fit_count = sum(fit == "fit"),
+        fit_count    = sum(fit == "fit"),
         no_fit_count = sum(fit == "no fit"),
-        total_count = fit_count + no_fit_count,
-        p_fit = if_else(no_fit_count == 0, 1, fit_count / total_count),
+        total_count  = fit_count + no_fit_count,
+        p_fit        = if_else(no_fit_count == 0, 1, fit_count / total_count),
         .groups = "drop"
       )
-    
-    # Create total row
     total_row <- summary_data |>
       summarise(
         across(all_of(group_vars), ~"Total"),
-        fit_count = sum(fit_count),
+        fit_count    = sum(fit_count),
         no_fit_count = sum(no_fit_count),
-        total_count = sum(total_count),
-        p_fit = if_else(sum(no_fit_count) == 0, 1, sum(fit_count) / sum(total_count))
+        total_count  = sum(total_count),
+        p_fit        = if_else(sum(no_fit_count) == 0, 1, sum(fit_count) / sum(total_count))
       )
-    
     bind_rows(summary_data, total_row)
   }
   
-  # V_I PPC
-  V_I_PPC <- extracted_data$V_I_rep |>
-    apply(2, \(x) quantile(x, c(0.025, 0.975))) |>
-    t() |>
-    as_tibble() |>
-    rename(`2.5%` = 1, `97.5%` = 2) |>
-    bind_cols(tibble(
-      V_I = inputs_bss[[ecg]]$V_I,
-      section = inputs_bss[[ecg]]$section_V,
-      day = inputs_bss[[ecg]]$day_V,
-      countnum = inputs_bss[[ecg]]$countnum_V
-    )) |>
-    left_join(sections, by = "section") |>
-    mutate(
-      section = as.factor(water_body),
-      day = as.factor(day),
-      countnum = as.factor(countnum),
-      fit = factor(
-        if_else(V_I >= `2.5%` & V_I <= `97.5%`, "fit", "no fit"), 
-        levels = c("fit", "no fit")
+  # Helper: decode gear integer to label
+  decode_gear <- function(x) {
+    as.factor(case_match(
+      x,
+      1 ~ "Bank Anglers",
+      2 ~ "Boat Anglers",
+      .default = as.character(x)
+    ))
+  }
+  
+  # Helper: build PPC data tibble for one parameter
+  # NOTE: imap passes (value, name) so cfg comes first, rep_name second
+  build_ppc_data <- function(cfg, rep_name) {
+    bounds <- extracted_data[[rep_name]] |>
+      apply(2, \(x) quantile(x, c(0.025, 0.975))) |>
+      t() |>
+      as_tibble(.name_repair = ~ paste0("V", seq_along(.))) |>
+      rename(`2.5%` = 1, `97.5%` = 2)
+    
+    # Observed values + index columns from inputs_bss
+    obs_data <- tibble(!!cfg$obs_name := ecg_inputs[[cfg$obs_name]])
+    for (std_name in names(cfg$index_cols)) {
+      input_col <- cfg$index_cols[[std_name]]
+      if (input_col %in% names(ecg_inputs)) {
+        obs_data[[std_name]] <- ecg_inputs[[input_col]]
+      }
+    }
+    
+    ppc_data <- bind_cols(bounds, obs_data)
+    
+    # Join section water body labels
+    if (cfg$has_section && "section" %in% names(ppc_data)) {
+      ppc_data <- ppc_data |>
+        left_join(sections, by = "section") |>
+        mutate(section = as.factor(water_body))
+    }
+    
+    # Standard factor conversions
+    ppc_data <- ppc_data |>
+      mutate(
+        across(any_of(c("day", "countnum")), as.factor),
+        across(any_of("gear"), decode_gear)
       )
-    )
-  
-  p_fit <- add_summary_totals(V_I_PPC, "section") |>
-    mutate(Parameter = "V_I_PPC")
-  
-  V_I_PPC_plt <- ggplot(V_I_PPC, aes(x = V_I, y = V_I, color = fit)) +
-    facet_grid(cols = vars(section)) +
-    geom_errorbar(aes(ymin = `2.5%`, ymax = `97.5%`), width = 0, 
-                  position = position_jitter(width = 0.5, height = 0)) +
-    labs(
-      x = "Observed Vehicle Counts", 
-      y = "95% PPI",
-      title = paste("Vehicle Counts PPC:", ecg)
-    ) +
-    geom_line(color = "black") +
-    coord_cartesian(xlim = c(0, max(V_I_PPC$`97.5%`)), 
-                    ylim = c(0, max(V_I_PPC$`97.5%`))) +
-    theme_bw() +
-    scale_colour_manual(values = c("#F8766D", "#00BFC4"), 
-                        labels = c("fit", "no fit"), drop = FALSE)
-  # invisible(
-  # ggsave(
-  #   filename = file.path(here("fishery_analyses", params$project_name, 
-  #                             params$fishery_name), paste0("V_I_PPC_", ecg, ".png")),
-  #   plot = V_I_PPC_plt, width = 6.5, height = 6.5, dpi = 300, 
-  #   limitsize = TRUE, scale = 1.75, units = "in"
-  # )
-  # )
-  
-  # T_I PPC
-  T_I_PPC <- extracted_data$T_I_rep |>
-    apply(2, \(x) quantile(x, c(0.025, 0.975))) |>
-    t() |>
-    as_tibble() |>
-    rename(`2.5%` = 1, `97.5%` = 2) |>
-    bind_cols(tibble(
-      T_I = inputs_bss[[ecg]]$T_I,
-      section = inputs_bss[[ecg]]$section_T,
-      day = inputs_bss[[ecg]]$day_T,
-      countnum = inputs_bss[[ecg]]$countnum_T
-    )) |>
-    left_join(sections, by = "section") |>
-    mutate(
-      section = as.factor(water_body),
-      day = as.factor(day),
-      countnum = as.factor(countnum),
-      fit = factor(
-        if_else(T_I >= `2.5%` & T_I <= `97.5%`, "fit", "no fit"), 
-        levels = c("fit", "no fit")
+    
+    # Fit flag
+    ppc_data |>
+      mutate(
+        fit = factor(
+          if_else(
+            .data[[cfg$obs_name]] >= `2.5%` & .data[[cfg$obs_name]] <= `97.5%`,
+            "fit", "no fit"
+          ),
+          levels = c("fit", "no fit")
+        )
       )
-    )
+  }
   
-  p_fit <- p_fit |>
-    bind_rows(
-      add_summary_totals(T_I_PPC, "section") |>
-        mutate(Parameter = "T_I_PPC")
-    )
-  
-  T_I_PPC_plt <- ggplot(T_I_PPC, aes(x = T_I, y = T_I, color = fit)) +
-    facet_grid(cols = vars(section)) +
-    geom_errorbar(aes(ymin = `2.5%`, ymax = `97.5%`), width = 0, 
-                  position = position_jitter(width = 0.5, height = 0)) +
-    labs(
-      x = "Observed Trailer Counts", 
-      y = "95% PPI",
-      title = paste("Trailer Counts PPC:", ecg)
-    ) +
-    geom_line(color = "black") +
-    coord_cartesian(xlim = c(0, max(T_I_PPC$`97.5%`)), 
-                    ylim = c(0, max(T_I_PPC$`97.5%`))) +
-    theme_bw() +
-    scale_colour_manual(values = c("#F8766D", "#00BFC4"), 
-                        labels = c("fit", "no fit"), drop = FALSE)
-  # invisible(
-  # ggsave(
-  #   filename = file.path(here("fishery_analyses", params$project_name, 
-  #                             params$fishery_name), paste0("T_I_PPC_", ecg, ".png")),
-  #   plot = T_I_PPC_plt, width = 6.5, height = 6.5, dpi = 300, 
-  #   limitsize = TRUE, scale = 1.75, units = "in"
-  # )
-  # )
-  
-  # E_s PPC
-  E_s_PPC <- extracted_data$E_s_rep |>
-    apply(2, \(x) quantile(x, c(0.025, 0.975))) |>
-    t() |>
-    as_tibble() |>
-    rename(`2.5%` = 1, `97.5%` = 2) |>
-    bind_cols(tibble(
-      E_s = inputs_bss[[ecg]]$E_s,
-      section = inputs_bss[[ecg]]$section_E,
-      day = inputs_bss[[ecg]]$day_E,
-      gear = inputs_bss[[ecg]]$gear_E,
-      countnum = inputs_bss[[ecg]]$countnum_E
-    )) |>
-    left_join(sections, by = "section") |>
-    mutate(
-      section = as.factor(water_body),
-      day = as.factor(day),
-      gear = as.factor(case_match(
-        gear,
-        1 ~ "Bank Anglers",
-        2 ~ "Boat Anglers",
-        .default = as.character(gear)
-      )),
-      countnum = as.factor(countnum),
-      fit = factor(
-        if_else(E_s >= `2.5%` & E_s <= `97.5%`, "fit", "no fit"), 
-        levels = c("fit", "no fit")
+  # Helper: build PPC plot
+  build_ppc_plot <- function(ppc_data, cfg) {
+    offset   <- if (isTRUE(cfg$plus_one)) 1 else 0
+    jitter_w <- if (cfg$has_section) 0.5 else 0.2
+    
+    p <- ggplot(ppc_data, aes(
+      x     = .data[[cfg$obs_name]] + offset,
+      y     = .data[[cfg$obs_name]] + offset,
+      color = fit
+    )) +
+      geom_errorbar(
+        aes(ymin = `2.5%` + offset, ymax = `97.5%` + offset),
+        width    = 0,
+        position = position_jitter(width = jitter_w, height = 0)
+      ) +
+      geom_line(color = "black") +
+      labs(
+        x     = cfg$x_label,
+        y     = "95% PPI",
+        title = paste0(cfg$plot_title, ": ", ecg)
+      ) +
+      theme_bw() +
+      scale_colour_manual(
+        values = c("#F8766D", "#00BFC4"),
+        labels = c("fit", "no fit"),
+        drop   = FALSE
       )
+    
+    # Faceting by parameter structure
+    if (cfg$has_section && cfg$has_gear) {
+      p <- p + facet_grid(rows = vars(gear), cols = vars(section))
+    } else if (cfg$has_section) {
+      p <- p + facet_grid(cols = vars(section))
+    } else if (cfg$has_gear) {
+      p <- p + facet_grid(cols = vars(gear))
+    }
+    
+    # Axis limits/scales
+    if (isTRUE(cfg$plus_one)) {
+      p <- p +
+        scale_y_continuous(breaks = seq(1, 10, by = 1)) +
+        scale_x_continuous(breaks = seq(1, 10, by = 1))
+    } else {
+      max_val <- max(ppc_data$`97.5%`)
+      p <- p + coord_cartesian(xlim = c(0, max_val), ylim = c(0, max_val))
+    }
+    
+    p
+  }
+  
+  # Build all PPC data and plots for active parameters
+  ppc_data_list <- imap(active_params, build_ppc_data)
+  
+  plot_list <- imap(active_params, \(cfg, rep_name) {
+    build_ppc_plot(ppc_data_list[[rep_name]], cfg)
+  })
+  names(plot_list) <- paste0(map_chr(active_params, "obs_name"), "_PPC_plt")
+  
+  # Combined p_fit summary across all active parameters
+  p_fit <- imap_dfr(active_params, \(cfg, rep_name) {
+    add_summary_totals(ppc_data_list[[rep_name]], cfg$summary_grps) |>
+      mutate(Parameter = paste0(cfg$obs_name, "_PPC"))
+  })
+  
+  # Combined plot groups:
+  #   p_combined  = section-only index count plots (V_I, T_I, A_I, B_s)
+  #   p_combined2 = gear-only interview expansion plots (V_A, T_A, B_A)
+  index_plots <- plot_list[
+    names(plot_list) %in% paste0(
+      map_chr(keep(active_params, \(cfg) cfg$has_section && !cfg$has_gear), "obs_name"),
+      "_PPC_plt"
     )
-  
-  p_fit <- p_fit |>
-    bind_rows(
-      add_summary_totals(E_s_PPC, c("section", "gear")) |>
-        mutate(Parameter = "E_s_PPC")
+  ]
+  interview_plots <- plot_list[
+    names(plot_list) %in% paste0(
+      map_chr(keep(active_params, \(cfg) cfg$has_gear && !cfg$has_section), "obs_name"),
+      "_PPC_plt"
     )
+  ]
   
-  E_s_PPC_plt <- ggplot(E_s_PPC, aes(x = E_s, y = E_s, color = fit)) +
-    facet_grid(rows = vars(gear), cols = vars(section)) +
-    geom_errorbar(aes(ymin = `2.5%`, ymax = `97.5%`), width = 0, 
-                  position = position_jitter(width = 0.5, height = 0)) +
-    labs(
-      x = "Observed Angler Counts", 
-      y = "95% PPI",
-      title = paste("Angler Counts PPC:", ecg)
-    ) +
-    geom_line(color = "black") +
-    coord_cartesian(xlim = c(0, max(E_s_PPC$`97.5%`)), 
-                    ylim = c(0, max(E_s_PPC$`97.5%`))) +
-    theme_bw() +
-    scale_colour_manual(values = c("#F8766D", "#00BFC4"), 
-                        labels = c("fit", "no fit"), drop = FALSE)
-  # invisible(
-  # ggsave(
-  #   filename = file.path(here("fishery_analyses", params$project_name, 
-  #                             params$fishery_name), paste0("E_s_PPC_", ecg, ".png")),
-  #   plot = E_s_PPC_plt, width = 6.5, height = 6.5, dpi = 300, 
-  #   limitsize = TRUE, scale = 1.75, units = "in"
-  # )
-  # )
+  p_combined  <- if (length(index_plots) > 0)     gridExtra::arrangeGrob(grobs = index_plots,     ncol = 1) else NULL
+  p_combined2 <- if (length(interview_plots) > 0) gridExtra::arrangeGrob(grobs = interview_plots, ncol = 1) else NULL
   
-  # c PPC
-  c_PPC <- extracted_data$c_rep |>
-    apply(2, \(x) quantile(x, c(0.025, 0.975))) |>
-    t() |>
-    as_tibble() |>
-    rename(`2.5%` = 1, `97.5%` = 2) |>
-    bind_cols(tibble(
-      c = inputs_bss[[ecg]]$c,
-      section = inputs_bss[[ecg]]$section_IntC,
-      day = inputs_bss[[ecg]]$day_IntC,
-      gear = inputs_bss[[ecg]]$gear_IntC
-    )) |>
-    left_join(sections, by = "section") |>
-    mutate(
-      section = as.factor(water_body),
-      day = as.factor(day),
-      gear = as.factor(case_match(
-        gear,
-        1 ~ "Bank Anglers",
-        2 ~ "Boat Anglers",
-        .default = as.character(gear)
-      )),
-      fit = factor(
-        if_else(c >= `2.5%` & c <= `97.5%`, "fit", "no fit"),
-        levels = c("fit", "no fit")
-      )
-    )
-  
-  p_fit <- p_fit |>
-    bind_rows(
-      add_summary_totals(c_PPC, c("section", "gear")) |>
-        mutate(Parameter = "c_PPC")
-    )
-  
-  c_PPC_plt <- ggplot(c_PPC, aes(x = c + 1, y = c + 1, color = fit)) +
-    facet_grid(rows = vars(gear), cols = vars(section)) +
-    geom_errorbar(aes(ymin = `2.5%` + 1, ymax = `97.5%` + 1), width = 0, 
-                  position = position_jitter(width = 0.2, height = 0)) +
-    labs(
-      x = "Observed Catch", 
-      y = "95% PPI",
-      title = paste("Catch PPC:", ecg)
-    ) +
-    geom_line(color = "black") +
-    scale_y_continuous(breaks = seq(1, 10, by = 1)) +
-    scale_x_continuous(breaks = seq(1, 10, by = 1)) +
-    theme_bw()
-  
-  # invisible(
-  # ggsave(
-  #   filename = file.path(here("fishery_analyses", params$project_name, 
-  #                             params$fishery_name), paste0("c_PPC_", ecg, ".png")),
-  #   plot = c_PPC_plt, width = 6.5, height = 6.5, dpi = 300, 
-  #   limitsize = TRUE, scale = 1.75, units = "in"
-  # )
-  # )
-  
-  # V_A PPC
-  V_A_PPC <- extracted_data$V_A_rep |>
-    apply(2, \(x) quantile(x, c(0.025, 0.975))) |>
-    t() |>
-    as_tibble() |>
-    rename(`2.5%` = 1, `97.5%` = 2) |>
-    bind_cols(tibble(
-      V_A = inputs_bss[[ecg]]$V_A,
-      gear = inputs_bss[[ecg]]$gear_IntA
-    )) |>
-    mutate(
-      gear = as.factor(case_match(
-        gear,
-        1 ~ "Bank Anglers",
-        2 ~ "Boat Anglers",
-        .default = as.character(gear)
-      )),
-      fit = factor(
-        if_else(V_A >= `2.5%` & V_A <= `97.5%`, "fit", "no fit"), 
-        levels = c("fit", "no fit")
-      )
-    )
-  
-  p_fit <- p_fit |>
-    bind_rows(
-      add_summary_totals(V_A_PPC, "gear") |>
-        mutate(Parameter = "V_A_PPC")
-    )
-  
-  V_A_PPC_plt <- ggplot(V_A_PPC, aes(x = V_A, y = V_A, color = fit)) +
-    facet_grid(cols = vars(gear)) +
-    geom_errorbar(aes(ymin = `2.5%`, ymax = `97.5%`), width = 0, 
-                  position = position_jitter(width = 0.2, height = 0)) +
-    labs(
-      x = "Observed Angler Group Vehicles", 
-      y = "95% PPI",
-      title = paste("Angler Group Vehicles PPC:", ecg)
-    ) +
-    geom_line(color = "black") +
-    coord_cartesian(xlim = c(0, max(V_A_PPC$`97.5%`)), 
-                    ylim = c(0, max(V_A_PPC$`97.5%`))) +
-    theme_bw() +
-    scale_colour_manual(values = c("#F8766D", "#00BFC4"), 
-                        labels = c("fit", "no fit"), drop = FALSE)
-  # invisible(
-  # ggsave(
-  #   filename = file.path(here("fishery_analyses", params$project_name, 
-  #                             params$fishery_name), paste0("V_A_PPC_", ecg, ".png")),
-  #   plot = V_A_PPC_plt, width = 6.5, height = 6.5, dpi = 300, 
-  #   limitsize = TRUE, scale = 1.75, units = "in"
-  # )
-  # )
-  # T_A PPC
-  T_A_PPC <- extracted_data$T_A_rep |>
-    apply(2, \(x) quantile(x, c(0.025, 0.975))) |>
-    t() |>
-    as_tibble() |>
-    rename(`2.5%` = 1, `97.5%` = 2) |>
-    bind_cols(tibble(
-      T_A = inputs_bss[[ecg]]$T_A,
-      gear = inputs_bss[[ecg]]$gear_IntA
-    )) |>
-    mutate(
-      gear = as.factor(case_match(
-        gear,
-        1 ~ "Bank Anglers",
-        2 ~ "Boat Anglers",
-        .default = as.character(gear)
-      )),
-      fit = factor(
-        if_else(T_A >= `2.5%` & T_A <= `97.5%`, "fit", "no fit"), 
-        levels = c("fit", "no fit")
-      )
-    )
-  
-  p_fit <- p_fit |>
-    bind_rows(
-      add_summary_totals(T_A_PPC, "gear") |>
-        mutate(Parameter = "T_A_PPC")
-    )
-  
-  T_A_PPC_plt <- ggplot(T_A_PPC, aes(x = T_A, y = T_A, color = fit)) +
-    facet_grid(cols = vars(gear)) +
-    geom_errorbar(aes(ymin = `2.5%`, ymax = `97.5%`), width = 0, 
-                  position = position_jitter(width = 0.2, height = 0)) +
-    labs(
-      x = "Observed Angler Group Trailers", 
-      y = "95% PPI",
-      title = paste("Angler Group Trailers PPC:", ecg)
-    ) +
-    geom_line(color = "black") +
-    coord_cartesian(xlim = c(0, max(T_A_PPC$`97.5%`)), 
-                    ylim = c(0, max(T_A_PPC$`97.5%`))) +
-    theme_bw() +
-    scale_colour_manual(values = c("#F8766D", "#00BFC4"), 
-                        labels = c("fit", "no fit"), drop = FALSE)
-  # invisible(
-  # ggsave(
-  #   filename = file.path(here("fishery_analyses", params$project_name, 
-  #                             params$fishery_name), paste0("T_A_PPC_", ecg, ".png")),
-  #   plot = T_A_PPC_plt, width = 6.5, height = 6.5, dpi = 300, 
-  #   limitsize = TRUE, scale = 1.75, units = "in"
-  # )
-  # )
-  
-  # Combined plots
-  p_combined <- gridExtra::arrangeGrob(V_I_PPC_plt, T_I_PPC_plt, nrow = 2)
-  p_combined2 <- gridExtra::arrangeGrob(V_A_PPC_plt, T_A_PPC_plt, nrow = 2)
-  
-  # invisible(
-  # ggsave(
-  #   filename = file.path(here("fishery_analyses", params$project_name, 
-  #                             params$fishery_name), paste0("VI_TI_PPC_", ecg, ".png")),
-  #   plot = p_combined, width = 6.5, height = 6.5, dpi = 300, 
-  #   limitsize = TRUE, scale = 1.75, units = "in"
-  # )
-  # )
-  # 
-  # invisible(
-  # ggsave(
-  #   filename = file.path(here("fishery_analyses", params$project_name, 
-  #                             params$fishery_name), paste0("VA_TA_PPC_", ecg, ".png")),
-  #   plot = p_combined2, width = 6.5, height = 6.5, dpi = 300, 
-  #   limitsize = TRUE, scale = 1.75, units = "in"
-  # )
-  # )
-  
-  # Save p_fit table
-  # p_fit |>
-  #   select(
-  #     Parameter,
-  #     Section = section,
-  #     Gear = gear,
-  #     `Fit count` = fit_count,
-  #     `No fit count` = no_fit_count,
-  #     `Total n` = total_count,
-  #     `2.5% Q > Pr.(obs) < 97.5% Q` = p_fit
-  #   ) |>
-  #   write.csv(
-  #     file.path(here("fishery_analyses", params$project_name, 
-  #                    params$fishery_name), paste0("p_fit_", ecg, ".csv")), 
-  #     row.names = FALSE
-  #   )
-  
-  # Return list of results
   list(
-    p_fit = p_fit,
-    plots = list(
-      V_I_PPC_plt = V_I_PPC_plt,
-      T_I_PPC_plt = T_I_PPC_plt,
-      E_s_PPC_plt = E_s_PPC_plt,
-      c_PPC_plt = c_PPC_plt,
-      V_A_PPC_plt = V_A_PPC_plt,
-      T_A_PPC_plt = T_A_PPC_plt
-    )
+    p_fit       = p_fit,
+    plots       = plot_list,
+    p_combined  = p_combined,
+    p_combined2 = p_combined2
   )
 }
