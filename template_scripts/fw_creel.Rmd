@@ -137,22 +137,13 @@ if (needs_db) {
   resolved_end   <- as.Date(est_end_input)
 }
 
-# Update `params`
-# Record the environment (works for interactive and headless runs)
-env <- environment()
-
-# Capture the original lock state of YAML params so it can be restored afterward. 
-# Rmarkdown locks YAML during a render (e.g., an interactive 'knit' or a headless run (scheduled task))
-# A chunk-by-chunk interactive run does not lock params from being edited. 
-# Restoring the original state avoids locking it when it wasn't locked before (chunk-by-chunk operation)
-# and leaving it unlocked when the binding was locked by a render (interactive 'knit' or headless run)
-was_locked <- bindingIsLocked("params", env)
-
-# Unlock the render-bound params, supply resolved dates, then restore the lock state
-if (was_locked) unlockBinding("params", env)
-params$est_date_start <- as.character(resolved_start)
-params$est_date_end   <- as.character(resolved_end)
-if (was_locked) lockBinding("params", env)
+# Bundle resolved dates into session-derived list
+# Downstream chunks read est_dates$... rather than params$..., 
+# This works around RStudio reseeding the params each time a chunk is run interactively
+est_dates <- list(
+  est_date_start = as.character(resolved_start),
+  est_date_end   = as.character(resolved_end)
+)
 ```
 
 #### Selected catch groups
@@ -174,8 +165,8 @@ params$est_catch_groups |>
 
 ```{r, eval=params$report_type %in% c("detailed","summary")}
 tibble(
-  `Start date`= format(as.Date(params$est_date_start), "%m/%d/%Y"),
-  `End date` = format(as.Date(params$est_date_end), "%m/%d/%Y")
+  `Start date`= format(as.Date(est_dates$est_date_start), "%m/%d/%Y"),
+  `End date` = format(as.Date(est_dates$est_date_end), "%m/%d/%Y")
 ) |> 
   gt() |> 
 tab_header(
@@ -358,8 +349,8 @@ saveRDS(dwg, file.path(outputs_folders$inputs, "dwg_raw.rds"))
 
 dwg$days <- prep_days(
   params = params,
-  date_begin = params$est_date_start, 
-  date_end = params$est_date_end, 
+  date_begin = est_dates$est_date_start, 
+  date_end = est_dates$est_date_end, 
   weekends = params$days_wkend,
   # holidays = read_lines(paste(here(), "input_files/dates_holidays_2015_2030.txt", sep = "/")),
   lat = mean(dwg$ll$centroid_lat), #can/should consider smarter options
@@ -410,7 +401,7 @@ dwg$effort |>
 ```{r creel_effort}
 
 dwg$effort |>
-  filter(between(event_date, as.Date(params$est_date_start), as.Date(params$est_date_end))) |>
+  filter(between(event_date, as.Date(est_dates$est_date_start), as.Date(est_dates$est_date_end))) |>
   distinct(section_num, location, event_date, tie_in_indicator, count_sequence) |>
   count(section_num, location, tie_in_indicator) |>
   mutate(
@@ -450,13 +441,13 @@ tab_header(
   ## NOTE: NAs in the "effort_type.y" column indicate that a census survey was conducted without the paired index count; if this occurs, the census data without a paired index count needs to be filter out for BSS model to run
 left_join(
   dwg$effort |>
-    filter(tie_in_indicator == 1, between(event_date, as.Date(params$est_date_start), as.Date(params$est_date_end))) |> 
+    filter(tie_in_indicator == 1, between(event_date, as.Date(est_dates$est_date_start), as.Date(est_dates$est_date_end))) |> 
     mutate(effort_type = "Census") |> 
     select(water_body, event_date, section_num, effort_type) |> 
     distinct() |> 
     arrange(event_date, section_num),
   dwg$effort |>
-    filter(tie_in_indicator == 0, between(event_date, as.Date(params$est_date_start), as.Date(params$est_date_end))) |> 
+    filter(tie_in_indicator == 0, between(event_date, as.Date(est_dates$est_date_start), as.Date(est_dates$est_date_end))) |> 
     mutate(effort_type = "Index") |> 
     select(water_body, event_date, section_num, effort_type) |> 
     distinct() |> 
@@ -470,7 +461,7 @@ left_join(
 ```{r creel_interview}
 # Total number of angler group interviews by section_num and fishing_location
 dwg$interview |>
-  filter(between(event_date, as.Date(params$est_date_start), as.Date(params$est_date_end))) |>
+  filter(between(event_date, as.Date(est_dates$est_date_start), as.Date(est_dates$est_date_end))) |>
   count(section_num, fishing_location) |>
   arrange(section_num) |>
   gt() |> 
@@ -500,7 +491,7 @@ tab_style(
 ```{r interviews_date_section, include=FALSE}
 # Number of angler group interviews by event_date and section_num; 
 dwg$interview |>  
-  filter(between(event_date, as.Date(params$est_date_start), as.Date(params$est_date_end))) |> 
+  filter(between(event_date, as.Date(est_dates$est_date_start), as.Date(est_dates$est_date_end))) |> 
   count(section_num, event_date) |> 
   pivot_wider(names_from = section_num, values_from = n) |> 
   arrange(event_date) |> 
@@ -515,7 +506,7 @@ dwg$interview |>
 # Total number of "encounters" for each unique catch_group recorded during angler group interviews
 dwg$catch |>
   left_join(dwg$interview, by = "interview_id") |> 
-  filter(between(event_date, as.Date(params$est_date_start), as.Date(params$est_date_end))) |> 
+  filter(between(event_date, as.Date(est_dates$est_date_start), as.Date(est_dates$est_date_end))) |> 
   group_by(catch_group) |> 
   summarise(fish_count = sum(fish_count), .groups = "drop") |> 
 gt() |>
@@ -555,7 +546,7 @@ tab_style(
   interview_fishing_time <- 
     prep_dwg_interview_fishing_time(
       params = params,
-      dwg_interview = dwg$interview |> filter(between(event_date, as.Date(params$est_date_start), as.Date(params$est_date_end))),
+      dwg_interview = dwg$interview |> filter(between(event_date, as.Date(est_dates$est_date_start), as.Date(est_dates$est_date_end))),
       #person_count_type = params$person_count_type,
       min_fishing_time = params$min_fishing_time,
       study_design = params$study_design
@@ -604,7 +595,7 @@ tab_style(
       effort_index_summ <- 
         prep_dwg_effort_index(
           params = params,
-          eff = dwg$effort |> filter(between(event_date, as.Date(params$est_date_start), as.Date(params$est_date_end))),
+          eff = dwg$effort |> filter(between(event_date, as.Date(est_dates$est_date_start), as.Date(est_dates$est_date_end))),
           study_design = params$study_design,
           boat_type_collapse = params$boat_type_collapse,
           fish_location_determines_type = params$fish_location_determines_type,
@@ -627,7 +618,7 @@ tab_style(
     effort_census_summ <- 
       prep_dwg_effort_census(
         params = params,
-        eff = dwg$effort |> filter(between(event_date, as.Date(params$est_date_start), as.Date(params$est_date_end))),
+        eff = dwg$effort |> filter(between(event_date, as.Date(est_dates$est_date_start), as.Date(est_dates$est_date_end))),
         study_design = params$study_design,
         boat_type_collapse = params$boat_type_collapse,
         fish_location_determines_type = params$fish_location_determines_type,
@@ -804,7 +795,7 @@ estimates_pe$effort |>
     .groups = "drop"
   ) |> 
   pivot_wider(names_from = section_num, values_from = E_sum) |> 
-  gt(caption = paste("Estimated effort (angler hours) by fishing section from", params$est_date_start, "to", params$est_date_end)) |> 
+  gt(caption = paste("Estimated effort (angler hours) by fishing section from", est_dates$est_date_start, "to", est_dates$est_date_end)) |> 
   tab_options(
     heading.title.font.size = px(14),
     table.font.color = "black"
