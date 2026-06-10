@@ -77,72 +77,16 @@ library(creelutils)
 ```
 
 ```{r resolve_dates, message=FALSE}
-# Resolve est_date_start / est_date_end for both interactive and headless runs.
-# Manual YAML dates win; blanks are sourced from the fishery lookup table,
-# with the end date capped at 'yesterday' for in-season runs.
+# Dynamically source fishery start and end dates from the Postgres creel database.
+# Manually entered dates always override and validation of manual dates is up to the user.
 
-# If fishery dates are manually entered -> pass through unchanged
-# If fishery dates are not entered (param as NULL, NA, length-0, or empty quotes "") -> normalize each to ""
-coerce_blank <- \(x) if (is.null(x) || length(x) != 1 || is.na(x) || !nzchar(x)) "" else as.character(x)
-est_start_input <- coerce_blank(params$est_date_start)
-est_end_input   <- coerce_blank(params$est_date_end)
-
-# Source fishery dates from the database if either param was left blank (default, "")
-needs_db <- !nzchar(est_start_input) || !nzchar(est_end_input)
-
-if (needs_db) {
-  fishery <- tryCatch(
-    creelutils::fishery_lut() |> # query and format
-      dplyr::filter(fishery_name == params$fishery_name) |>
-      dplyr::select(fishery_name, fishery_start_date, fishery_end_date),
-    error = \(e) NULL
-  )
-
-  # NULL returned means a connection issue
-  # row count != 1 means fishery name either absent from, or duplicated in, fishery_lut
-  if (is.null(fishery) || nrow(fishery) != 1) {
-    reason <- if (is.null(fishery)) "lookup failed (DB connection or query error)"
-              else if (nrow(fishery) == 0) "fishery_name not found in fishery_lut"
-              else "fishery_name matched multiple rows in fishery_lut"
-    cli::cli_abort(c(
-      "Cannot resolve estimation window for {.val {params$fishery_name}}.",
-      "x" = "{reason},",
-      "x" = "and no manual est_date_start / est_date_end were supplied."
-    ))
-  }
-
-  # Resolve fishery dates
-  # If the YAML param est_date_start is provided use that date (default is ""),
-  # otherwise use the start date from the fishery lookup table.
-  resolved_start <- if (nzchar(est_start_input)) as.Date(est_start_input) else as.Date(fishery$fishery_start_date)
-
-  # If the YAML param est_date_end is provided use that date (default is "").
-  # If a manual est_date_end is not provided, use whichever comes first:
-  #   1) the end date from the fishery lookup table, or 2) the system date minus one (yesterday).
-  #
-  #   This accounts for in-season versus post-season runs of the script:
-  #   - run within the fishery date range (in-season)  -> uses Sys.Date() - 1
-  #   - run after the fishery has closed (post-season) -> uses the lookup table end date
-  resolved_end <- if (nzchar(est_end_input)) as.Date(est_end_input) else min(as.Date(fishery$fishery_end_date), Sys.Date() - 1)
-  
-  # Abort when the resolved window is inverted (end before start)
-  if (resolved_end < resolved_start) {
-    cli::cli_abort("Invalid date range for {.val {params$fishery_name}}: end ({resolved_end}) is before start ({resolved_start}).")
-  }
-
-} else {
-  # Both est_date_start and est_date_end were manually supplied: use them verbatim
-  # The user is responsible for date validation
-  resolved_start <- as.Date(est_start_input)
-  resolved_end   <- as.Date(est_end_input)
-}
-
-# Bundle resolved dates into session-derived list
-# Downstream chunks read est_dates$... rather than params$..., 
-# This works around RStudio reseeding the params each time a chunk is run interactively
-est_dates <- list(
-  est_date_start = as.character(resolved_start),
-  est_date_end   = as.character(resolved_end)
+# If at least one date parameter is blank (default: ""), the database fishery lookup table (fishery_lut) is queried.
+# For in-season estimates, the end date is capped at `today - 1` (i.e., yesterday, the last completed day).
+# For post-season estimates, the fishery end date is used.
+est_dates <- resolve_dates(
+  params$fishery_name, 
+  params$est_date_start, 
+  params$est_date_end
 )
 ```
 
