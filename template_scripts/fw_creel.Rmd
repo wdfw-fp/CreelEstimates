@@ -76,6 +76,11 @@ library("digest")
 library(creelutils)
 ```
 
+```{r, load_functions, message=FALSE}
+# Load CreelEstimates functions (pre-package method)
+walk(list.files(here("R_functions"), full.names = T), source)
+```
+
 ```{r resolve_dates, message=FALSE}
 # Dynamically source fishery start and end dates from the Postgres creel database.
 # Manually entered dates always override and validation of manual dates is up to the user.
@@ -148,9 +153,6 @@ if (params$enable_cache) {
 } else {
   cli_alert_warning("Cache is DISABLED - all chunks will be re-executed")
 }
-
-# Load functions (pre-package method)
-walk(list.files(here("R_functions"), full.names = T), source)
 
 # adjust day_length inputs
 day_length_inputs <- list()
