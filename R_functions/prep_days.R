@@ -63,10 +63,12 @@ prep_days <- function(
     week = as.numeric(format(event_date, "%W")),
     month = as.numeric(format(event_date, "%m")),
     year = as.numeric(format(event_date, "%Y")),
-    period = case_when(
-      period_pe == "week" ~ week,
-      period_pe == "month" ~ month,
-      period_pe == "duration" ~ double(1)
+    period = switch(
+      period_pe,
+      week = week,
+      month = month,
+      duration = double(1),
+      stop("Invalid `period_pe`: ", period_pe)
     ),
     day_index = as.integer(seq_along(event_date)),
     week_index = as.integer(factor(week, levels = unique(week))),
