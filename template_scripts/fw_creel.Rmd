@@ -659,35 +659,46 @@ saveRDS(inputs_pe, file.path(outputs_folders$inputs, "inputs_pe.rds"))
 ### Paired census and index angler effort counts
 
 ```{r view_paired_census_index_counts, cache=params$enable_cache, dependson=c("establish_file_structure", "prep_inputs_pe")}
-
-if (nrow(dwg_summ$effort_census) > 0) {
-  # table view of census / index surveys and resulting bias term ratio 
-  inputs_pe$paired_census_index_counts |> 
-    gt() |> 
-    tab_header(
-      title = "The season-long sum of paired census and index angler effort counts and corresponding bias-term ratio (TI_expan_final), indicating the magnitude and direction (postive or negative) of bias in index counts relative to census counts."
-    ) |>
-    tab_options(
-      heading.title.font.size = px(14),
-      table.font.color = "black"
-    ) |> 
-    fmt_number(c(TI_expan_weighted, TI_expan_final), decimals = 2) |> 
-    fmt_number(c(count_census, count_index), decimals = 0)
+# Skip table for Drano study design (no census-index effort bias correction)
+if (!params$study_design == "Drano") {
+  # For study designs other than "Drano", skip if there has not been a census effort count
+  if (nrow(dwg_summ$effort_census) > 0) {
+    # table view of census / index surveys and resulting bias term ratio 
+    inputs_pe$paired_census_index_counts |> 
+      gt() |> 
+      tab_header(
+        title = "The season-long sum of paired census and index angler effort counts and corresponding bias-term ratio (TI_expan_final), indicating the magnitude and direction (postive or negative) of bias in index counts relative to census counts."
+      ) |>
+      tab_options(
+        heading.title.font.size = px(14),
+        table.font.color = "black"
+      ) |> 
+      fmt_number(c(TI_expan_weighted, TI_expan_final), decimals = 2) |> 
+      fmt_number(c(count_census, count_index), decimals = 0)
+  } else {
+    gt(data.frame(
+      msg = "No census effort count data was detected. Substituting a 1.0 census-index bias ratio for each section and angler type combination. This assumes there is no systematic bias in the index effort data relative to census counts."
+    )) |>
+    tab_options(column_labels.hidden = TRUE, table.font.size = gt::px(14), table.font.color = "black")
+  }
 } else {
-  gt(data.frame(
-    msg = "No census effort count data was detected. Substituting a 1.0 census-index bias ratio for each section and angler type combination. This assumes there is no systematic bias in the index effort data relative to census counts."
-  )) |>
-  tab_options(column_labels.hidden = TRUE, table.font.size = gt::px(14), table.font.color = "black")
+  # Print message on Drano reports
+  cat("Drano study design: paired index-census bias correction table not applicable. Each index effort count is treated as a census of angler effort.")
 }
 ```
 
 ```{r scatterplot_census_v_index, fig.cap= "Scatterplot displaying the effort bias-term ratio (TI_expan_final) for each section and angler type (angler_final), representing the total count from census surveys divided by the total count from index surveys. A 1:1 relationship is shown by the dashed line.", dependson=c("establish_file_structure", "prep_inputs_pe")}
-
-if (nrow(dwg_summ$effort_census) > 0) {
-  plot_inputs_pe_census_vs_index(census_TI_expan = inputs_pe$paired_census_index_counts) +
-    theme(plot.caption = element_text(size = 10, hjust = 0))
+# Skip table for Drano study design (no census-index effort bias correction)
+if (!params$study_design == "Drano") {
+  # For study designs other than "Drano", skip if there has not been a census effort count
+  if (nrow(dwg_summ$effort_census) > 0) {
+    plot_inputs_pe_census_vs_index(census_TI_expan = inputs_pe$paired_census_index_counts) +
+      theme(plot.caption = element_text(size = 10, hjust = 0))
+  }
+} else {
+  # Print message on Drano reports
+  cat("Drano study design: paired index-census bias correction table not applicable. Each index effort count is treated as a census of angler effort.")
 }
-
 ```
 
 ### Generate PE estimates
