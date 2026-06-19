@@ -4,9 +4,10 @@
 #' 
 #' @param params List of parameters from Rmd YAML header
 #' @param analysis_lut Analysis lookup table with folder information
+#' @param est_dates Estimate dates resolved from the database fishery lookup table or manually entered by a user
 #' 
 #' @return List with paths to outputs folders
-setup_analysis_structure <- function(params, analysis_lut) {
+setup_analysis_structure <- function(params, analysis_lut, est_dates) {
   
   # Define analysis folder path
   analysis_folder_path <- here::here(
@@ -53,7 +54,7 @@ setup_analysis_structure <- function(params, analysis_lut) {
       fig.keep = "all",
       dev = c("png", "pdf"),
       dpi = 300,
-      cache.extra = list(params, analysis_lut$analysis_id),
+      cache.extra = list(params, analysis_lut$analysis_id, est_dates),
       cache.lazy = FALSE
     )
   } else {
