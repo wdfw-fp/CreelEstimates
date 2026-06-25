@@ -17,6 +17,9 @@ if(str_detect(study_design, "tandard" )){
         section_num = dwg_summarized$effort_index |> distinct(section_num) |> pull(), 
         angler_final = dwg_summarized$effort_index |> distinct(angler_final)|> pull(),
         TI_expan_final = 1 # If no census counts counted, this hard codes the spatial expansion to be 1 (i.e., assumes bias parameter is 1); should revisit later
+      ) |> 
+      mutate(
+        angler_final = str_replace(angler_final, "^total$", "bank")
       )
   } else {
     #begin census expansion values object by joining census and index in terms of total & boat
@@ -93,12 +96,12 @@ if(str_detect(study_design, "tandard" )){
     
     census_TI_expan <- 
       census_TI_expan |> 
-      dplyr::group_by(section_num, angler_final) |>
+      dplyr::group_by(angler_final) |>
       dplyr::summarise(
         dplyr::across(c(count_census, count_index), sum),
         .groups = "drop"
       ) |>
-      dplyr::left_join(census_expan, by = c("section_num", "angler_final")) |>
+      dplyr::left_join(census_expan, by = c("angler_final")) |>
       dplyr::mutate(
         TI_expan_weighted = count_census / count_index,
         TI_expan_weighted = if_else(

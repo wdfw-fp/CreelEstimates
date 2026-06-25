@@ -4,9 +4,10 @@
 #' 
 #' @param params List of parameters from Rmd YAML header
 #' @param analysis_lut Analysis lookup table with folder information
+#' @param est_dates Estimate dates resolved from the database fishery lookup table or manually entered by a user
 #' 
 #' @return List with paths to outputs folders
-setup_analysis_structure <- function(params, analysis_lut) {
+setup_analysis_structure <- function(params, analysis_lut, est_dates) {
   
   # Define analysis folder path
   analysis_folder_path <- here::here(
@@ -37,25 +38,35 @@ setup_analysis_structure <- function(params, analysis_lut) {
     }
   })
   
-  # Define and create separate cache location
+  # Define cache location (only create folder if caching is enabled)
   cache_path <- file.path(analysis_folder_path, ".cache")
   
-  if (!dir.exists(cache_path)) {
-    dir.create(cache_path, recursive = TRUE)
+  if (isTRUE(params$enable_cache)) {
+    if (!dir.exists(cache_path)) {
+      dir.create(cache_path, recursive = TRUE)
+    }
+    
+    # Set knitr cache to SEPARATE location from analysis outputs
+    knitr::opts_chunk$set(
+      cache = TRUE,
+      cache.path = paste0(cache_path, .Platform$file.sep),
+      fig.path = paste0(outputs_folders$figures, .Platform$file.sep),
+      fig.keep = "all",
+      dev = c("png", "pdf"),
+      dpi = 300,
+      cache.extra = list(params, analysis_lut$analysis_id, est_dates),
+      cache.lazy = FALSE
+    )
+  } else {
+    # Caching disabled - no .cache folder created, no cache options set
+    knitr::opts_chunk$set(
+      cache = FALSE,
+      fig.path = paste0(outputs_folders$figures, .Platform$file.sep),
+      fig.keep = "all",
+      dev = c("png", "pdf"),
+      dpi = 300
+    )
   }
-  
-  # Set knitr cache to SEPARATE location from analysis outputs
-  # Use paste0 with trailing slash for cross-platform compatibility
-  knitr::opts_chunk$set(
-    cache = TRUE,
-    cache.path = paste0(cache_path, .Platform$file.sep),
-    fig.path = paste0(outputs_folders$figures, .Platform$file.sep),
-    fig.keep = "all",
-    dev = c("png", "pdf"),
-    dpi = 300,
-    cache.extra = list(params, analysis_lut$analysis_id),
-    cache.lazy = FALSE
-  )
   
   # Set output directory for knitted HTML
   knitr::opts_chunk$set(output_dir = analysis_folder_path)
@@ -64,7 +75,11 @@ setup_analysis_structure <- function(params, analysis_lut) {
   cli::cli_alert_info("  Inputs: {.path {outputs_folders$inputs}}")
   cli::cli_alert_info("  Outputs: {.path {outputs_folders$outputs}}")
   cli::cli_alert_info("  Figures: {.path {outputs_folders$figures}}")
-  cli::cli_alert_info("  Cache: {.path {cache_path}}")
+  if (isTRUE(params$enable_cache)) {
+    cli::cli_alert_info("  Cache: {.path {cache_path}}")
+  } else {
+    cli::cli_alert_warning("  Cache: DISABLED (no .cache folder created)")
+  }
   
   # Return outputs folders for use in subsequent code
   return(list(
