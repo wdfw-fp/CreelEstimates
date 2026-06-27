@@ -4,7 +4,7 @@ date: "`r Sys.Date()`"
 params:
   project_name: "District 16"
   fishery_name: "Hoh winter steelhead 2023-24"
-  est_date_start: "2023-12-01"
+  est_date_start: "2024-02-01"
   est_date_end: "2024-03-31"
   est_catch_groups: !r data.frame(rbind(
     c(species = 'Steelhead', life_stage = 'Adult', fin_mark = 'UM', fate = 'Released')))
@@ -1442,6 +1442,27 @@ reg_rects <- hoh_boat_reg_dated |>
   ) |>
   filter(boat_allowed)  # only shade the "allowed" periods; prohibited = white background
 
+# ---- Raw daily catch from interviews ----
+# Sum fish_count by event_date x section x angler_final for overlay on posterior.
+# These are raw reported counts from interviews, not expanded to total catch.
+raw_catch_daily <- dwg_summ$interview |>
+  filter(
+    between(event_date, as.Date(params$est_date_start), as.Date(params$est_date_end)),
+    !is.na(est_cg)
+  ) |>
+  mutate(
+    section_num  = as.character(section_num),
+    section_label = paste("Section", section_num),
+    angler_final = dplyr::case_match(
+      angler_final,
+      "1"   ~ "bank",
+      "2"   ~ "boat",
+      .default = angler_final
+    )
+  ) |>
+  group_by(est_cg, section_label, angler_final, event_date) |>
+  summarise(raw_catch = sum(fish_count, na.rm = TRUE), .groups = "drop")
+
 # ---- Plot ----
 section_labels <- c(
   "Section 1" = "Section 1\n(Lower Hoh, RM 0\u201314.4)",
@@ -1467,6 +1488,16 @@ plot_catch_boat_reg <- catch_daily |>
   ) +
   # Posterior mean line
   geom_line(aes(y = `50%`), lwd = 0.9) +
+  # Raw observed catch points — same colour as gear type, hollow to distinguish from model
+  geom_point(
+    data        = raw_catch_daily,
+    aes(x = event_date, y = raw_catch, colour = angler_final),
+    inherit.aes = FALSE,
+    shape       = 21,       # hollow circle; fill set to white so interior is clear
+    fill        = "white",
+    size        = 1.8,
+    stroke      = 0.7
+  ) +
   scale_x_date(
     date_breaks  = "2 weeks",
     date_labels  = "%b %d",
@@ -1487,10 +1518,10 @@ plot_catch_boat_reg <- catch_daily |>
     labeller = as_labeller(section_labels)
   ) +
   labs(
-    x      = "Date",
-    y      = "Posterior mean catch (fish)",
-    colour = "Angler type",
-    caption = "Blue shading indicates days when boat fishing was permitted in each section.\nLine = posterior mean; ribbon = 95% credible interval."
+    x       = "Date",
+    y       = "Catch (fish)",
+    colour  = "Angler type",
+    caption = "Blue shading indicates days when boat fishing was permitted in each section.\nLine = BSS posterior mean; ribbon = 95% credible interval; points = raw observed interview catch (not expanded)."
   ) +
   theme_bw() +
   theme(
