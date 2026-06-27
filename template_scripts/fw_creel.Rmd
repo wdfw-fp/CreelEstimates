@@ -586,7 +586,7 @@ plot_inputs_pe_index_effort_counts(
 
 # Effort and catch estimation
 
-This section contains preliminary estimates of angler effort and catch during the `r paste(params$fishery_name)` fishery. Settings for the Bayesian state space creel model are contained in folded code, select "show" to view the settings used for this report, including priors used for model parameters and sampler settings. 
+This section contains preliminary estimates of angler effort and catch during the `r paste(params$fishery_name)` fishery. Settings for the Bayesian state space creel model are contained in folded code, select "show" to view the settings used for this report, including priors used for model parameters and sampler settings.
 
 ## PE estimation
 
@@ -849,7 +849,7 @@ saveRDS(inputs_bss, file.path(outputs_folders$inputs, "inputs_bss.rds"))
 
 # ---- CONFIGURATION ----
 # Set to TRUE to save draw objects (WARNING: large file sizes)
-save_draws <- TRUE  # Change to TRUE if you want to save draws
+save_draws <- FALSE  # Change to TRUE if you want to save draws
 # ----------------------
 
 # create empty lists for outputs

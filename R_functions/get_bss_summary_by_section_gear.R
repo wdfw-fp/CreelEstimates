@@ -1,4 +1,4 @@
-#' Summarize BSS model draws by section and gear type
+#' Summarize BSS model draws by section and gear type_
 #'
 #' Computes season-total effort (angler-hours) and catch (fish) from posterior
 #' draws of `lambda_E_S` and `lambda_C_S`, returning mean, median, and 95% CIs
