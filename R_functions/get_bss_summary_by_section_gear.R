@@ -90,6 +90,13 @@
 #' @param day_groups Optional data frame specifying day-level grouping. Two
 #'   formats accepted — see Details. Must contain exactly one grouping column
 #'   beyond any `section_num` or date columns. Default `NULL` (no grouping).
+#' @param return_draws Logical. If `TRUE`, return raw per-draw season totals in
+#'   long format instead of summarized moments. Output columns are `est_cg`,
+#'   `section_num`, `angler_final`, `quantity`, `draw` (integer), `value`
+#'   (numeric), plus the grouping column if `day_groups` is supplied. Useful
+#'   when you need to aggregate across strata with correct CIs — sum the `value`
+#'   column across strata within each `draw`, then take quantiles of that summed
+#'   vector. Default `FALSE`.
 #' @param collapse_within_groups Logical. When both `collapse = TRUE` and
 #'   `day_groups` is supplied, also compute collapsed totals within each group
 #'   level. Default `TRUE`.
@@ -202,7 +209,8 @@ get_bss_summary_by_section_gear <- function(
     probs                  = c(0.025, 0.975),
     collapse               = FALSE,
     day_groups             = NULL,
-    collapse_within_groups = TRUE
+    collapse_within_groups = TRUE,
+    return_draws           = FALSE
 ) {
 
   # ---- 0. Input validation ----
@@ -399,29 +407,6 @@ get_bss_summary_by_section_gear <- function(
     }
   }
 
-  # ---- 6. Helper: summarize a vector of per-draw totals into one output row ----
-  summarize_draws_vec <- function(vals, qty_label, sec_label, gear_label,
-                                  group_val = NA) {
-    row <- dplyr::tibble(
-      est_cg       = ecg,
-      section_num  = sec_label,
-      angler_final = gear_label,
-      quantity     = qty_label,
-      mean         = mean(vals),
-      median       = stats::median(vals),
-      lo95         = stats::quantile(vals, probs[1]),
-      hi95         = stats::quantile(vals, probs[2]),
-      sd           = stats::sd(vals),
-      n_draws      = n_draws
-    )
-    if (!is.null(day_groups)) {
-      row[[group_col]] <- group_val
-      row <- row[, c("est_cg", "section_num", "angler_final", group_col,
-                     "quantity", "mean", "median", "lo95", "hi95", "sd", "n_draws")]
-    }
-    row
-  }
-
   # ---- 7. Build per-(s,g) draw-level matrices ----
   # Cache [n_draws x D] effort-hour and catch matrices so the collapse step
   # can sum across (s,g) draw-by-draw without re-reading draws_df.
@@ -447,17 +432,79 @@ get_bss_summary_by_section_gear <- function(
     }
   }
 
-  # ---- 8. Helper: compute rows from a matrix slice ----
-  # day_mask_vec = NULL means use all days (season total)
+  # ---- 8. Helpers ----
+
+  # Summarize a per-draw vector into one summary row
+  summarize_draws_vec <- function(vals, qty_label, sec_label, gear_label,
+                                  group_val = NA) {
+    row <- dplyr::tibble(
+      est_cg       = ecg,
+      section_num  = sec_label,
+      angler_final = gear_label,
+      quantity     = qty_label,
+      mean         = mean(vals),
+      median       = stats::median(vals),
+      lo95         = stats::quantile(vals, probs[1]),
+      hi95         = stats::quantile(vals, probs[2]),
+      sd           = stats::sd(vals),
+      n_draws      = n_draws
+    )
+    if (!is.null(day_groups)) {
+      row[[group_col]] <- group_val
+      row <- row[, c("est_cg", "section_num", "angler_final", group_col,
+                     "quantity", "mean", "median", "lo95", "hi95", "sd", "n_draws")]
+    }
+    row
+  }
+
+  # Return a per-draw long-format tibble (used when return_draws = TRUE)
+  draws_vec_to_long <- function(vals, qty_label, sec_label, gear_label,
+                                group_val = NA) {
+    row <- dplyr::tibble(
+      est_cg       = ecg,
+      section_num  = sec_label,
+      angler_final = gear_label,
+      quantity     = qty_label,
+      draw         = seq_along(vals),
+      value        = vals
+    )
+    if (!is.null(day_groups)) {
+      row[[group_col]] <- group_val
+      row <- row[, c("est_cg", "section_num", "angler_final", group_col,
+                     "quantity", "draw", "value")]
+    }
+    row
+  }
+
+  # Dispatch to the right output format
+  emit_rows <- function(vals_effort, vals_catch, sec_label, gear_label,
+                        group_val = NA) {
+    if (return_draws) {
+      dplyr::bind_rows(
+        draws_vec_to_long(vals_effort, "effort", sec_label, gear_label, group_val),
+        draws_vec_to_long(vals_catch,  "catch",  sec_label, gear_label, group_val)
+      )
+    } else {
+      dplyr::bind_rows(
+        summarize_draws_vec(vals_effort, "effort", sec_label, gear_label, group_val),
+        summarize_draws_vec(vals_catch,  "catch",  sec_label, gear_label, group_val)
+      )
+    }
+  }
+
+  # Compute season totals from matrix slice and emit
   compute_rows <- function(e_hrs, c_rate, sec_label, gear_label,
                            day_mask_vec = NULL, group_val = NA) {
     if (!is.null(day_mask_vec)) {
       e_hrs  <- e_hrs[,  day_mask_vec, drop = FALSE]
       c_rate <- c_rate[, day_mask_vec, drop = FALSE]
     }
-    dplyr::bind_rows(
-      summarize_draws_vec(rowSums(e_hrs),           "effort", sec_label, gear_label, group_val),
-      summarize_draws_vec(rowSums(e_hrs * c_rate),  "catch",  sec_label, gear_label, group_val)
+    emit_rows(
+      vals_effort = rowSums(e_hrs),
+      vals_catch  = rowSums(e_hrs * c_rate),
+      sec_label   = sec_label,
+      gear_label  = gear_label,
+      group_val   = group_val
     )
   }
 
@@ -478,7 +525,6 @@ get_bss_summary_by_section_gear <- function(
       # Group-level totals
       if (!is.null(day_groups)) {
         for (lev in grp_levels) {
-          # Resolve mask: section-specific or uniform
           mask <- if (has_section_groups) {
             day_mask_s[[as.character(s)]][[as.character(lev)]]
           } else {
@@ -499,23 +545,17 @@ get_bss_summary_by_section_gear <- function(
     e_hrs_all <- Reduce(`+`, lapply(sg_matrices, `[[`, "e_hrs"))
     ec_all    <- Reduce(`+`, lapply(sg_matrices, function(m) m$e_hrs * m$c_rate))
 
-    # Season collapsed total
-    results[[length(results) + 1]] <- dplyr::bind_rows(
-      summarize_draws_vec(rowSums(e_hrs_all), "effort", "all", "all"),
-      summarize_draws_vec(rowSums(ec_all),    "catch",  "all", "all")
+    results[[length(results) + 1]] <- emit_rows(
+      rowSums(e_hrs_all), rowSums(ec_all), "all", "all"
     )
 
-    # Collapsed group-level totals
     if (!is.null(day_groups) && collapse_within_groups) {
       for (lev in grp_levels) {
-        # For section-specific format: union mask (any section open = day included)
-        # For uniform format: same mask as per-section rows
         mask <- day_mask_collapsed[[as.character(lev)]]
-        results[[length(results) + 1]] <- dplyr::bind_rows(
-          summarize_draws_vec(rowSums(e_hrs_all[, mask, drop = FALSE]),
-                              "effort", "all", "all", group_val = lev),
-          summarize_draws_vec(rowSums(ec_all[,    mask, drop = FALSE]),
-                              "catch",  "all", "all", group_val = lev)
+        results[[length(results) + 1]] <- emit_rows(
+          rowSums(e_hrs_all[, mask, drop = FALSE]),
+          rowSums(ec_all[,    mask, drop = FALSE]),
+          "all", "all", group_val = lev
         )
       }
     }
