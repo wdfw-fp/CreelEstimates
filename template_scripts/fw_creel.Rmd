@@ -4,7 +4,7 @@ date: "`r Sys.Date()`"
 params:
   project_name: "District 16"
   fishery_name: "Hoh winter steelhead 2023-24"
-  est_date_start: "2024-02-01"
+  est_date_start: "2023-12-01"
   est_date_end: "2024-03-31"
   est_catch_groups: !r data.frame(rbind(
     c(species = 'Steelhead', life_stage = 'Adult', fin_mark = 'UM', fate = 'Released')))
@@ -1059,96 +1059,22 @@ if (save_draws) {
 }
 ```
 
-```{r bss_summary_boat_reg, eval=TRUE, results='hide', cache=params$enable_cache, dependson="estimates_bss", cache.extra=param_hash}
-# ---- Hoh River boat regulation summary ----
-# Summarizes BSS effort and catch stratified by whether boat fishing was allowed,
-# per the section- and day-of-week-specific regulation structure (Table 1).
-#
-# DEPENDENCY: requires draws_bss to be in memory. This means either:
-#   (a) save_draws = TRUE in the estimates_bss chunk (recommended for caching), or
-#   (b) this chunk runs in the same session immediately after estimates_bss.
-# If draws_bss is not available, the chunk attempts to reload from disk.
+#### Hoh regulation comparison of bss results
 
-if (!exists("draws_bss") || length(draws_bss) == 0) {
-  draws_bss_path <- file.path(outputs_folders$outputs, "draws_bss.rds")
-  if (file.exists(draws_bss_path)) {
-    draws_bss <- readRDS(draws_bss_path)
-    cli::cli_alert_info("draws_bss reloaded from disk")
-  } else {
-    cli::cli_abort(
-      "draws_bss not found in memory or on disk. Re-run estimates_bss chunk with save_draws = TRUE."
-    )
-  }
-}
+##### Regime comparison (regulatory period effects)
 
-# Build section x day-of-week boat_allowed flag from dwg$days.
-# Uses dwg$days$day (day-of-week name) as the crossing variable.
-# NOTE: open_section_* columns in dwg$days indicate fishery open/close status
-# and are intentionally NOT used here — that is already captured in the Stan
-# model via O[d,s]. This flag captures only the boat-prohibition overlay.
-hoh_boat_reg <- dwg$days |>
-  filter(between(event_date, as.Date(params$est_date_start), as.Date(params$est_date_end))) |>
-  select(event_date, day) |>
-  tidyr::crossing(section_num = c(1L, 2L, 3L)) |>
-  dplyr::mutate(
-    # Table 1: regulation permitting boat-based fishing by section and day of week
-    # Section 1 (Lower Hoh, RM 0-14.4):    prohibited Sun-Tue, allowed Wed-Sat
-    # Section 2 (Middle Hoh, RM 14.4-23.0): allowed Sun-Tue, prohibited Wed-Sat
-    # Section 3 (Upper Hoh, RM 23.0-29.7):  prohibited all days
-    boat_allowed = dplyr::case_when(
-      section_num == 1L & day %in% c("Sunday", "Monday", "Tuesday")                 ~ FALSE,
-      section_num == 1L & day %in% c("Wednesday", "Thursday", "Friday", "Saturday") ~ TRUE,
-      section_num == 2L & day %in% c("Sunday", "Monday", "Tuesday")                 ~ TRUE,
-      section_num == 2L & day %in% c("Wednesday", "Thursday", "Friday", "Saturday") ~ FALSE,
-      section_num == 3L                                                              ~ FALSE
-    )
-  ) |>
-  dplyr::arrange(section_num, event_date) |>
-  dplyr::select(section_num, event_date, boat_allowed)
+Where a regulation (e.g. a boat-fishing restriction) applies unevenly across sections and days, comparing raw total catch between "open" and "closed" periods is confounded by unequal numbers of fishing days per stratum. `get_bss_regime_comparison()` normalizes to a per-day rate before comparing, and decomposes the per-day catch difference into effort/day and CPUE (catch rate) components, computed draw-by-draw to avoid transformation bias. See `R_functions/get_bss_regime_comparison.R` for full documentation.
 
-# Run summary for each catch group, storing alongside the generic section x gear summary.
-# Two calls per ecg:
-#   $summary_boat_reg  — summarized moments (mean, CI) for individual strata rows
-#   $draws_boat_reg    — raw per-draw totals for draw-by-draw aggregation in the table
-for (ecg in names(estimates_bss)) {
-  estimates_bss[[ecg]]$summary_boat_reg <- get_bss_summary_by_section_gear(
-    draws_bss    = draws_bss,
-    dwg          = dwg,
-    inputs_bss   = inputs_bss[[ecg]],
-    ecg          = ecg,
-    collapse     = TRUE,
-    day_groups   = hoh_boat_reg |> dplyr::select(-event_date),
-    return_draws = FALSE
-  )
-  estimates_bss[[ecg]]$draws_boat_reg <- get_bss_summary_by_section_gear(
-    draws_bss    = draws_bss,
-    dwg          = dwg,
-    inputs_bss   = inputs_bss[[ecg]],
-    ecg          = ecg,
-    collapse     = FALSE,
-    day_groups   = hoh_boat_reg |> dplyr::select(-event_date),
-    return_draws = TRUE
-  )
-  cli::cli_alert_success("Boat reg summary complete for catch group: {ecg}")
-}
+This section is fishery-specific (only meaningful where a within-season regulatory contrast exists) — adjust or remove the `day_groups` construction below for fisheries without such a contrast.
 
-# Re-save estimates_bss with boat reg summaries attached
-saveRDS(estimates_bss, file.path(outputs_folders$outputs, "estimates_bss.rds"))
-cli::cli_alert_success("estimates_bss updated with boat reg summaries")
-```
-
-### Boat regulation comparison table
-
-```{r table_boat_reg_comparison, eval=TRUE, dependson="bss_summary_boat_reg"}
-# Combine boat reg summaries across all catch groups.
-# Design:
-#   - Drop NA season-total rows and collapsed "all" rows from summary output
-#   - Drop section 3 — boat prohibited all days, no open/closed contrast
-#   - Display mean [lo95, hi95] for BSS posterior estimates
-#   - Total rows computed draw-by-draw from $draws_boat_reg
-#   - Raw observed catch counts joined alongside posterior estimates for comparison
-
-# ---- Rebuild hoh_boat_reg if not in environment ----
+```{r bss_regime_comparison, eval=TRUE, cache=params$enable_cache, dependson="estimates_bss", cache.extra=param_hash}
+# ---- Build the regime day_groups object ----
+# Example: Hoh River 2023-24 boat regulation (Table 1 of the study design),
+# where boat fishing allowance varies by section AND day of week. Replace
+# this case_when with the actual regulation structure for the fishery in
+# this report; the shape required is a data frame with one row per
+# event_date x section_num (or just event_date for a uniform regulation)
+# and a single grouping column (here, boat_allowed).
 if (!exists("hoh_boat_reg")) {
   hoh_boat_reg <- dwg$days |>
     filter(between(event_date, as.Date(params$est_date_start), as.Date(params$est_date_end))) |>
@@ -1164,219 +1090,75 @@ if (!exists("hoh_boat_reg")) {
       )
     ) |>
     dplyr::arrange(section_num, event_date) |>
-    dplyr::select(section_num, event_date, boat_allowed)
+    dplyr::select(section_num, boat_allowed)
 }
 
-# ---- Raw observed catch by section x gear x boat_allowed ----
-# Join boat_allowed onto dwg_summ$interview by section_num x event_date,
-# then sum fish_count within each est_cg x section x gear x boat_allowed stratum.
-# NOTE: fish_count here is raw reported catch from interviews — not expanded.
-# It serves as a field check alongside the posterior estimates.
-# Coerce both section_num columns to character at join to avoid double vs integer mismatch.
+# ---- Run the comparison per catch group ----
+regime_comparison <- list()
 
-# Helper: prep interview data with section_num as character and boat_allowed joined
-interview_with_reg <- dwg_summ$interview |>
-  filter(
-    between(event_date, as.Date(params$est_date_start), as.Date(params$est_date_end)),
-    !is.na(est_cg)
-  ) |>
-  mutate(section_num = as.character(section_num)) |>
-  left_join(
-    hoh_boat_reg |> mutate(section_num = as.character(section_num)),
-    by = c("section_num", "event_date")
-  ) |>
-  filter(!is.na(boat_allowed), section_num != "3") |>
-  mutate(
-    angler_final = dplyr::case_match(
-      angler_final,
-      "1"   ~ "bank",
-      "2"   ~ "boat",
-      .default = angler_final
-    )
+for (ecg in names(inputs_bss)) {
+  regime_comparison[[ecg]] <- get_bss_regime_comparison(
+    draws_bss     = draws_bss,
+    dwg           = dwg,
+    inputs_bss    = inputs_bss[[ecg]],
+    ecg           = ecg,
+    day_groups    = hoh_boat_reg,
+    regime_levels = c(TRUE, FALSE),  # TRUE (open) minus FALSE (closed)
+    return_draws  = FALSE
   )
+  estimates_bss[[ecg]]$regime_comparison <- regime_comparison[[ecg]]
+  cli::cli_alert_success("Regime comparison complete for catch group: {ecg}")
+}
 
-# Per-stratum raw catch
-raw_catch_strata <- interview_with_reg |>
-  group_by(est_cg, section_num, angler_final, boat_allowed) |>
-  summarise(raw_catch = sum(fish_count, na.rm = TRUE), .groups = "drop") |>
-  mutate(
-    strata             = paste0("Section ", section_num, " \u2014 ", angler_final),
-    boat_allowed_label = if_else(boat_allowed, "Boat allowed", "Boat prohibited"),
-    quantity_label     = "Catch (fish)",
-    raw_display        = format(round(raw_catch, 0), big.mark = ",")
-  ) |>
-  select(est_cg, strata, quantity_label, boat_allowed_label, raw_display)
-
-# Total raw catch across sections 1+2 x all gears
-raw_catch_totals <- interview_with_reg |>
-  group_by(est_cg, boat_allowed) |>
-  summarise(raw_catch = sum(fish_count, na.rm = TRUE), .groups = "drop") |>
-  mutate(
-    strata             = "Total (sections 1 & 2, all gears)",
-    boat_allowed_label = if_else(boat_allowed, "Boat allowed", "Boat prohibited"),
-    quantity_label     = "Catch (fish)",
-    raw_display        = format(round(raw_catch, 0), big.mark = ",")
-  ) |>
-  select(est_cg, strata, quantity_label, boat_allowed_label, raw_display)
-
-# Combine and pivot wide
-raw_catch_wide <- dplyr::bind_rows(raw_catch_strata, raw_catch_totals) |>
-  tidyr::pivot_wider(
-    names_from   = boat_allowed_label,
-    values_from  = raw_display,
-    names_prefix = "raw_"
-  )
-
-# ---- Per-stratum BSS summary rows (sections 1 and 2 only) ----
-boat_reg_combined <- purrr::map_dfr(estimates_bss, ~.x$summary_boat_reg) |>
-  filter(
-    !is.na(boat_allowed),
-    section_num != "all",
-    angler_final != "all",
-    section_num != "3"
-  ) |>
-  mutate(
-    angler_final = dplyr::case_match(
-      angler_final,
-      "1"   ~ "bank",
-      "2"   ~ "boat",
-      .default = angler_final
-    ),
-    section_label      = paste("Section", section_num),
-    boat_allowed_label = if_else(boat_allowed, "Boat allowed", "Boat prohibited"),
-    quantity_label     = if_else(quantity == "effort", "Effort (angler-hours)", "Catch (fish)"),
-    display = glue::glue(
-      "{format(round(mean, 1), big.mark = ',')} ",
-      "[{format(round(lo95, 1), big.mark = ',')}, ",
-      "{format(round(hi95, 1), big.mark = ',')}]"
-    )
-  )
-
-# ---- Total rows: draw-by-draw sum across sections 1+2 x all gears ----
-boat_reg_total_draws <- purrr::map_dfr(estimates_bss, ~.x$draws_boat_reg) |>
-  filter(
-    !is.na(boat_allowed),
-    section_num != "3"
-  ) |>
-  group_by(est_cg, quantity, boat_allowed, draw) |>
-  summarise(total_value = sum(value), .groups = "drop") |>
-  group_by(est_cg, quantity, boat_allowed) |>
-  summarise(
-    mean    = mean(total_value),
-    lo95    = quantile(total_value, 0.025),
-    hi95    = quantile(total_value, 0.975),
-    n_draws = n(),
-    .groups = "drop"
-  ) |>
-  mutate(
-    boat_allowed_label = if_else(boat_allowed, "Boat allowed", "Boat prohibited"),
-    quantity_label     = if_else(quantity == "effort", "Effort (angler-hours)", "Catch (fish)"),
-    strata  = "Total (sections 1 & 2, all gears)",
-    display = glue::glue(
-      "{format(round(mean, 1), big.mark = ',')} ",
-      "[{format(round(lo95, 1), big.mark = ',')}, ",
-      "{format(round(hi95, 1), big.mark = ',')}]"
-    )
-  ) |>
-  select(est_cg, strata, quantity_label, boat_allowed_label, display)
-
-# ---- Assemble BSS wide table ----
-boat_reg_strata <- boat_reg_combined |>
-  mutate(strata = paste0(section_label, " \u2014 ", angler_final)) |>
-  select(est_cg, strata, quantity_label, boat_allowed_label, display)
-
-boat_reg_wide <- dplyr::bind_rows(boat_reg_strata, boat_reg_total_draws) |>
-  tidyr::pivot_wider(
-    names_from  = boat_allowed_label,
-    values_from = display
-  ) |>
-  arrange(
-    est_cg,
-    strata == "Total (sections 1 & 2, all gears)",
-    strata,
-    quantity_label
-  )
-
-# ---- Join raw catch columns onto BSS wide table ----
-# Raw counts only apply to catch rows; effort rows get NA (no raw effort count)
-boat_reg_final <- boat_reg_wide |>
-  left_join(
-    raw_catch_wide |> select(est_cg, strata, quantity_label,
-                             `raw_Boat allowed`, `raw_Boat prohibited`),
-    by = c("est_cg", "strata", "quantity_label")
-  ) |>
-  mutate(
-    `raw_Boat allowed`    = if_else(quantity_label == "Catch (fish)", `raw_Boat allowed`,    NA_character_),
-    `raw_Boat prohibited` = if_else(quantity_label == "Catch (fish)", `raw_Boat prohibited`, NA_character_)
-  )
-
-# ---- Render gt table ----
-boat_reg_table <- boat_reg_final |>
-  gt(groupname_col = "est_cg", rowname_col = "strata") |>
-  cols_label(
-    quantity_label        = "Quantity",
-    `Boat allowed`        = "BSS estimate",
-    `Boat prohibited`     = "BSS estimate",
-    `raw_Boat allowed`    = "Observed catch",
-    `raw_Boat prohibited` = "Observed catch"
-  ) |>
-  tab_spanner(
-    id      = "spanner_allowed",
-    label   = "Boat allowed",
-    columns = c(`Boat allowed`, `raw_Boat allowed`)
-  ) |>
-  tab_spanner(
-    id      = "spanner_prohibited",
-    label   = "Boat prohibited",
-    columns = c(`Boat prohibited`, `raw_Boat prohibited`)
-  ) |>
-  tab_header(
-    title    = "BSS estimates and observed catch by boat regulation status",
-    subtitle = "BSS: mean [95% credible interval]. Observed: raw fish count from angler interviews (not expanded). Stratified by section and angler type; regulation structure per Hoh 2023-24 Table 1. Section 3 excluded — boat prohibited all days."
-  ) |>
-  tab_style(
-    style     = cell_fill(color = "grey95"),
-    locations = cells_body(rows = quantity_label == "Effort (angler-hours)")
-  ) |>
-  tab_style(
-    style     = list(cell_text(weight = "bold"), cell_borders(sides = "top", weight = px(2))),
-    locations = cells_body(rows = strata == "Total (sections 1 & 2, all gears)")
-  ) |>
-  tab_style(
-    style     = cell_text(weight = "bold"),
-    locations = cells_row_groups()
-  ) |>
-  # Visually distinguish raw from BSS columns
-  tab_style(
-    style     = cell_fill(color = "#f0f7ff"),
-    locations = cells_body(columns = c(`raw_Boat allowed`, `raw_Boat prohibited`))
-  ) |>
-  tab_style(
-    style     = cell_fill(color = "#f0f7ff"),
-    locations = cells_column_labels(columns = c(`raw_Boat allowed`, `raw_Boat prohibited`))
-  ) |>
-  sub_missing(missing_text = "\u2014") |>  # em dash for effort raw cells
-  tab_options(
-    heading.title.font.size    = px(14),
-    heading.subtitle.font.size = px(12),
-    table.font.color           = "black",
-    row_group.as_column        = FALSE
-  ) |>
-  tab_footnote(
-    footnote  = "BSS estimates: mean [lo95, hi95] from posterior draws aggregated draw-by-draw across days within each regulation period (Buehrens, pers. comm.). Total row CI computed by summing per-stratum draws before taking quantiles.",
-    locations = cells_column_labels(columns = c(`Boat allowed`, `Boat prohibited`))
-  ) |>
-  tab_footnote(
-    footnote  = "Observed catch: raw sum of fish_count from angler interviews within each regulation period. Not expanded to total catch — provided for model fit reference only.",
-    locations = cells_column_labels(columns = c(`raw_Boat allowed`, `raw_Boat prohibited`))
-  )
-
-boat_reg_table
-
-save_gt_table(boat_reg_table, "bss_boat_reg_comparison")
+# Save regime comparison results
+saveRDS(regime_comparison, file.path(outputs_folders$outputs, "regime_comparison.rds"))
 ```
 
-### Daily catch by boat regulation status
+##### Regime comparison summary table
+
+```{r table_regime_comparison, results='asis'}
+# Display the draw-wise regime difference for each catch group: effort/day,
+# catch/day, and CPUE, with sparse cells flagged.
+for (ecg in names(regime_comparison)) {
+  tbl <- regime_comparison[[ecg]]$comparison |>
+    dplyr::filter(metric %in% c("diff_effort_per_day", "diff_catch_per_day", "diff_cpue")) |>
+    dplyr::mutate(
+      metric = dplyr::case_match(
+        metric,
+        "diff_effort_per_day" ~ "Effort (angler-hrs/day)",
+        "diff_catch_per_day"  ~ "Catch (fish/day)",
+        "diff_cpue"           ~ "CPUE (fish/angler-hr)"
+      )
+    ) |>
+    dplyr::select(section_num, angler_final, metric, mean, lower, upper, n_days_a, n_days_b, sparse) |>
+    gt::gt(groupname_col = "section_num") |>
+    gt::fmt_number(columns = c(mean, lower, upper), decimals = 2) |>
+    gt::cols_label(
+      angler_final = "Gear",
+      metric = "Metric",
+      mean = "Mean diff (open - closed)",
+      lower = "2.5%",
+      upper = "97.5%",
+      n_days_a = "Days open",
+      n_days_b = "Days closed",
+      sparse = "Sparse"
+    ) |>
+    gt::tab_header(
+      title = glue::glue("Catch Group: {ecg}"),
+      subtitle = "Draw-wise difference in per-day rates, open minus closed regime"
+    ) |>
+    gt::tab_style(
+      style = gt::cell_fill(color = "lightyellow"),
+      locations = gt::cells_body(rows = sparse)
+    )
+  cat(gt::as_raw_html(tbl))
+
+  safe_name <- stringr::str_replace_all(ecg, "[^[:alnum:]]", "_")
+  save_gt_table(tbl, paste0("regime_comparison_", safe_name))
+}
+```
+
+##### Daily catch by boat regulation status
 
 ```{r plot_bss_catch_daily_boat_reg, eval=TRUE, fig.width=12, fig.height=10, fig.cap="Daily mean catch (fish) with 95% credible intervals by section and angler type. Shading on the x-axis indicates days when boat fishing was permitted in each section per the Hoh 2023-24 regulation structure (Table 1). Bank anglers are shown in one colour, boat anglers in another. Section 3 (Upper Hoh) is included for completeness — boat fishing was prohibited all days in that section.", dependson="bss_summary_boat_reg"}
 
@@ -1540,6 +1322,7 @@ save_plot(
   height = 10
 )
 ```
+
 
 ### BSS convergence diagnostics
 
