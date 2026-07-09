@@ -1008,32 +1008,70 @@ for(ecg in names(inputs_bss)) {
   cat(diagnostics_keep$bss_settings_cg, sep = "\n")
 
   # trace plots
-  invisible(diagnostics_keep$traceplots <- mcmc_trace(
-    ecg_fit, 
-    pars = c(
-      "C_sum", "E_sum", "phi_C_scaled", "phi_E_scaled", 
-      "sigma_r_C", "sigma_r_E", "sigma_eps_C", "sigma_eps_E",
-      "sigma_mu_C", "sigma_mu_E", "phi_C", "phi_E", 
-      "r_C", "r_E", "B1", "lp__"
-    ),
-    np = nuts_params(ecg_fit)
-  ) +
-    labs(
-      x = "Post-warmup iteration",
-      title = paste("Trace plots for catch group:", ecg)
-    ) +
-    theme(axis.text.x = element_text(angle = 45, hjust = 1)))
-  
-  safe_name <- stringr::str_replace_all(ecg, "[^[:alnum:]]", "_")
-    
-  # Save the traceplot
-  save_plot(
-    diagnostics_keep$traceplots, 
-    paste0("traceplot_", safe_name, ".png"),
-    width = 12,
-    height = 10
+  trace_pars <- c(
+    "C_sum", "E_sum", "phi_C_scaled", "phi_E_scaled",
+    "sigma_r_C", "sigma_r_E", "sigma_eps_C", "sigma_eps_E",
+    "sigma_mu_C", "sigma_mu_E", "phi_C", "phi_E",
+    "r_C", "r_E", "B1", "lp__"
   )
-      
+
+  build_trace_plot <- function(pars) {
+    mcmc_trace(
+      ecg_fit,
+      pars = pars,
+      np = nuts_params(ecg_fit)
+    ) +
+      labs(
+        x = "Post-warmup iteration",
+        title = paste("Trace plots for catch group:", ecg)
+      ) +
+      theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  }
+
+  # generated-quantities draws can be NaN when poisson_rng hits its rate
+  # ceiling (>= 2^30) on low-catch data; mcmc_trace() aborts on any NaN, so
+  # fall back to the subset of pars that are actually clean before giving up
+  invisible(diagnostics_keep$traceplots <- tryCatch({
+    build_trace_plot(trace_pars)
+  }, error = function(e) {
+    cli::cli_alert_warning(paste0(
+      "Trace plot failed for catch group {ecg}: {e$message} -- this is almost ",
+      "certainly NaN generated-quantities draws (C_sum/E_sum) from poisson_rng ",
+      "rate overflow on low-catch data. Retrying with only the NaN-free parameters."
+    ))
+
+    clean_pars <- purrr::keep(trace_pars, function(par) {
+      draws <- tryCatch(as.matrix(ecg_fit, pars = par), error = function(e2) NULL)
+      !is.null(draws) && !anyNA(draws)
+    })
+
+    if (length(clean_pars) == 0) {
+      cli::cli_alert_warning("No NaN-free parameters remain for catch group {ecg}; skipping trace plot entirely.")
+      return(NULL)
+    }
+
+    tryCatch({
+      build_trace_plot(clean_pars)
+    }, error = function(e3) {
+      cli::cli_alert_warning("Partial trace plot also failed for catch group {ecg}: {e3$message}. Skipping trace plot entirely.")
+      NULL
+    })
+  }))
+
+  safe_name <- stringr::str_replace_all(ecg, "[^[:alnum:]]", "_")
+
+  # Save the traceplot (skipped when NaN draws prevented any plot from being built)
+  if (!is.null(diagnostics_keep$traceplots)) {
+    save_plot(
+      diagnostics_keep$traceplots,
+      paste0("traceplot_", safe_name, ".png"),
+      width = 12,
+      height = 10
+    )
+  } else {
+    cli::cli_alert_info("Skipping traceplot save for catch group {ecg} (no plot available).")
+  }
+
   diagnostics_bss[[ecg]] <- diagnostics_keep
   
   # Additional memory cleanup - remove fit object after extracting what we need
@@ -1101,9 +1139,13 @@ for (ecg in names(convergence_tables)) {
 ```{r bss_trace_plots, eval=TRUE, fig.keep='all', dependson="estimates_bss"}
 # Plot and save traceplots
 purrr::iwalk(diagnostics_bss, function(diag, ecg) {
-  # Print to document
-  print(diag$traceplots)
-  
+  # Print to document (traceplots is NULL when NaN draws prevented plotting)
+  if (!is.null(diag$traceplots)) {
+    print(diag$traceplots)
+  } else {
+    cli::cli_alert_info("Trace plots skipped for catch group {ecg} (NaN draws).")
+  }
+
   # Save to figures folder
   # save_plot(
   #   diag$traceplots,
