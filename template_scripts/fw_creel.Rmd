@@ -46,6 +46,7 @@ params:
     value_normal_sigma_mu_E = 2,
     value_betashape_phi_E_scaled = 1,
     value_betashape_phi_C_scaled = 1)
+  bss_empirical_mu_mu_C: FALSE  # TRUE re-centers the mu_C hyperprior mean at log(observed CPUE), per catch group, overriding value_normal_mu_mu_C in bss_priors
   model_used: "Both models"
   data_grade: "provisional"
   export: "local"
@@ -849,21 +850,45 @@ map(
 ```{r prep_inputs_bss, eval=TRUE, cache=params$enable_cache, dependson="prep_dwg_summ_shared_summary_objects", cache.extra=param_hash}
 #either a single element list for a single catch_group
 #or a list of bss-input-lists, one for each catch_group
-inputs_bss <- 
-  unique(na.omit(dwg_summ$interview$est_cg)) |> 
-  set_names() |> 
+inputs_bss <-
+  unique(na.omit(dwg_summ$interview$est_cg)) |>
+  set_names() |>
   map(
-    ~prep_inputs_bss(
-      est_catch_group = .x,
-      period = params$period_bss,
-      days = dwg$days,
-      dwg_summarized = dwg_summ,
-      census_expan = dwg_summ$census_expan,
-      study_design = params$study_design,
+    ~ {
+      ecg <- .x
       # unlist() so both the header default (named numeric vector) and a
       # YAML-map override from an automation config (named list) work
-      priors = unlist(params$bss_priors)
-    )
+      priors_ecg <- unlist(params$bss_priors)
+
+      # Optional empirical Bayes seeding: center the mu_C hyperprior mean on
+      # the observed season CPUE for this catch group. Uses the same
+      # interview rows (zero-filled catch, group fishing hours) that become
+      # the Stan c/h vectors. Falls back to the bss_priors value when
+      # observed CPUE is zero/undefined (log(0) would be -Inf).
+      if (isTRUE(params$bss_empirical_mu_mu_C)) {
+        obs_cpue <- dwg_summ$interview |>
+          filter(est_cg == ecg) |>
+          summarise(cpue = sum(fish_count, na.rm = TRUE) / sum(fishing_time_total, na.rm = TRUE)) |>
+          pull(cpue)
+
+        if (is.finite(obs_cpue) && obs_cpue > 0) {
+          priors_ecg[["value_normal_mu_mu_C"]] <- log(obs_cpue)
+          cli_alert_info("{ecg}: value_normal_mu_mu_C set empirically to log({signif(obs_cpue, 4)}) = {signif(log(obs_cpue), 4)}")
+        } else {
+          cli_alert_warning("{ecg}: observed CPUE is zero or undefined; keeping value_normal_mu_mu_C = {priors_ecg[['value_normal_mu_mu_C']]} from bss_priors")
+        }
+      }
+
+      prep_inputs_bss(
+        est_catch_group = ecg,
+        period = params$period_bss,
+        days = dwg$days,
+        dwg_summarized = dwg_summ,
+        census_expan = dwg_summ$census_expan,
+        study_design = params$study_design,
+        priors = priors_ecg
+      )
+    }
   )
 
 # Save BSS inputs

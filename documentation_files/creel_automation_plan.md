@@ -498,7 +498,11 @@ places. Copy the full params block into the first config and prune deliberately.
   interactive knits behave exactly as before — every automation config must
   set real values, and a real production run must be timed before trusting
   the nightly timeout. Note: `bss_priors` overrides replace the whole vector —
-  a config supplying it must supply all 16 entries.
+  a config supplying it must supply all 16 entries. A related opt-in,
+  `bss_empirical_mu_mu_C: TRUE`, re-centers the `mu_C` hyperprior mean at
+  `log(observed CPUE)` per catch group (empirical Bayes), computed from the
+  same interview rows that feed the Stan `c`/`h` vectors, falling back to the
+  `bss_priors` value when observed CPUE is zero.
 - **Memory** — **[revised]** public-repo `ubuntu-latest` runners have 16 GB
   (4 vCPU) since early 2024; the 7 GB figure applies to private repos. Still
   watch it: the existing `gc()` calls around draws handling show this pipeline
