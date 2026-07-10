@@ -32,9 +32,13 @@ The repo root already contains a production(-ish) internal-path automation:
   Teams shared drive for next-day review.
 
 So "goal 2" (internal path) is not future work — it already runs, just on a
-different scheduler. The new driver should be designed to **replace** this script,
-not coexist with it, and it must preserve the two things the current script
-provides that the original plan under-specified:
+different scheduler. **[decision 2026-07]** The legacy `render.R` stays untouched
+until its owner is coordinated with — the Task Scheduler job calls it by path and
+renders local Rmd copies in the (gitignored) `fishery_analyses/` folder, so a new
+driver under a different name (`render_fisheries.R`) coexists with it with zero
+interaction. Eventual replacement is still the goal; until then the new driver
+must preserve the two things the current script provides that the original plan
+under-specified:
 
 - **Multi-fishery batch**: one scheduled invocation, N fisheries, failures in one
   don't stop the rest.
@@ -43,8 +47,8 @@ provides that the original plan under-specified:
   self-hosted-runner future can restore the Teams copy step. Plan for a
   per-target "delivery" step, not just "outputs land in `fishery_analyses/`".
 
-Known defects in the existing `render.R` worth fixing in the rewrite rather than
-inheriting:
+Known defects in the existing `render.R` worth fixing in the new driver rather
+than inheriting:
 
 - `tryCatch(..., warning = function(w) ...)` **aborts the render on the first
   warning** (tryCatch unwinds on a caught condition; this pipeline emits routine
@@ -192,7 +196,56 @@ issue, don't block on it.)
    `report_type` to a config gets an rmarkdown error (undeclared params are
    rejected by `rmarkdown::render()`).
 
-## `render.R` driver (rewrite of the existing script)
+## Where do analyst-owned, fishery-specific pieces live?
+
+The team's instinct (and current practice) is a stable of fishery-specific Rmds:
+copies of the template where the analyst sets catch groups and params in the
+header and inserts manual data edits inline, with the workflow iterating the
+stable. The underlying requirement is right — analysts need a per-fishery place
+they own — but full template forks are the expensive way to get it:
+
+- The estimation code (~1,500 lines) is duplicated per fishery per season. A
+  template fix mid-season doesn't propagate; two fisheries can silently run
+  different code and nothing surfaces it.
+- The forks would have to move out of gitignored `fishery_analyses/` into
+  tracked space for CI to see them.
+- The rolling in-season window gets awkward: a fork's header is supposed to be
+  the source of truth, but the driver still has to override `est_date_end` at
+  render time, giving two competing sources of params.
+
+**Recommended shape — same analyst ownership, ~95% less duplication.** Each
+fishery is defined by two small analyst-owned files, and the template stays the
+single source of code:
+
+1. `configs/<fishery>.yml` — all params, including `est_catch_groups`. Same YAML
+   the analyst would have written in an Rmd header, minus the `!r
+   data.frame(rbind(...))` awkwardness.
+2. `configs/edits/<fishery>.R` — **optional** manual data edits, applied by the
+   template's existing (currently empty) `manual_edits` chunk:
+
+   ```r
+   edits_file <- here("configs", "edits",
+                      paste0(gsub("[^A-Za-z0-9]", "_", params$fishery_name), ".R"))
+   if (file.exists(edits_file)) {
+     cli::cli_alert_info("Applying manual data edits from {.file {edits_file}}")
+     cat(readLines(edits_file), sep = "\n")   # echo edits into the report
+     source(edits_file, local = TRUE)          # runs in knit env; can modify dwg
+   } else {
+     cli::cli_alert_info("No manual edits file for this fishery.")
+   }
+   ```
+
+   Echoing the file into the rendered report preserves the best property of
+   inline edits — reviewers see exactly what was changed, with the analyst's
+   comments, in context. Record the edits file's hash in the run manifest for
+   provenance.
+
+The workflow loop is identical either way (iterate configs vs. iterate Rmds), so
+this choice doesn't block the CI work — and per-run Rmd snapshots via
+`save_analysis_metadata()` still land in each analysis folder, preserving the
+"what exactly ran" record the forks were providing.
+
+## `render_fisheries.R` driver (new file; legacy `render.R` untouched)
 
 Responsibilities:
 - Accept one or more config files (one YAML per fishery under `configs/`);
@@ -237,8 +290,9 @@ Skeleton:
 
 ```r
 #!/usr/bin/env Rscript
-# render.R — automation driver for fw_creel.Rmd
-# Usage: Rscript render.R --config configs/hoh_river_external.yml [more configs...]
+# render_fisheries.R — automation driver for fw_creel.Rmd
+# (distinct from legacy render.R, which the Task Scheduler job still owns)
+# Usage: Rscript render_fisheries.R --config configs/hoh_river_external.yml [more configs...]
 
 library(yaml)
 library(rmarkdown)
@@ -375,7 +429,7 @@ jobs:
       - name: Run creel model
         env:
           SOCRATA_APP_TOKEN: ${{ secrets.SOCRATA_APP_TOKEN }}
-        run: Rscript render.R --config configs/hoh_river_external.yml
+        run: Rscript render_fisheries.R --config configs/hoh_river_external.yml
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -463,9 +517,9 @@ places. Copy the full params block into the first config and prune deliberately.
    swap `dwg_fetch` to `fetch_data()` with the explicit six-table list and the
    zero-row guard; fix the undeclared `report_type` chunk option; promote BSS
    sampler settings to params.
-2. Rewrite `render.R` per the skeleton (replacing the Task Scheduler script —
-   coordinate with whoever owns the Snohomish nightly job before merging, since
-   it calls this file by path).
+2. Add `render_fisheries.R` per the skeleton. Legacy `render.R` stays untouched
+   until the Snohomish nightly job's owner is coordinated with; retiring it is a
+   later, separate step.
 3. Add `ci/install_packages.R` (tracked; replaces the gitignored
    `.devcontainer/install_packages.R` the old workflow depended on).
 4. Add `configs/` with one real fishery config including `est_catch_groups`.
