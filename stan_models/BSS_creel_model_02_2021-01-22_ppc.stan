@@ -77,7 +77,7 @@ transformed data{
 parameters{
 	//Effort
 	real B1; //fixed effect accounting for the effect of day type on effort 
-	matrix[G,S] B2; //mean effect of boat fishing open
+	matrix[G,S] B2; //effect of boat fishing open
 	real<lower=0> sigma_eps_E; //effort process error standard deviation 
 	cholesky_factor_corr[G*S] Lcorr_E; //effort process error correlations
 	real<lower=0> sigma_r_E; //prior on r_E
