@@ -1,5 +1,5 @@
 data{
-    //Day attributes
+  //Day attributes
 	int<lower=0> D; //number of fishing days (sampling frame)
 	int<lower=0> G; //number of unique gear/angler types 
 	int<lower=0> S; //number of river sections
@@ -9,6 +9,7 @@ data{
 	int<lower=0> period[D]; //index denoting period    
 	vector<lower=0>[D] L; // total amount of available fishing hours per day (e.g., day length - sunrise to sunset)
 	matrix<lower=0>[D,S] O; //index denoting fishery status, where 1=open, 0 = closed 
+	matrix<lower=0>[D,S] R; //index denoting regulation status, where 1=boat fishing open, 0 = boat fishing closed 
 	//Vehicle index effort counts
 	int<lower=0> V_n; //total number of individual vehicle index effort counts
 	int<lower=0> day_V[V_n]; //index denoting the "day" for an individual vehicle index effort count
@@ -75,7 +76,8 @@ transformed data{
 }
 parameters{
 	//Effort
-	real B1; //fixed effect accounting for the effect of day type on effort   
+	real B1; //fixed effect accounting for the effect of day type on effort 
+	matrix[G,S] B2; //mean effect of boat fishing open
 	real<lower=0> sigma_eps_E; //effort process error standard deviation 
 	cholesky_factor_corr[G*S] Lcorr_E; //effort process error correlations
 	real<lower=0> sigma_r_E; //prior on r_E
@@ -135,7 +137,7 @@ transformed parameters{
 		for(d in 1:D){       
 			for(s in 1:S){	
 				lambda_C_S[s][d,g] = exp(mu_C[g,s] + to_matrix(omega_C[period[d],],G,S)[g,s]) * O[d,s];
-				lambda_E_S[s][d,g] = exp(mu_E[g,s] + to_matrix(omega_E[period[d],],G,S)[g,s] + B1 * w[d])* O[d,s];
+				lambda_E_S[s][d,g] = exp(mu_E[g,s] + to_matrix(omega_E[period[d],],G,S)[g,s] + B1 * w[d]  + B2[g,s] * R[d,s])* O[d,s];
 				for(i in 1:H){
 					lambda_E_S_I[s,i][d,g] = lambda_E_S[s][d,g] * eps_E_H[s,i][d,g];									
 				}
@@ -176,6 +178,7 @@ model{
 	    eps_mu_C[g,s] ~ std_normal();
 			eps_mu_E[g,s] ~ std_normal();
       p_I[g,s] ~ beta(0.5,0.5); 
+      B2[g,s] ~ std_normal();
 		}
 		R_V[g] ~ beta(0.5,0.5); //Note: leaving constant among days AND sections...may need to tweak; can make beta because is "true" angler cars or angler trailers per angler!
 		R_T[g] ~ beta(0.5,0.5); //Note: leaving constant among days AND sections...may need to tweak; can make beta because is "true" angler cars or angler trailers per angler!
