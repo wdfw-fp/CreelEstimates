@@ -453,6 +453,10 @@ est_catch_groups:
   - {species: "Steelhead", life_stage: "Adult", fin_mark: "AD", fate: "Kept"}
 data_source: "external"
 run_mode: "automated"
+bss_n_chain: 4              # production sampler settings — header defaults are dev-scale
+bss_n_cores: 4
+bss_n_iter: 2000            # placeholder: confirm against a timed production run
+bss_n_warmup: 1000
 enable_cache: false         # knitr cache is useless on ephemeral runners and risks staleness
 export: "local"             # "database" requires connect_creel_db(); internal path only
 ```
@@ -485,19 +489,20 @@ places. Copy the full params block into the first config and prune deliberately.
 ## Pitfalls to test for before trusting the nightly schedule
 
 - **Stan compile + sampler time** — `fit_bss()` compiles via rstan on first run
-  per runner; cache `stan_models/*.rds` as above. Current dev settings
-  (`n_iter = 50, n_warmup = 25`, hardcoded in the `estimates_bss` chunk — note
-  these are **not params**, so production settings require an Rmd edit or new
-  params) are placeholders; time a real production run before trusting the
-  timeout. **[revised]** Sampler settings being non-parameterized is itself a
-  gap for automation — promote `n_iter`/`n_warmup`/`n_chain` to params while
-  editing the Rmd.
+  per runner; cache `stan_models/*.rds` as above. **[done 2026-07]** Sampler
+  settings, `save_draws`, and the prior vector are now params
+  (`bss_n_chain`, `bss_n_cores`, `bss_n_iter`, `bss_n_warmup`, `bss_n_thin`,
+  `bss_adapt_delta`, `bss_max_treedepth`, `bss_init`, `bss_save_draws`,
+  `bss_priors`), so production settings are a config concern. The header
+  defaults intentionally keep the dev-scale values (`n_iter = 50`) so
+  interactive knits behave exactly as before — every automation config must
+  set real values, and a real production run must be timed before trusting
+  the nightly timeout. Note: `bss_priors` overrides replace the whole vector —
+  a config supplying it must supply all 16 entries.
 - **Memory** — **[revised]** public-repo `ubuntu-latest` runners have 16 GB
   (4 vCPU) since early 2024; the 7 GB figure applies to private repos. Still
   watch it: the existing `gc()` calls around draws handling show this pipeline
   has hit memory pressure before.
-- **`save_draws <- FALSE`** is also hardcoded mid-chunk — fine default for
-  automation, but same parameterization argument applies.
 - **`data_source` footgun** — always pass it explicitly; `match.arg()` silently
   picks `"internal"` on `NULL`/missing.
 - **Empty-data behavior on external** — a wrong `fishery_name` returns empty
@@ -515,8 +520,9 @@ places. Copy the full params block into the first config and prune deliberately.
 
 1. Add `data_source` + `run_mode` params (with validation) to `fw_creel.Rmd`;
    swap `dwg_fetch` to `fetch_data()` with the explicit six-table list and the
-   zero-row guard; fix the undeclared `report_type` chunk option; promote BSS
-   sampler settings to params.
+   zero-row guard; fix the undeclared `report_type` chunk option.
+   ~~Promote BSS sampler settings to params~~ **[done 2026-07]** — see the
+   sampler-time pitfall entry for the new param names.
 2. Add `render_fisheries.R` per the skeleton. Legacy `render.R` stays untouched
    until the Snohomish nightly job's owner is coordinated with; retiring it is a
    later, separate step.

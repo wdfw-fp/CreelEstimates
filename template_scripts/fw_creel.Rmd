@@ -20,6 +20,32 @@ params:
   day_length_expansion: "night closure"
   min_fishing_time: 0.5
   bss_model_file_name: "BSS_creel_model_02_2021-01-22_ppc.stan"
+  bss_n_chain: 2
+  bss_n_cores: 2
+  bss_n_iter: 50      # NOTE: dev-scale default; production runs should set this much higher
+  bss_n_warmup: 25    # NOTE: dev-scale default; production runs should set this much higher
+  bss_n_thin: 1
+  bss_adapt_delta: 0.7
+  bss_max_treedepth: 12
+  bss_init: "0"
+  bss_save_draws: FALSE  # TRUE saves posterior draw objects (WARNING: large file sizes)
+  bss_priors: !r c(
+    value_cauchyDF_sigma_eps_C = 0.5,
+    value_cauchyDF_sigma_eps_E = 0.5,
+    value_cauchyDF_sigma_r_E = 0.5,
+    value_cauchyDF_sigma_r_C = 0.5,
+    value_cauchyDF_sigma_mu_C = 0.5,
+    value_cauchyDF_sigma_mu_E = 0.5,
+    value_normal_sigma_omega_C_0 = 1,
+    value_normal_sigma_omega_E_0 = 3,
+    value_lognormal_sigma_b = 1,
+    value_normal_sigma_B1 = 5,
+    value_normal_mu_mu_C = log(0.02),
+    value_normal_sigma_mu_C = 1.5,
+    value_normal_mu_mu_E = log(5),
+    value_normal_sigma_mu_E = 2,
+    value_betashape_phi_E_scaled = 1,
+    value_betashape_phi_C_scaled = 1)
   model_used: "Both models"
   data_grade: "provisional"
   export: "local"
@@ -832,26 +858,11 @@ inputs_bss <-
       period = params$period_bss,
       days = dwg$days,
       dwg_summarized = dwg_summ,
-      census_expan = dwg_summ$census_expan, 
-      study_design = params$study_design, 
-      priors = c(
-        value_cauchyDF_sigma_eps_C = 0.5,
-        value_cauchyDF_sigma_eps_E = 0.5,
-        value_cauchyDF_sigma_r_E = 0.5,  
-        value_cauchyDF_sigma_r_C = 0.5,  
-        value_cauchyDF_sigma_mu_C = 0.5, 
-        value_cauchyDF_sigma_mu_E = 0.5, 
-        value_normal_sigma_omega_C_0 = 1,
-        value_normal_sigma_omega_E_0 = 3,
-        value_lognormal_sigma_b = 1,
-        value_normal_sigma_B1 = 5,  
-        value_normal_mu_mu_C = log(0.02),
-        value_normal_sigma_mu_C = 1.5,  
-        value_normal_mu_mu_E = log(5),
-        value_normal_sigma_mu_E = 2,  
-        value_betashape_phi_E_scaled = 1, 
-        value_betashape_phi_C_scaled = 1 
-    )
+      census_expan = dwg_summ$census_expan,
+      study_design = params$study_design,
+      # unlist() so both the header default (named numeric vector) and a
+      # YAML-map override from an automation config (named list) work
+      priors = unlist(params$bss_priors)
     )
   )
 
@@ -865,8 +876,8 @@ saveRDS(inputs_bss, file.path(outputs_folders$inputs, "inputs_bss.rds"))
 #should work for either single or multiple catch_group 
 
 # ---- CONFIGURATION ----
-# Set to TRUE to save draw objects (WARNING: large file sizes)
-save_draws <- FALSE  # Change to TRUE if you want to save draws
+# Controlled by params$bss_save_draws (WARNING: TRUE means large file sizes)
+save_draws <- isTRUE(params$bss_save_draws)
 # ----------------------
 
 # create empty lists for outputs
@@ -884,14 +895,14 @@ for(ecg in names(inputs_bss)) {
     fit_bss(
       model_file_name = params$bss_model_file_name,
       bss_inputs_list = inputs_bss[[ecg]],
-      n_chain = 2,  
-      n_cores = 2,
-      n_iter = 50,
-      n_warmup = 25,
-      n_thin = 1,
-      adapt_delta = 0.7,
-      max_treedepth = 12,
-      init = "0"
+      n_chain = params$bss_n_chain,
+      n_cores = params$bss_n_cores,
+      n_iter = params$bss_n_iter,
+      n_warmup = params$bss_n_warmup,
+      n_thin = params$bss_n_thin,
+      adapt_delta = params$bss_adapt_delta,
+      max_treedepth = params$bss_max_treedepth,
+      init = params$bss_init
     )
     
   ## extract and summarize estimates and model fit statistics 
