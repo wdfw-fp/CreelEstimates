@@ -2,13 +2,12 @@
 title: "Freshwater Creel Report <br>`r params$fishery_name`"
 date: "`r Sys.Date()`"
 params:
-  project_name: "District 14"
-  fishery_name: "Skagit spring Chinook 2026 upper"
-  est_date_start: ""
-  est_date_end: ""
+  project_name: "District 16"
+  fishery_name: "Hoh winter steelhead 2023-24"
+  est_date_start: "2023-12-01"
+  est_date_end: "2024-03-31"
   est_catch_groups: !r data.frame(rbind(
-    c(species = 'Chinook', life_stage = 'Adult', fin_mark = 'UM', fate = 'Released'),
-    c(species = 'Chinook', life_stage = 'Adult', fin_mark = 'AD', fate = 'Kept')))
+    c(species = 'Steelhead', life_stage = 'Adult', fin_mark = 'UM', fate = 'Released')))
   study_design: "Standard"   
   boat_type_collapse: "Yes"
   fish_location_determines_type: "No"
@@ -19,7 +18,7 @@ params:
   days_wkend: !r c('Saturday', 'Sunday')
   day_length_expansion: "night closure"
   min_fishing_time: 0.5
-  bss_model_file_name: "BSS_creel_model_02_2021-01-22_ppc.stan"
+  bss_model_file_name: "BSS_creel_model_02_2021-01-22_ppc_withboateffect.stan"
   model_used: "Both models"
   data_grade: "provisional"
   export: "local"
@@ -311,6 +310,61 @@ dwg$days <- prep_days(
 # Save processed days
 saveRDS(dwg$days, file.path(outputs_folders$inputs, "dwg_days.rds"))
 ```
+
+```{r hoh boat reg}
+
+# ---- Build the regime day_groups object ----
+# Example: Hoh River 2023-24 boat regulation (Table 1 of the study design),
+# where boat fishing allowance varies by section AND day of week. Replace
+# this case_when with the actual regulation structure for the fishery in
+# this report; the shape required is a data frame with one row per
+# event_date x section_num (or just event_date for a uniform regulation)
+# and a single grouping column (here, boat_allowed).
+
+# if (!exists("hoh_boat_reg")) {
+hoh_boat_reg <- dwg$days |>
+  filter(between(event_date, as.Date(params$est_date_start), as.Date(params$est_date_end))) |>
+  select(event_date, day) |>
+  tidyr::crossing(section_num = c(1L, 2L, 3L)) |>
+  dplyr::mutate(
+    boat_allowed = dplyr::case_when(
+      section_num == 1L & day %in% c("Sunday", "Monday", "Tuesday")                 ~ FALSE,
+      section_num == 1L & day %in% c("Wednesday", "Thursday", "Friday", "Saturday") ~ TRUE,
+      section_num == 2L & day %in% c("Sunday", "Monday", "Tuesday")                 ~ TRUE,
+      section_num == 2L & day %in% c("Wednesday", "Thursday", "Friday", "Saturday") ~ FALSE,
+      section_num == 3L                                                            ~ FALSE
+    )
+  ) |>
+  dplyr::select(-day) |>
+  dplyr::arrange(event_date, section_num) |>
+  tidyr::pivot_wider(
+    id_cols = event_date,
+    names_from = section_num,
+    names_prefix = "open_section_",
+    values_from = boat_allowed
+  ) |>
+  dplyr::arrange(event_date) |>
+  dplyr::select(-event_date)
+# }
+
+# Create a long-format regulation lookup for joining to daily results
+# Maps day_index × section_num → boat_reg (open/closed)
+regulation_lookup <- hoh_boat_reg |>
+  mutate(day_index = row_number()) |>
+  pivot_longer(
+    cols = starts_with("open_section_"),
+    names_to = "section_num",
+    names_prefix = "open_section_",
+    values_to = "boat_reg"
+  ) |>
+  mutate(
+    section_num = as.integer(section_num),
+    boat_reg_label = if_else(boat_reg, "Boat fishing open", "Boat fishing closed")
+  ) |>
+  select(day_index, section_num, boat_reg, boat_reg_label)
+
+```
+
 
 ## River sections
 Description of the spatial units of the creel survey. Each is listed by section number with a description of their downstream and upstream extent within the river system.
@@ -831,6 +885,7 @@ inputs_bss <-
       est_catch_group = .x,
       period = params$period_bss,
       days = dwg$days,
+      regulation = hoh_boat_reg,
       dwg_summarized = dwg_summ,
       census_expan = dwg_summ$census_expan, 
       study_design = params$study_design, 
@@ -897,9 +952,28 @@ for(ecg in names(inputs_bss)) {
   ## extract and summarize estimates and model fit statistics 
   ecg_keep <- list()
   ecg_keep$overview <- get_bss_overview(bss_fit = ecg_fit, ecg = ecg)
-  ecg_keep$cpue_daily <- get_bss_cpue_daily(bss_fit = ecg_fit, ecg = ecg, dwg = dwg)
-  ecg_keep$catch_daily <- get_bss_catch_daily(bss_fit = ecg_fit, ecg = ecg, dwg = dwg)
-  ecg_keep$effort_daily <- get_bss_effort_daily(bss_fit = ecg_fit, ecg = ecg, dwg = dwg)
+  ecg_keep$cpue_daily <- get_bss_cpue_daily(bss_fit = ecg_fit, ecg = ecg, dwg = dwg) |>
+    left_join(regulation_lookup, by = c("day_index", "section_num"))
+  ecg_keep$catch_daily <- get_bss_catch_daily(bss_fit = ecg_fit, ecg = ecg, dwg = dwg) |>
+    left_join(regulation_lookup, by = c("day_index", "section_num"))
+  ecg_keep$effort_daily <- get_bss_effort_daily(bss_fit = ecg_fit, ecg = ecg, dwg = dwg) |>
+    left_join(regulation_lookup, by = c("day_index", "section_num"))
+  
+  # Extract B2 (boat regulation effect on effort, log-scale)
+  ecg_keep$B2 <- ecg_fit |>
+    summary(pars = "B2") |>
+    pluck("summary") |>
+    as.data.frame() |>
+    rownames_to_column("parameter") |>
+    as_tibble() |>
+    mutate(
+      indices = str_extract(parameter, "\\d+,\\d+"),
+      gear = as.integer(str_extract(indices, "^\\d+")),
+      section_num = as.integer(str_extract(indices, "\\d+$")),
+      angler_final = if_else(gear == 1, "bank", "boat"),
+      est_cg = ecg
+    ) |>
+    select(est_cg, angler_final, section_num, mean, sd, `2.5%`, `50%`, `97.5%`, n_eff, Rhat)
   
   # Always extract draws for use in diagnostics and plots
   ecg_keep$draws <- extract(ecg_fit)
@@ -941,7 +1015,8 @@ for(ecg in names(inputs_bss)) {
     "sigma_r_E", "sigma_r_C",
     "p_I",
     "mu_mu_E", "sigma_mu_E", "eps_mu_E",
-    "mu_mu_C", "sigma_mu_C", "eps_mu_C"
+    "mu_mu_C", "sigma_mu_C", "eps_mu_C",
+    "B1", "B2"
   )
   
   ## subset and format
@@ -1016,6 +1091,7 @@ for(ecg in names(inputs_bss)) {
       "sigma_mu_C", "sigma_mu_E", "phi_C", "phi_E", 
       "r_C", "r_E", "B1", "lp__"
     ),
+    regex_pars = "B2",
     np = nuts_params(ecg_fit)
   ) +
     labs(
@@ -1174,14 +1250,32 @@ save_plot(
 
 ```{r plot_bss_catch_daily, eval=TRUE, fig.keep='all', dependson=c("establish_file_structure", "estimates_bss"), fig.cap= "Weekly estimates of catch for catch groups included in the report, with separate plots for each river section. Lines are posterior medians and shading shows 95% credible intervals and are colored by angler type."}
 
+catch_daily_df <- map_df(estimates_bss, ~.x$catch_daily)
+
+# Build regulation shading rectangles for background
+reg_shading_catch <- catch_daily_df |>
+  distinct(section_num, event_date, boat_reg_label) |>
+  arrange(section_num, event_date) |>
+  group_by(section_num) |>
+  mutate(reg_change = boat_reg_label != lag(boat_reg_label, default = first(boat_reg_label))) |>
+  mutate(reg_group = cumsum(reg_change)) |>
+  group_by(section_num, reg_group, boat_reg_label) |>
+  summarise(xmin = min(event_date), xmax = max(event_date), .groups = "drop")
+
 plot_bss_catch_daily <-
-  map_df(estimates_bss, ~.x$catch_daily) |> 
-    ggplot(aes(x = event_date, y = `50%`, fill = angler_final, color = angler_final)) +
-    geom_ribbon(aes(ymin = `2.5%`, ymax = `97.5%`), alpha = 0.2, color = "transparent") +
-    geom_line(lwd = 1) +
+  catch_daily_df |> 
+    ggplot(aes(x = event_date, y = `50%`)) +
+    geom_rect(
+      data = reg_shading_catch |> filter(boat_reg_label == "Boat fishing open"),
+      aes(xmin = xmin, xmax = xmax, ymin = -Inf, ymax = Inf),
+      fill = "lightblue", alpha = 0.15, inherit.aes = FALSE
+    ) +
+    geom_ribbon(aes(ymin = `2.5%`, ymax = `97.5%`, fill = angler_final), alpha = 0.2, color = "transparent") +
+    geom_line(aes(color = angler_final), lwd = 1) +
     ylab("Median (50%) catch") +
     xlab("Date") +
-    labs(color = "Angler type", fill = "Angler type") +
+    labs(color = "Angler type", fill = "Angler type",
+         caption = "Light blue shading = boat fishing open") +
     scale_x_date(date_breaks = "1 week", date_labels = "%m-%d") +
     theme_bw() +
     theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 8)) +
@@ -1195,7 +1289,7 @@ save_plot(
   plot_bss_catch_daily,
   "bss_catch_daily.png",
   width = 12,
-  height = 4 + (2 * n_distinct(map_df(estimates_bss, ~.x$catch_daily)$est_cg))
+  height = 4 + (2 * n_distinct(catch_daily_df$est_cg))
 )
 ```
 
@@ -1203,17 +1297,35 @@ save_plot(
 
 ```{r plot_bss_effort_daily, eval=TRUE, fig.keep='all', dependson=c("establish_file_structure", "estimates_bss"), fig.cap= "Weekly estimates of angler effort (angler hours) during the fishery, with separate plots for each river section. Lines are posterior medians and shading shows 95% credible intervals and are colored by angler type."}
 
+effort_daily_df <- map_df(estimates_bss, ~.x$effort_daily)
+
+reg_shading_effort <- effort_daily_df |>
+  distinct(section_num, event_date, boat_reg_label) |>
+  arrange(section_num, event_date) |>
+  group_by(section_num) |>
+  mutate(reg_change = boat_reg_label != lag(boat_reg_label, default = first(boat_reg_label))) |>
+  mutate(reg_group = cumsum(reg_change)) |>
+  group_by(section_num, reg_group, boat_reg_label) |>
+  summarise(xmin = min(event_date), xmax = max(event_date), .groups = "drop")
+
 plot_bss_effort_daily <-
-  estimates_bss[[1]]$effort_daily |> 
-    ggplot(aes(x = event_date, y = `50%`, fill = angler_final, color = angler_final)) +
-    geom_ribbon(aes(ymin = `2.5%`, ymax = `97.5%`), alpha = 0.2, color = "transparent") +
-    geom_line(lwd = 1) +
+  effort_daily_df |> 
+    ggplot(aes(x = event_date, y = `50%`)) +
+    geom_rect(
+      data = reg_shading_effort |> filter(boat_reg_label == "Boat fishing open"),
+      aes(xmin = xmin, xmax = xmax, ymin = -Inf, ymax = Inf),
+      fill = "lightblue", alpha = 0.15, inherit.aes = FALSE
+    ) +
+    geom_ribbon(aes(ymin = `2.5%`, ymax = `97.5%`, fill = angler_final), alpha = 0.2, color = "transparent") +
+    geom_line(aes(color = angler_final), lwd = 1) +
     ylab("Median (50%) effort (angler hours)") +
     xlab("Date") +
-    labs(color = "Angler type", fill = "Angler type") +
-    scale_x_date() +
+    labs(color = "Angler type", fill = "Angler type",
+         caption = "Light blue shading = boat fishing open") +
+    scale_x_date(date_breaks = "1 week", date_labels = "%m-%d") +
     theme_bw() +
-    facet_wrap(~section_num, nrow = estimates_bss[[1]]$effort_daily$section_num |> n_distinct())
+    theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 8)) +
+    facet_wrap(~section_num, nrow = n_distinct(effort_daily_df$section_num))
 
 # Print to document
 print(plot_bss_effort_daily)
@@ -1231,14 +1343,31 @@ save_plot(
 
 ```{r plot_bss_cpue_daily, eval=TRUE, fig.keep='all', dependson=c("establish_file_structure","estimates_bss"), fig.cap= "Weekly estimates of catch rate (fish/hour) for catch groups included in the report, with separate plots for each river section. Lines are posterior medians and shading shows 95% credible intervals and are colored by angler type."}
 
+cpue_daily_df <- map_df(estimates_bss, ~.x$cpue_daily)
+
+reg_shading_cpue <- cpue_daily_df |>
+  distinct(section_num, event_date, boat_reg_label) |>
+  arrange(section_num, event_date) |>
+  group_by(section_num) |>
+  mutate(reg_change = boat_reg_label != lag(boat_reg_label, default = first(boat_reg_label))) |>
+  mutate(reg_group = cumsum(reg_change)) |>
+  group_by(section_num, reg_group, boat_reg_label) |>
+  summarise(xmin = min(event_date), xmax = max(event_date), .groups = "drop")
+
 plot_bss_cpue_daily <-
-  map_df(estimates_bss, ~.x$cpue_daily) |> 
-    ggplot(aes(x = event_date, y = `50%`, fill = angler_final, color = angler_final)) +
-    geom_ribbon(aes(ymin = `2.5%`, ymax = `97.5%`), alpha = 0.2, color = "transparent") +
-    geom_line(lwd = 1) +
+  cpue_daily_df |> 
+    ggplot(aes(x = event_date, y = `50%`)) +
+    geom_rect(
+      data = reg_shading_cpue |> filter(boat_reg_label == "Boat fishing open"),
+      aes(xmin = xmin, xmax = xmax, ymin = -Inf, ymax = Inf),
+      fill = "lightblue", alpha = 0.15, inherit.aes = FALSE
+    ) +
+    geom_ribbon(aes(ymin = `2.5%`, ymax = `97.5%`, fill = angler_final), alpha = 0.2, color = "transparent") +
+    geom_line(aes(color = angler_final), lwd = 1) +
     ylab("Median (50%) catch per unit effort (fish/hour)") +
     xlab("Date") +
-    labs(color = "Angler type", fill = "Angler type") +
+    labs(color = "Angler type", fill = "Angler type",
+         caption = "Light blue shading = boat fishing open") +
     scale_x_date(date_breaks = "1 week", date_labels = "%m-%d") +
     theme_bw() +
     theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 8)) +
@@ -1254,6 +1383,107 @@ save_plot(
   width = 12,
   height = 4 + (2 * n_distinct(map_df(estimates_bss, ~.x$cpue_daily)$est_cg))
 )
+```
+
+### BSS estimates by boat regulation status
+
+#### B2 parameter: estimated boat regulation effect on effort
+
+The `B2` parameter represents the effect of boat fishing regulations on angler effort (on the log scale). Values > 0 indicate higher effort when boat fishing is open; values < 0 indicate lower effort. The multiplicative effect on effort is `exp(B2)`.
+
+```{r B2_regulation_effect, eval=TRUE, dependson="estimates_bss"}
+# Extract and display B2 parameter estimates
+B2_combined <- purrr::map_df(estimates_bss, ~.x$B2)
+
+B2_combined |>
+  mutate(
+    mult_effect = round(exp(`50%`), 2),
+    mult_lower = round(exp(`2.5%`), 2),
+    mult_upper = round(exp(`97.5%`), 2)
+  ) |>
+  select(est_cg, angler_final, section_num, 
+         `B2 median (log)` = `50%`, 
+         `Effort multiplier` = mult_effect,
+         `2.5%` = mult_lower, `97.5%` = mult_upper,
+         Rhat) |>
+  gt(groupname_col = "est_cg") |>
+  fmt_number(columns = c(`B2 median (log)`), decimals = 3) |>
+  fmt_number(columns = c(`Effort multiplier`, `2.5%`, `97.5%`), decimals = 2) |>
+  fmt_number(columns = Rhat, decimals = 3) |>
+  tab_header(
+    title = "Boat regulation effect (B2) on angler effort",
+    subtitle = "Effort multiplier = exp(B2): values > 1 indicate increased effort when boat fishing is open"
+  ) |>
+  tab_options(
+    heading.title.font.size = px(14),
+    table.font.color = "black"
+  )
+```
+
+#### Summary of effort and catch grouped by regulation status
+
+```{r regulation_grouped_summary, eval=TRUE, dependson="estimates_bss"}
+
+# Effort grouped by regulation status
+effort_by_reg <- map_df(estimates_bss, ~.x$effort_daily) |>
+  group_by(est_cg, section_num, angler_final, boat_reg_label) |>
+  summarise(
+    n_days = n(),
+    total_effort_median = sum(`50%`),
+    mean_daily_effort_median = mean(`50%`),
+    .groups = "drop"
+  )
+
+# Catch grouped by regulation status
+catch_by_reg <- map_df(estimates_bss, ~.x$catch_daily) |>
+  group_by(est_cg, section_num, angler_final, boat_reg_label) |>
+  summarise(
+    n_days = n(),
+    total_catch_median = sum(`50%`),
+    mean_daily_catch_median = mean(`50%`),
+    .groups = "drop"
+  )
+
+# Combined regulation summary table
+reg_summary <- effort_by_reg |>
+  left_join(
+    catch_by_reg |> select(est_cg, section_num, angler_final, boat_reg_label, 
+                           total_catch_median, mean_daily_catch_median),
+    by = c("est_cg", "section_num", "angler_final", "boat_reg_label")
+  ) |>
+  mutate(
+    mean_daily_cpue = mean_daily_catch_median / mean_daily_effort_median
+  )
+
+reg_summary_table <- reg_summary |>
+  gt(groupname_col = "est_cg") |>
+  fmt_number(columns = c(total_effort_median, mean_daily_effort_median, 
+                         total_catch_median, mean_daily_catch_median, mean_daily_cpue), 
+             decimals = 1) |>
+  cols_label(
+    section_num = "Section",
+    angler_final = "Angler type",
+    boat_reg_label = "Regulation",
+    n_days = "Days",
+    total_effort_median = "Total effort (hrs)",
+    mean_daily_effort_median = "Mean daily effort (hrs)",
+    total_catch_median = "Total catch",
+    mean_daily_catch_median = "Mean daily catch",
+    mean_daily_cpue = "Mean CPUE (fish/hr)"
+  ) |>
+  tab_header(
+    title = "Effort and catch estimates grouped by boat regulation status",
+    subtitle = "Summaries of posterior medians by section, angler type, and regulation period"
+  ) |>
+  tab_options(
+    heading.title.font.size = px(14),
+    table.font.color = "black"
+  )
+
+reg_summary_table
+
+# Save to figures folder
+save_gt_table(reg_summary_table, "regulation_grouped_summary")
 ```
 
 ### BSS model fit: posterior predictive checks (PPC)
@@ -1460,10 +1690,21 @@ save_gt_table(interview_coverage_table, paste0("interview_coverage_table"))
 
 # Save results
 
-```{r transform_estimates, eval = TRUE, results='hide', cache=params$enable_cache, dependson="estimates_bss", cache.extra=param_hash}
+```{r transform_estimates, eval = FALSE, results='hide', cache=params$enable_cache, dependson="estimates_bss", cache.extra=param_hash}
 #Extract and transform model estimates into a common format
 transformed_pe_data <- list()
 transformed_bss_data <- list()
+
+# Create a clean copy of estimates_bss without regulation columns for creelutils export
+# (creelutils expects the standard column layout for rbind with PE estimates)
+estimates_bss_clean <- map(estimates_bss, function(ecg_list) {
+  reg_cols <- c("boat_reg", "boat_reg_label")
+  ecg_list$effort_daily <- ecg_list$effort_daily |> select(-any_of(reg_cols))
+  ecg_list$catch_daily  <- ecg_list$catch_daily  |> select(-any_of(reg_cols))
+  ecg_list$cpue_daily   <- ecg_list$cpue_daily   |> select(-any_of(reg_cols))
+  ecg_list
+})
+
 #Export data from one or both models
 if (params$export %in% c("database", "local") && !params$model_used %in% c("PE only", "BSS only", "Both models" )) {
   stop("\nInvalid value for export or model_used parameter.")
@@ -1486,17 +1727,17 @@ if (params$export %in% c("database", "local") && !params$model_used %in% c("PE o
   # Process BSS estimates to common format
   if (exists("estimates_bss") && params$model_used == "BSS only") {
     cat("Performing 'BSS only' transformation.")
-    transformed_bss_data <- creelutils::process_estimates_bss(params, analysis_lut, estimates_bss)
+    transformed_bss_data <- creelutils::process_estimates_bss(params, analysis_lut, estimates_bss_clean)
     
     #add parameter data_grade as a field on all tables
     creelutils::map_data_grade(params, transformed_bss_data, transformed_pe_data=NULL)
   }
   
   # Process PE and BSS model estimates to common format
-  if (exists("estimates_pe") && exists("estimates_bss") && params$model_used == "Both models") {
+  if (exists("estimates_bss") && exists("estimates_pe") && params$model_used == "Both models") {
     cat("Performing 'Both models' transformation.")
     transformed_pe_data <- creelutils::process_estimates_pe(analysis_lut, estimates_pe, params)
-    transformed_bss_data <- creelutils::process_estimates_bss(params, analysis_lut, estimates_bss)
+    transformed_bss_data <- creelutils::process_estimates_bss(params, analysis_lut, estimates_bss_clean)
     
     #add parameter data_grade as a field on all tables
     creelutils::map_data_grade(params, transformed_bss_data, transformed_pe_data)
@@ -1512,7 +1753,7 @@ if (params$export %in% c("database", "local") && !params$model_used %in% c("PE o
 # cli_alert_success("Transformed estimates saved to {.path {file.path(outputs_folders$outputs, 'creel_estimates_transformed.rds')}}")
 ```
 
-```{r export_estimates, results='hide', eval= TRUE}
+```{r export_estimates, results='hide', eval= FALSE}
 
 if (params$export == "database") {
   #Converts metadata to JSON and adds to analysis_lut

@@ -3,6 +3,7 @@
 prep_inputs_bss <- function(
     period,
     days,            # tibble with time strata and closure fields
+    regulation,
     dwg_summarized,  # list with shared interview, index and census tibbles
     est_catch_group, # data.frame passed from params of aggregated catch groups of interest to estimate
     census_expan,    # tibble summarizing p_census by angler_final and section_num where p_census is a hard coded value in the database specifying the proportion of a a section that is covered during a census count; values less than 1 with result in census counts being expanded (e.g., census count divided by p_census)
@@ -10,6 +11,8 @@ prep_inputs_bss <- function(
     study_design,    # string passed from params denoting which study design was followed during data collection
     ...){
 
+
+  
 if(str_detect(study_design, "tandard" )){ 
   #in-function-scope intermediates
   effort_index_vehicle <- dwg_summarized$effort_index |> filter(str_detect(angler_final, "total"))   #angler_final = "total" is the same data as count_type = "vehicle" (see prep_dwg_effort_index function)
@@ -99,7 +102,12 @@ stan_list <- list(
     select(any_of(paste0("open_section_", unique(dwg_summarized$effort_census$section_num)))) |>
     mutate(across(everything(), ~if_else(., 1, 0.000001))) |> 
     as.matrix(),
-    
+  
+  R = regulation |> 
+    select(any_of(paste0("open_section_", unique(dwg_summarized$effort_census$section_num)))) |>
+    dplyr::mutate(across(everything(), ~if_else(., 1, 0.000001))) |>
+    as.matrix(),
+
   # Vehicle index effort counts 
   V_n = nrow(effort_index_vehicle), # int; total number of individual vehicle index effort counts 
   day_V = left_join(effort_index_vehicle, days, by = "event_date") |> pull(day_index),   # int; index for day/period 
