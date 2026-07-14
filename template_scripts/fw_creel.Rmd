@@ -23,7 +23,7 @@ params:
   data_grade: "provisional"
   export: "local"
   export_tables: "both"
-  enable_cache: FALSE  # Set to FALSE to disable all caching (useful when cached files become too large)
+  enable_cache: TRUE  # Set to FALSE to disable all caching (useful when cached files become too large)
 output:
   html_document:
     toc: true
@@ -921,7 +921,7 @@ saveRDS(inputs_bss, file.path(outputs_folders$inputs, "inputs_bss.rds"))
 
 # ---- CONFIGURATION ----
 # Set to TRUE to save draw objects (WARNING: large file sizes)
-save_draws <- FALSE  # Change to TRUE if you want to save draws
+save_draws <- TRUE  # Change to TRUE if you want to save draws
 # ----------------------
 
 # create empty lists for outputs
@@ -939,10 +939,10 @@ for(ecg in names(inputs_bss)) {
     fit_bss(
       model_file_name = params$bss_model_file_name,
       bss_inputs_list = inputs_bss[[ecg]],
-      n_chain = 2,  
-      n_cores = 2,
-      n_iter = 50,
-      n_warmup = 25,
+      n_chain = 4,  
+      n_cores = 4,
+      n_iter = 2000,
+      n_warmup = 1000,
       n_thin = 1,
       adapt_delta = 0.7,
       max_treedepth = 12,
@@ -1248,7 +1248,7 @@ save_plot(
 
 #### plot daily catch BSS
 
-```{r plot_bss_catch_daily, eval=TRUE, fig.keep='all', dependson=c("establish_file_structure", "estimates_bss"), fig.cap= "Weekly estimates of catch for catch groups included in the report, with separate plots for each river section. Lines are posterior medians and shading shows 95% credible intervals and are colored by angler type."}
+```{r plot_bss_catch_daily, eval=TRUE, fig.keep='all', dependson=c("establish_file_structure", "estimates_bss"), fig.cap= "Weekly estimates of catch for catch groups included in the report, with separate plots for each river section. Lines are posterior means and shading shows 95% credible intervals and are colored by angler type."}
 
 catch_daily_df <- map_df(estimates_bss, ~.x$catch_daily)
 
@@ -1260,26 +1260,26 @@ reg_shading_catch <- catch_daily_df |>
   mutate(reg_change = boat_reg_label != lag(boat_reg_label, default = first(boat_reg_label))) |>
   mutate(reg_group = cumsum(reg_change)) |>
   group_by(section_num, reg_group, boat_reg_label) |>
-  summarise(xmin = min(event_date), xmax = max(event_date), .groups = "drop")
+  summarise(xmin = min(event_date), xmax = max(event_date) + 1, .groups = "drop")
 
 plot_bss_catch_daily <-
   catch_daily_df |> 
-    ggplot(aes(x = event_date, y = `50%`)) +
+    ggplot(aes(x = event_date, y = mean)) +
     geom_rect(
       data = reg_shading_catch |> filter(boat_reg_label == "Boat fishing open"),
       aes(xmin = xmin, xmax = xmax, ymin = -Inf, ymax = Inf),
-      fill = "lightblue", alpha = 0.15, inherit.aes = FALSE
+      fill = "#FFF9C4", alpha = 0.6, inherit.aes = FALSE
     ) +
     geom_ribbon(aes(ymin = `2.5%`, ymax = `97.5%`, fill = angler_final), alpha = 0.2, color = "transparent") +
     geom_line(aes(color = angler_final), lwd = 1) +
-    ylab("Median (50%) catch") +
+    ylab("Mean catch") +
     xlab("Date") +
     labs(color = "Angler type", fill = "Angler type",
-         caption = "Light blue shading = boat fishing open") +
+         caption = "Yellow background shading = boat fishing open (regulation covariate); unshaded = boat fishing closed.\nRibbon shading (colored by angler type) = 95% credible interval.") +
     scale_x_date(date_breaks = "1 week", date_labels = "%m-%d") +
     theme_bw() +
     theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 8)) +
-    facet_grid(est_cg ~ section_num, scales = "free_y")
+    facet_grid(section_num ~ est_cg, scales = "free_y")
 
 # Print with specific dimensions
 print(plot_bss_catch_daily)
@@ -1289,13 +1289,13 @@ save_plot(
   plot_bss_catch_daily,
   "bss_catch_daily.png",
   width = 12,
-  height = 4 + (2 * n_distinct(catch_daily_df$est_cg))
+  height = 4 + (2 * n_distinct(catch_daily_df$section_num))
 )
 ```
 
 #### plot daily effort BSS
 
-```{r plot_bss_effort_daily, eval=TRUE, fig.keep='all', dependson=c("establish_file_structure", "estimates_bss"), fig.cap= "Weekly estimates of angler effort (angler hours) during the fishery, with separate plots for each river section. Lines are posterior medians and shading shows 95% credible intervals and are colored by angler type."}
+```{r plot_bss_effort_daily, eval=TRUE, fig.keep='all', dependson=c("establish_file_structure", "estimates_bss"), fig.cap= "Weekly estimates of angler effort (angler hours) during the fishery, with separate plots for each river section. Lines are posterior means; ribbon shading (colored by angler type) shows 95% credible intervals. Yellow background shading indicates periods when boat fishing was open; unshaded periods indicate boat fishing was closed."}
 
 effort_daily_df <- map_df(estimates_bss, ~.x$effort_daily)
 
@@ -1306,22 +1306,22 @@ reg_shading_effort <- effort_daily_df |>
   mutate(reg_change = boat_reg_label != lag(boat_reg_label, default = first(boat_reg_label))) |>
   mutate(reg_group = cumsum(reg_change)) |>
   group_by(section_num, reg_group, boat_reg_label) |>
-  summarise(xmin = min(event_date), xmax = max(event_date), .groups = "drop")
+  summarise(xmin = min(event_date), xmax = max(event_date) + 1, .groups = "drop")
 
 plot_bss_effort_daily <-
   effort_daily_df |> 
-    ggplot(aes(x = event_date, y = `50%`)) +
+    ggplot(aes(x = event_date, y = mean)) +
     geom_rect(
       data = reg_shading_effort |> filter(boat_reg_label == "Boat fishing open"),
       aes(xmin = xmin, xmax = xmax, ymin = -Inf, ymax = Inf),
-      fill = "lightblue", alpha = 0.15, inherit.aes = FALSE
+      fill = "#FFF9C4", alpha = 0.6, inherit.aes = FALSE
     ) +
     geom_ribbon(aes(ymin = `2.5%`, ymax = `97.5%`, fill = angler_final), alpha = 0.2, color = "transparent") +
     geom_line(aes(color = angler_final), lwd = 1) +
-    ylab("Median (50%) effort (angler hours)") +
+    ylab("Mean effort (angler hours)") +
     xlab("Date") +
     labs(color = "Angler type", fill = "Angler type",
-         caption = "Light blue shading = boat fishing open") +
+         caption = "Yellow background shading = boat fishing open (regulation covariate); unshaded = boat fishing closed.\nRibbon shading (colored by angler type) = 95% credible interval.") +
     scale_x_date(date_breaks = "1 week", date_labels = "%m-%d") +
     theme_bw() +
     theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 8)) +
@@ -1341,7 +1341,7 @@ save_plot(
 
 #### plot daily CPUE BSS
 
-```{r plot_bss_cpue_daily, eval=TRUE, fig.keep='all', dependson=c("establish_file_structure","estimates_bss"), fig.cap= "Weekly estimates of catch rate (fish/hour) for catch groups included in the report, with separate plots for each river section. Lines are posterior medians and shading shows 95% credible intervals and are colored by angler type."}
+```{r plot_bss_cpue_daily, eval=TRUE, fig.keep='all', dependson=c("establish_file_structure","estimates_bss"), fig.cap= "Weekly estimates of catch rate (fish/hour) for catch groups included in the report, with separate plots for each river section. Lines are posterior means and shading shows 95% credible intervals and are colored by angler type."}
 
 cpue_daily_df <- map_df(estimates_bss, ~.x$cpue_daily)
 
@@ -1352,26 +1352,26 @@ reg_shading_cpue <- cpue_daily_df |>
   mutate(reg_change = boat_reg_label != lag(boat_reg_label, default = first(boat_reg_label))) |>
   mutate(reg_group = cumsum(reg_change)) |>
   group_by(section_num, reg_group, boat_reg_label) |>
-  summarise(xmin = min(event_date), xmax = max(event_date), .groups = "drop")
+  summarise(xmin = min(event_date), xmax = max(event_date) + 1, .groups = "drop")
 
 plot_bss_cpue_daily <-
   cpue_daily_df |> 
-    ggplot(aes(x = event_date, y = `50%`)) +
+    ggplot(aes(x = event_date, y = mean)) +
     geom_rect(
       data = reg_shading_cpue |> filter(boat_reg_label == "Boat fishing open"),
       aes(xmin = xmin, xmax = xmax, ymin = -Inf, ymax = Inf),
-      fill = "lightblue", alpha = 0.15, inherit.aes = FALSE
+      fill = "#FFF9C4", alpha = 0.6, inherit.aes = FALSE
     ) +
     geom_ribbon(aes(ymin = `2.5%`, ymax = `97.5%`, fill = angler_final), alpha = 0.2, color = "transparent") +
     geom_line(aes(color = angler_final), lwd = 1) +
-    ylab("Median (50%) catch per unit effort (fish/hour)") +
+    ylab("Mean catch per unit effort (fish/hour)") +
     xlab("Date") +
     labs(color = "Angler type", fill = "Angler type",
-         caption = "Light blue shading = boat fishing open") +
+         caption = "Yellow background shading = boat fishing open (regulation covariate); unshaded = boat fishing closed.\nRibbon shading (colored by angler type) = 95% credible interval.") +
     scale_x_date(date_breaks = "1 week", date_labels = "%m-%d") +
     theme_bw() +
     theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 8)) +
-    facet_grid(est_cg ~ section_num, scales = "free_y")
+    facet_grid(section_num ~ est_cg, scales = "free_y")
 
 # Print with specific dimensions
 print(plot_bss_cpue_daily)
@@ -1381,7 +1381,7 @@ save_plot(
   plot_bss_cpue_daily,
   "bss_cpue_daily.png",
   width = 12,
-  height = 4 + (2 * n_distinct(map_df(estimates_bss, ~.x$cpue_daily)$est_cg))
+  height = 4 + (2 * n_distinct(cpue_daily_df$section_num))
 )
 ```
 
@@ -1429,8 +1429,8 @@ effort_by_reg <- map_df(estimates_bss, ~.x$effort_daily) |>
   group_by(est_cg, section_num, angler_final, boat_reg_label) |>
   summarise(
     n_days = n(),
-    total_effort_median = sum(`50%`),
-    mean_daily_effort_median = mean(`50%`),
+    total_effort_mean = sum(mean),
+    mean_daily_effort_mean = mean(mean),
     .groups = "drop"
   )
 
@@ -1439,8 +1439,8 @@ catch_by_reg <- map_df(estimates_bss, ~.x$catch_daily) |>
   group_by(est_cg, section_num, angler_final, boat_reg_label) |>
   summarise(
     n_days = n(),
-    total_catch_median = sum(`50%`),
-    mean_daily_catch_median = mean(`50%`),
+    total_catch_mean = sum(mean),
+    mean_daily_catch_mean = mean(mean),
     .groups = "drop"
   )
 
@@ -1448,32 +1448,34 @@ catch_by_reg <- map_df(estimates_bss, ~.x$catch_daily) |>
 reg_summary <- effort_by_reg |>
   left_join(
     catch_by_reg |> select(est_cg, section_num, angler_final, boat_reg_label, 
-                           total_catch_median, mean_daily_catch_median),
+                           total_catch_mean, mean_daily_catch_mean),
     by = c("est_cg", "section_num", "angler_final", "boat_reg_label")
   ) |>
   mutate(
-    mean_daily_cpue = mean_daily_catch_median / mean_daily_effort_median
+    mean_daily_cpue = mean_daily_catch_mean / mean_daily_effort_mean
   )
 
 reg_summary_table <- reg_summary |>
   gt(groupname_col = "est_cg") |>
-  fmt_number(columns = c(total_effort_median, mean_daily_effort_median, 
-                         total_catch_median, mean_daily_catch_median, mean_daily_cpue), 
+  fmt_number(columns = c(mean_daily_cpue), 
+             decimals = 2) |>
+  fmt_number(columns = c(total_effort_mean, mean_daily_effort_mean, 
+                         total_catch_mean, mean_daily_catch_mean), 
              decimals = 1) |>
   cols_label(
     section_num = "Section",
     angler_final = "Angler type",
     boat_reg_label = "Regulation",
     n_days = "Days",
-    total_effort_median = "Total effort (hrs)",
-    mean_daily_effort_median = "Mean daily effort (hrs)",
-    total_catch_median = "Total catch",
-    mean_daily_catch_median = "Mean daily catch",
+    total_effort_mean = "Total effort (hrs)",
+    mean_daily_effort_mean = "Mean daily effort (hrs)",
+    total_catch_mean = "Total catch",
+    mean_daily_catch_mean = "Mean daily catch",
     mean_daily_cpue = "Mean CPUE (fish/hr)"
   ) |>
   tab_header(
     title = "Effort and catch estimates grouped by boat regulation status",
-    subtitle = "Summaries of posterior medians by section, angler type, and regulation period"
+    subtitle = "Summaries of posterior means by section, angler type, and regulation period"
   ) |>
   tab_options(
     heading.title.font.size = px(14),
