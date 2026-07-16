@@ -6,9 +6,7 @@ params:
   fishery_name: "Skagit spring Chinook 2026 upper"
   est_date_start: ""
   est_date_end: ""
-  est_catch_groups: !r data.frame(rbind(
-    c(species = 'Chinook', life_stage = 'Adult', fin_mark = 'UM', fate = 'Released'),
-    c(species = 'Chinook', life_stage = 'Adult', fin_mark = 'AD', fate = 'Kept')))
+  est_catch_groups: ""
   study_design: "Standard"   
   boat_type_collapse: "Yes"
   fish_location_determines_type: "No"
@@ -76,6 +74,12 @@ library("digest")
 library(creelutils)
 ```
 
+```{r database_con, message=FALSE}
+# Establish a connection to the creel database, carry throughout the session
+# This requires a one-time setup per user
+con <- creelutils::connect_creel_db(db_env = "test") # TEMP argument, remove "db_env = 'test'" use after revview
+```
+
 ```{r, load_functions, message=FALSE}
 # Load CreelEstimates functions (pre-package method)
 walk(list.files(here("R_functions"), full.names = T), source)
@@ -91,14 +95,28 @@ walk(list.files(here("R_functions"), full.names = T), source)
 est_dates <- resolve_dates(
   params$fishery_name, 
   params$est_date_start, 
-  params$est_date_end
+  params$est_date_end,
+  conn = con
+)
+```
+
+```{r resolve_catch_groups, message=FALSE}
+# Dynamically source catch groups from the creel database when the YAML param
+# est_catch_groups is blank (default: ""). Manually entered catch groups always
+# override and require no database connection; validation is up to the user.
+est_catch_groups <- resolve_catch_groups(
+  fishery       = params$fishery_name,
+  catch_groups  = params$est_catch_groups,
+  observed_only = FALSE,
+  conn = con
 )
 ```
 
 #### Selected catch groups
 The following catch groups of fish were selected for generating catch estimates. 
 ```{r, echo = FALSE}
-params$est_catch_groups |> 
+est_catch_groups |> 
+  select(-c(fishery_name, combined_catch_group, model_catch_group_id)) |> 
   mutate(`#` = row_number()) |> 
   relocate(`#`) |> 
   gt() |> 
@@ -519,7 +537,7 @@ tab_style(
       interview_plus_angler_types = interview_plus_angler_types,
       study_design = params$study_design,
       dwg_catch = dwg$catch,
-      est_catch_groups = params$est_catch_groups
+      est_catch_groups = dplyr::select(est_catch_groups, species, life_stage, fin_mark, fate)
     )
 
   # 1.4 - Attach the final formatted interview data set to "dwg_summ"
