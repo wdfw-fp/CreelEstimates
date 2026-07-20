@@ -110,6 +110,19 @@ est_catch_groups <- resolve_catch_groups(
   observed_only = FALSE,
   conn = con
 )
+
+# Snapshot of resolved parameters: YAML params overlaid with resolver
+# outputs. Single source for params_json, generate_analysis_lut(), and
+# the export pipeline (drop-in superset of params).
+resolved_params <- utils::modifyList(
+  unclass(params),
+  c(
+    est_dates[c("est_date_start", "est_date_end", "model_run_type")],
+    list(est_catch_groups = est_catch_groups[
+      c("combined_catch_group", "model_catch_group_id")
+    ])
+  )
+)
 ```
 
 #### Selected catch groups
@@ -220,12 +233,11 @@ current_file <- tryCatch({
 }, error = function(e) NULL)
 
 ## Generate or load analysis_lut (uses existing function as-is)
-generate_analysis_lut(params, current_file_path = current_file)
+generate_analysis_lut(resolved_params, current_file_path = current_file)
 
 # Display analysis metadata
 cli_alert_info("Analysis ID: {.val {analysis_lut$analysis_id}}")
-cli_alert_info("Analysis Folder: {.val {analysis_lut$analysis_folder}}")
-cli_alert_info("Identifier: {.val {analysis_lut$identifier}}")
+cli_alert_info("Analysis Folder: {.val {analysis_lut$analysis_folder_name}}")
 
 # Create analysis folder structure and configure knitr
 # THIS will set the cache.path and fig.path correctly
@@ -1545,18 +1557,12 @@ if (params$export %in% c("database", "local") && !params$model_used %in% c("PE o
   if (exists("estimates_pe") && params$model_used == "PE only") {
     cat("Performing 'PE only' transformation.")
     transformed_pe_data <- creelutils::process_estimates_pe(analysis_lut, estimates_pe, params)
-    
-    #add parameter data_grade as a field on all tables
-    creelutils::map_data_grade(params, transformed_bss_data=NULL, transformed_pe_data)
   }
   
   # Process BSS estimates to common format
   if (exists("estimates_bss") && params$model_used == "BSS only") {
     cat("Performing 'BSS only' transformation.")
     transformed_bss_data <- creelutils::process_estimates_bss(params, analysis_lut, estimates_bss)
-    
-    #add parameter data_grade as a field on all tables
-    creelutils::map_data_grade(params, transformed_bss_data, transformed_pe_data=NULL)
   }
   
   # Process PE and BSS model estimates to common format
@@ -1564,9 +1570,6 @@ if (params$export %in% c("database", "local") && !params$model_used %in% c("PE o
     cat("Performing 'Both models' transformation.")
     transformed_pe_data <- creelutils::process_estimates_pe(analysis_lut, estimates_pe, params)
     transformed_bss_data <- creelutils::process_estimates_bss(params, analysis_lut, estimates_bss)
-    
-    #add parameter data_grade as a field on all tables
-    creelutils::map_data_grade(params, transformed_bss_data, transformed_pe_data)
   }
   
   #Combine PE and BSS and perform other transformation steps
@@ -1591,10 +1594,7 @@ if (params$export == "database") {
   
   con <- creelutils::connect_creel_db()
   
-  analysis_lut <- analysis_lut |> 
-    dplyr::select(-fishery_name, -identifier, -analysis_folder, -created_datetime)
-  
-  creelutils::export_estimates(conn = con , params, analysis_lut, creel_estimates)
+  creelutils::export_estimates(resolved_params, est_catch_groups, analysis_lut, creel_estimates, conn = con)
   
 } else if (params$export == "local") {
   # Save all export tables to outputs folder
