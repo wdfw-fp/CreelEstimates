@@ -1544,7 +1544,7 @@ save_gt_table(interview_coverage_table, paste0("interview_coverage_table"))
 transformed_pe_data <- list()
 transformed_bss_data <- list()
 #Export data from one or both models
-if (params$export %in% c("database", "local") && !params$model_used %in% c("PE only", "BSS only", "Both models" )) {
+if (resolved_params$export %in% c("database", "local") && !resolved_params$model_used %in% c("PE only", "BSS only", "Both models" )) {
   stop("\nInvalid value for export or model_used parameter.")
 } else {
   
@@ -1554,26 +1554,26 @@ if (params$export %in% c("database", "local") && !params$model_used %in% c("PE o
   }
   
   # Process PE estimates to common format
-  if (exists("estimates_pe") && params$model_used == "PE only") {
+  if (exists("estimates_pe") && resolved_params$model_used == "PE only") {
     cat("Performing 'PE only' transformation.")
-    transformed_pe_data <- creelutils::process_estimates_pe(analysis_lut, estimates_pe, params)
+    transformed_pe_data <- creelutils::process_estimates_pe(analysis_lut, estimates_pe, params = resolved_params)
   }
   
   # Process BSS estimates to common format
   if (exists("estimates_bss") && params$model_used == "BSS only") {
     cat("Performing 'BSS only' transformation.")
-    transformed_bss_data <- creelutils::process_estimates_bss(params, analysis_lut, estimates_bss)
+    transformed_bss_data <- creelutils::process_estimates_bss(params = resolved_params, analysis_lut, estimates_bss)
   }
   
   # Process PE and BSS model estimates to common format
-  if (exists("estimates_pe") && exists("estimates_bss") && params$model_used == "Both models") {
+  if (exists("estimates_pe") && exists("estimates_bss") && resolved_params$model_used == "Both models") {
     cat("Performing 'Both models' transformation.")
-    transformed_pe_data <- creelutils::process_estimates_pe(analysis_lut, estimates_pe, params)
-    transformed_bss_data <- creelutils::process_estimates_bss(params, analysis_lut, estimates_bss)
+    transformed_pe_data <- creelutils::process_estimates_pe(analysis_lut, estimates_pe, params = resolved_params)
+    transformed_bss_data <- creelutils::process_estimates_bss(params = resolved_params, analysis_lut, estimates_bss)
   }
   
   #Combine PE and BSS and perform other transformation steps
-  creel_estimates <- creelutils::transform_estimates(params, dwg, transformed_pe_data, transformed_bss_data)  
+  creel_estimates <- creelutils::transform_estimates(params = resolved_params, dwg, transformed_pe_data, transformed_bss_data)  
 
 }
 
@@ -1584,7 +1584,7 @@ if (params$export %in% c("database", "local") && !params$model_used %in% c("PE o
 
 ```{r export_estimates, results='hide', eval= TRUE}
 
-if (params$export == "database") {
+if (resolved_params$export == "database") {
   #Converts metadata to JSON and adds to analysis_lut
   #Connects to database
   #calls prep_export()
@@ -1596,7 +1596,7 @@ if (params$export == "database") {
   
   creelutils::export_estimates(resolved_params, est_catch_groups, analysis_lut, creel_estimates, conn = con)
   
-} else if (params$export == "local") {
+} else if (resolved_params$export == "local") {
   # Save all export tables to outputs folder
   cli_alert_info("Exporting estimates to local files...")
   
