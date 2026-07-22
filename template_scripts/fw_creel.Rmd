@@ -70,7 +70,7 @@ library("bayesplot")
 library("digest")
 
 # Load packages from source
-# devtools::install_github("wdfw-fp/creelutils")
+# devtools::install_github("dfw-wa/creelutils")
 library(creelutils)
 ```
 
@@ -107,7 +107,7 @@ est_dates <- resolve_dates(
 est_catch_groups <- resolve_catch_groups(
   fishery       = params$fishery_name,
   catch_groups  = params$est_catch_groups,
-  observed_only = FALSE,
+  observed_only = TRUE,
   conn = con
 )
 
@@ -1573,28 +1573,25 @@ if (resolved_params$export %in% c("database", "local") && !resolved_params$model
   }
   
   #Combine PE and BSS and perform other transformation steps
-  creel_estimates <- creelutils::transform_estimates(params = resolved_params, dwg, transformed_pe_data, transformed_bss_data)  
-
+  creel_estimates <- creelutils::transform_estimates(
+    params = resolved_params, 
+    transformed_pe_data, 
+    transformed_bss_data
+  )  
 }
-
-# Save transformed estimates locally
-# saveRDS(creel_estimates, file.path(outputs_folders$outputs, "creel_estimates_transformed.rds"))
-# cli_alert_success("Transformed estimates saved to {.path {file.path(outputs_folders$outputs, 'creel_estimates_transformed.rds')}}")
 ```
 
 ```{r export_estimates, results='hide', eval= TRUE}
 
 if (resolved_params$export == "database") {
-  #Converts metadata to JSON and adds to analysis_lut
-  #Connects to database
-  #calls prep_export()
-  #Defines functions for writing to database tables
-  #Performs pre- and post- upload QAQC checks
-  # creelutils::export_estimates(params, analysis_lut, creel_estimates)
   
-  con <- creelutils::connect_creel_db()
-  
-  creelutils::export_estimates(resolved_params, est_catch_groups, analysis_lut, creel_estimates, conn = con)
+  creelutils::export_estimates(
+    resolved_params,
+    est_catch_groups, 
+    analysis_lut, 
+    creel_estimates, 
+    conn = con
+  )
   
 } else if (resolved_params$export == "local") {
   # Save all export tables to outputs folder
