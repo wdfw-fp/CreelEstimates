@@ -58,7 +58,7 @@ generate_analysis_lut <- function(resolved_params, current_file_path = NULL) {
     
     # Generate session-specific analysis uuid
     analysis_id <- uuid::UUIDgenerate()
-    analysis_id <- toupper(analysis_id)  # Capitalize to match database format
+    analysis_id <- tolower(analysis_id)  # force lowercase (PostgreSQL standard)
     cli::cli_alert_success("New analysis_id created: {.val {substr(analysis_id, 1, 8)}...}")
     
     # Create fishery identifier
