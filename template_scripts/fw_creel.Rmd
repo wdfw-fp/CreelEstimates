@@ -6,9 +6,7 @@ params:
   fishery_name: "Skagit spring Chinook 2026 upper"
   est_date_start: ""
   est_date_end: ""
-  est_catch_groups: !r data.frame(rbind(
-    c(species = 'Chinook', life_stage = 'Adult', fin_mark = 'UM', fate = 'Released'),
-    c(species = 'Chinook', life_stage = 'Adult', fin_mark = 'AD', fate = 'Kept')))
+  est_catch_groups: ""
   study_design: "Standard"   
   boat_type_collapse: "Yes"
   fish_location_determines_type: "No"
@@ -22,7 +20,7 @@ params:
   bss_model_file_name: "BSS_creel_model_02_2021-01-22_ppc.stan"
   model_used: "Both models"
   data_grade: "provisional"
-  export: "local"
+  export: "database"
   export_tables: "both"
   enable_cache: FALSE  # Set to FALSE to disable all caching (useful when cached files become too large)
 output:
@@ -72,8 +70,14 @@ library("bayesplot")
 library("digest")
 
 # Load packages from source
-# devtools::install_github("wdfw-fp/creelutils")
+# devtools::install_github("dfw-wa/creelutils")
 library(creelutils)
+```
+
+```{r database_con, message=FALSE}
+# Establish a connection to the creel database, carry throughout the session
+# This requires a one-time setup per user
+con <- creelutils::connect_creel_db(db_env = "test") # TEMP argument, remove "db_env = 'test'" use after revview
 ```
 
 ```{r, load_functions, message=FALSE}
@@ -91,14 +95,41 @@ walk(list.files(here("R_functions"), full.names = T), source)
 est_dates <- resolve_dates(
   params$fishery_name, 
   params$est_date_start, 
-  params$est_date_end
+  params$est_date_end,
+  conn = con
+)
+```
+
+```{r resolve_catch_groups, message=FALSE}
+# Dynamically source catch groups from the creel database when the YAML param
+# est_catch_groups is blank (default: ""). Manually entered catch groups always
+# override and require no database connection; validation is up to the user.
+est_catch_groups <- resolve_catch_groups(
+  fishery       = params$fishery_name,
+  catch_groups  = params$est_catch_groups,
+  observed_only = TRUE,
+  conn = con
+)
+
+# Snapshot of resolved parameters: YAML params overlaid with resolver
+# outputs. Single source for params_json, generate_analysis_lut(), and
+# the export pipeline (drop-in superset of params).
+resolved_params <- utils::modifyList(
+  unclass(params),
+  c(
+    est_dates[c("est_date_start", "est_date_end", "model_run_type")],
+    list(est_catch_groups = est_catch_groups[
+      c("combined_catch_group", "model_catch_group_id")
+    ])
+  )
 )
 ```
 
 #### Selected catch groups
 The following catch groups of fish were selected for generating catch estimates. 
 ```{r, echo = FALSE}
-params$est_catch_groups |> 
+est_catch_groups |> 
+  select(-c(fishery_name, combined_catch_group, model_catch_group_id)) |> 
   mutate(`#` = row_number()) |> 
   relocate(`#`) |> 
   gt() |> 
@@ -202,12 +233,11 @@ current_file <- tryCatch({
 }, error = function(e) NULL)
 
 ## Generate or load analysis_lut (uses existing function as-is)
-generate_analysis_lut(params, current_file_path = current_file)
+generate_analysis_lut(resolved_params, current_file_path = current_file)
 
 # Display analysis metadata
 cli_alert_info("Analysis ID: {.val {analysis_lut$analysis_id}}")
-cli_alert_info("Analysis Folder: {.val {analysis_lut$analysis_folder}}")
-cli_alert_info("Identifier: {.val {analysis_lut$identifier}}")
+cli_alert_info("Analysis Folder: {.val {analysis_lut$analysis_folder_name}}")
 
 # Create analysis folder structure and configure knitr
 # THIS will set the cache.path and fig.path correctly
@@ -519,7 +549,7 @@ tab_style(
       interview_plus_angler_types = interview_plus_angler_types,
       study_design = params$study_design,
       dwg_catch = dwg$catch,
-      est_catch_groups = params$est_catch_groups
+      est_catch_groups = dplyr::select(est_catch_groups, species, life_stage, fin_mark, fate)
     )
 
   # 1.4 - Attach the final formatted interview data set to "dwg_summ"
@@ -1514,7 +1544,7 @@ save_gt_table(interview_coverage_table, paste0("interview_coverage_table"))
 transformed_pe_data <- list()
 transformed_bss_data <- list()
 #Export data from one or both models
-if (params$export %in% c("database", "local") && !params$model_used %in% c("PE only", "BSS only", "Both models" )) {
+if (resolved_params$export %in% c("database", "local") && !resolved_params$model_used %in% c("PE only", "BSS only", "Both models" )) {
   stop("\nInvalid value for export or model_used parameter.")
 } else {
   
@@ -1524,61 +1554,46 @@ if (params$export %in% c("database", "local") && !params$model_used %in% c("PE o
   }
   
   # Process PE estimates to common format
-  if (exists("estimates_pe") && params$model_used == "PE only") {
+  if (exists("estimates_pe") && resolved_params$model_used == "PE only") {
     cat("Performing 'PE only' transformation.")
-    transformed_pe_data <- creelutils::process_estimates_pe(analysis_lut, estimates_pe, params)
-    
-    #add parameter data_grade as a field on all tables
-    creelutils::map_data_grade(params, transformed_bss_data=NULL, transformed_pe_data)
+    transformed_pe_data <- creelutils::process_estimates_pe(analysis_lut, estimates_pe, params = resolved_params)
   }
   
   # Process BSS estimates to common format
   if (exists("estimates_bss") && params$model_used == "BSS only") {
     cat("Performing 'BSS only' transformation.")
-    transformed_bss_data <- creelutils::process_estimates_bss(params, analysis_lut, estimates_bss)
-    
-    #add parameter data_grade as a field on all tables
-    creelutils::map_data_grade(params, transformed_bss_data, transformed_pe_data=NULL)
+    transformed_bss_data <- creelutils::process_estimates_bss(params = resolved_params, analysis_lut, estimates_bss)
   }
   
   # Process PE and BSS model estimates to common format
-  if (exists("estimates_pe") && exists("estimates_bss") && params$model_used == "Both models") {
+  if (exists("estimates_pe") && exists("estimates_bss") && resolved_params$model_used == "Both models") {
     cat("Performing 'Both models' transformation.")
-    transformed_pe_data <- creelutils::process_estimates_pe(analysis_lut, estimates_pe, params)
-    transformed_bss_data <- creelutils::process_estimates_bss(params, analysis_lut, estimates_bss)
-    
-    #add parameter data_grade as a field on all tables
-    creelutils::map_data_grade(params, transformed_bss_data, transformed_pe_data)
+    transformed_pe_data <- creelutils::process_estimates_pe(analysis_lut, estimates_pe, params = resolved_params)
+    transformed_bss_data <- creelutils::process_estimates_bss(params = resolved_params, analysis_lut, estimates_bss)
   }
   
   #Combine PE and BSS and perform other transformation steps
-  creel_estimates <- creelutils::transform_estimates(params, dwg, transformed_pe_data, transformed_bss_data)  
-
+  creel_estimates <- creelutils::transform_estimates(
+    params = resolved_params, 
+    transformed_pe_data, 
+    transformed_bss_data
+  )  
 }
-
-# Save transformed estimates locally
-# saveRDS(creel_estimates, file.path(outputs_folders$outputs, "creel_estimates_transformed.rds"))
-# cli_alert_success("Transformed estimates saved to {.path {file.path(outputs_folders$outputs, 'creel_estimates_transformed.rds')}}")
 ```
 
 ```{r export_estimates, results='hide', eval= TRUE}
 
-if (params$export == "database") {
-  #Converts metadata to JSON and adds to analysis_lut
-  #Connects to database
-  #calls prep_export()
-  #Defines functions for writing to database tables
-  #Performs pre- and post- upload QAQC checks
-  # creelutils::export_estimates(params, analysis_lut, creel_estimates)
+if (resolved_params$export == "database") {
   
-  con <- creelutils::connect_creel_db()
+  creelutils::export_estimates(
+    resolved_params,
+    est_catch_groups, 
+    analysis_lut, 
+    creel_estimates, 
+    conn = con
+  )
   
-  analysis_lut <- analysis_lut |> 
-    dplyr::select(-fishery_name, -identifier, -analysis_folder, -created_datetime)
-  
-  creelutils::export_estimates(conn = con , params, analysis_lut, creel_estimates)
-  
-} else if (params$export == "local") {
+} else if (resolved_params$export == "local") {
   # Save all export tables to outputs folder
   cli_alert_info("Exporting estimates to local files...")
   
